@@ -1,2 +1,1 @@
-# smi.github.io
-# data/stocks_dashboard.html
+View [Regular Hours](data/stocks_dashboard.html).
