@@ -4,4 +4,3 @@ numpy>=1.23.5
 requests>=2.28.2
 lxml>=4.9.1
 multitasking>=0.0.11
-```
