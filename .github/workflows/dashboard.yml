@@ -1,37 +1,46 @@
-name: Update Stock Dashboard
+name: Update Dashboard
 
 on:
   schedule:
-    - cron: '0 0,12-23 * * *'   # Every hour 4 AM – 4 PM PST (daily)
-    # - cron: '0 0,12-23 * * 1-5'  # Uncomment this line instead for weekdays only
-  workflow_dispatch:  # Allows manual trigger from GitHub UI
+    - cron: '0 0,12-23 * * 1-6'
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   run-script:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'  # Or whatever version you use
+          python-version: '3.12'
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          
-      - name: Run stocks.py
-        run: python stocks.py  --refresh 30 # Or python stocks.py --refresh 300 if you want custom args
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Commit and push updated dashboards (optional)
-        if: success()  # Only if the script ran successfully
+      - name: Run stocks.py
+        run: python stocks.py --refresh 30
+
+      - name: Commit and push
+        if: success()
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add data/*.html
-          git commit -m "Update dashboards $(date -u)" || exit 0
-          git push
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Update dashboards $(date -u)"
+          git pull --rebase origin main
+          git push origin main
