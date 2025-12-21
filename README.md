@@ -1,1 +1,1 @@
-View [Regular Hours](data/stocks_dashboard.html).
+View [Regular Hours](data/stock_dashboard.html).
