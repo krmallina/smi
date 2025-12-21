@@ -460,6 +460,8 @@ def export_to_html(df, vix_data, fg_data, aaii_data, output_file='data/stock_das
         .ticker {{ font-weight: bold; font-size: 1.1em; }}
         .link-group {{ display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; font-size: 0.8em; }}
         .item {{ font-size: 0.85em; margin: 4px 0; line-height: 1.4; }}
+        .switch-btn {{display:inline-block;margin-left:12px;padding:6px 14px;background:#ff6600;color:white;border-radius:4px;font-weight:bold;text-decoration:none}}
+        .switch-btn:hover {{background:#e65c00}}
     </style>
 </head>
 <body>
@@ -473,13 +475,6 @@ def export_to_html(df, vix_data, fg_data, aaii_data, output_file='data/stock_das
             <span class="aaii-display">{aaii_html}</span>
         </div>
         <div class="controls">
-            <div class="mode-switch">
-                <label>Extended Hours:</label>
-                <label class="switch">
-                    <input type="checkbox" id="extendedToggle" {'checked' if extended_hours else ''}>
-                    <span class="slider"></span>
-                </label>
-            </div>
             <button class="refresh-btn" onclick="location.reload()">Refresh Now</button>
         </div>
     </div>
@@ -534,10 +529,8 @@ def export_to_html(df, vix_data, fg_data, aaii_data, output_file='data/stock_das
             risk_items.append(f'<div class="item"><strong>P/C Vol Ratio:</strong> <span class="{cls}">{row["put_call_vol_ratio"]:.2f}</span></div>')
         if row['down_volume_bias']:
             risk_items.append('<div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div>')
-        # Options Direction
         dir_class = "negative" if "Strong Bearish" in row['options_direction'] else "bearish" if "Bearish" in row['options_direction'] else "bullish" if "Bullish" in row['options_direction'] else "neutral"
         risk_items.append(f'<div class="item"><strong>Options Direction:</strong> <span class="{dir_class}">{row["options_direction"]}</span></div>')
-        # Implied Move
         if row['implied_move_pct'] is not None:
             move_class = "high-risk" if row['implied_move_pct'] > 10 else "bearish" if row['implied_move_pct'] > 5 else ""
             conservative_move = row['implied_move_pct'] * 0.85
@@ -608,12 +601,6 @@ def export_to_html(df, vix_data, fg_data, aaii_data, output_file='data/stock_das
                     rows.forEach(row => document.querySelector('#stockTable').appendChild(row));
                 });
             });
-            
-            document.getElementById('extendedToggle').addEventListener('change', function() {
-                const url = new URL(window.location);
-                this.checked ? url.searchParams.set('extended', '1') : url.searchParams.delete('extended');
-                window.location = url;
-            });
         });
     </script>
 </body>
@@ -624,26 +611,53 @@ def export_to_html(df, vix_data, fg_data, aaii_data, output_file='data/stock_das
 
 if __name__ == "__main__":
     os.makedirs('data', exist_ok=True)
-    parser = argparse.ArgumentParser(description='Live Dashboard')
+    parser = argparse.ArgumentParser()
     parser.add_argument('csv_file', nargs='?', default='data/tickers.csv')
-    parser.add_argument('--extended', '-e', action='store_true')
     parser.add_argument('--refresh', type=int, default=60)
     args = parser.parse_args()
-    
-    query_params = parse_qs(os.getenv('QUERY_STRING', ''))
-    use_extended = args.extended or ('extended' in query_params)
-    
-    df = create_dashboard(args.csv_file, extended_hours=use_extended)
-    vix_data = get_vix_data()
-    fg_data = get_fear_greed_data()
-    aaii_data = get_aaii_sentiment()
-    stock_list = df.to_dict('records') if not df.empty else []
-    triggered_alerts = check_alerts(stock_list)
-    export_to_html(df, vix_data, fg_data, aaii_data, extended_hours=use_extended, refresh_interval=args.refresh, triggered_alerts=triggered_alerts)
 
-    print(f"Dashboard generated: data/stock_dashboard.html")
-    print(f"Mode: {'Extended' if use_extended else 'Regular'} Hours")
-    if triggered_alerts:
-        print(f"\n🚨 {len(triggered_alerts)} alert(s) triggered!")
-        for a in triggered_alerts:
-            print(f"   • {a['message']}")
+    dashboards = [
+        (False, 'data/reg_dashboard.html',  'Regular',  'regular-hours'),
+        (True,  'data/extnd_dashboard.html', 'Extended', 'extended-hours')
+    ]
+
+    other = {dashboards[0][1]: dashboards[1][1], dashboards[1][1]: dashboards[0][1]}
+
+    print("Generating dashboards...\n")
+
+    for ext, out, name, cls in dashboards:
+        try:
+            df = create_dashboard(args.csv_file, extended_hours=ext)
+            alerts = check_alerts(df.to_dict('records') if not df.empty else [])
+
+            export_to_html(
+                df=df,
+                vix_data=get_vix_data(),
+                fg_data=get_fear_greed_data(),
+                aaii_data=get_aaii_sentiment(),
+                output_file=out,
+                extended_hours=ext,
+                refresh_interval=args.refresh,
+                triggered_alerts=alerts
+            )
+
+            with open(out, 'r+', encoding='utf-8') as f:
+                html = f.read()
+                html = html.replace('<title>Live Dashboard</title>', f'<title>{name} Dashboard</title>')
+
+                badge = f'<span class="mode-badge {cls}">{name} Hours</span>'
+                switch = f'<a href="{other[out]}" class="switch-btn">Switch to {"Extended" if not ext else "Regular"} Hours</a>'
+                html = html.replace(badge, badge + switch)
+
+                f.seek(0)
+                f.write(html)
+                f.truncate()
+
+            print(f"✓ {name} Hours → {out}")
+            if alerts:
+                print(f"   🚨 {len(alerts)} alert{'s' if len(alerts)!=1 else ''}")
+
+        except Exception as e:
+            print(f"✗ {name} failed: {e}")
+
+    print("\nDashboards generated with cross-links.")
