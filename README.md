@@ -1,1 +1,1 @@
-View [Regular Hours](data/stock_dashboard.html).
+View [Regular Hours](https://krmallina.github.io/smi/data/stock_dashboard.html)).
