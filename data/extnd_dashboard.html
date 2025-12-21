@@ -1,98 +1,371 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Extended Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extended Hours - Stock Dashboard</title>
     <meta http-equiv="refresh" content="60">
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
-        h1 { color: #333; display: inline-block; }
-        .header-container { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 10px; }
-        .controls { display: flex; gap: 15px; align-items: center; flex-wrap: wrap; }
-        .refresh-btn { padding: 8px 16px; background: #0066cc; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
-        .refresh-btn:hover { background: #0052a3; }
-        .vix-display, .fear-greed-display, .aaii-display { font-size: 1.2em; font-weight: bold; margin-left: 20px; }
-        .mode-badge { padding: 8px 16px; border-radius: 4px; font-weight: bold; font-size: 0.9em; }
-        .regular-hours { background-color: #0066cc; color: white; }
-        .extended-hours { background-color: #ff6600; color: white; }
-        .refresh-info { color: #666; font-size: 0.9em; margin-bottom: 15px; }
-        .alert-banner { background-color: #ff4444; color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); animation: pulse 2s infinite; }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.8; } 100% { opacity: 1; } }
-        table { border-collapse: collapse; width: 100%; background-color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        th { background-color: #0066cc; color: white; padding: 12px; text-align: left; font-size: 0.9em; cursor: pointer; }
-        th.sortable::after { content: ' ⇅'; opacity: 0.5; }
-        th.sort-asc::after { content: ' ▲'; } th.sort-desc::after { content: ' ▼'; }
-        td { padding: 12px 10px; border-bottom: 1px solid #ddd; font-size: 0.9em; vertical-align: top; }
-        tr:nth-child(even) { background-color: #f9f9f9; }
-        tr:hover { background-color: #f0f0f0; }
-        .positive { background-color: #00aa00; color: white; padding: 4px 8px; border-radius: 3px; font-weight: bold; display: inline-block; }
-        .negative { background-color: #cc0000; color: white; padding: 4px 8px; border-radius: 3px; font-weight: bold; display: inline-block; }
-        .bullish { color: #00aa00; font-weight: bold; }
-        .bearish { color: #cc0000; font-weight: bold; }
-        .high-risk { color: #cc6600; font-weight: bold; }
-        .neutral { color: #666; font-style: italic; }
-        .ticker { font-weight: bold; font-size: 1.1em; }
-        .link-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; font-size: 0.8em; }
-        .item { font-size: 0.85em; margin: 4px 0; line-height: 1.4; }
-        .switch-btn {display:inline-block;margin-left:12px;padding:6px 14px;background:#ff6600;color:white;border-radius:4px;font-weight:bold;text-decoration:none}
-        .switch-btn:hover {background:#e65c00}
+        body { font-family: system-ui, sans-serif; margin: 0; padding: 12px; background: #f0f0f0; }
+        .container { max-width: 1400px; margin: auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+        .header { padding: 16px; background: #111; color: white; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
+        h1 { margin: 0; font-size: 1.6em; }
+        .mode { padding: 8px 16px; border-radius: 8px; font-weight: bold; background: #ff6600; }
+        .switch-btn { padding: 10px 16px; background: #ff6600; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; }
+        .indicators { padding: 12px 16px; display: flex; flex-wrap: wrap; gap: 16px; font-weight: bold; }
+        .info { padding: 0 16px 12px; color: #666; font-size: 0.9em; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #0066cc; color: white; padding: 12px; text-align: left; }
+        td { padding: 12px; border-bottom: 1px solid #eee; }
+        tr:hover { background: #f8f8ff; }
+        .ticker a { font-weight: bold; font-size: 1.2em; color: #000; text-decoration: none; }
+        .links a { margin-right: 12px; color: #0066cc; font-size: 0.9em; }
+        .bar { height: 8px; background: #eee; border-radius: 4px; overflow: hidden; margin: 6px 0; position: relative; }
+        .fill { height: 100%; background: #00aa00; }
+        .marker { position: absolute; top: 0; width: 3px; height: 100%; background: black; left: 50%; }
+        @media (max-width: 768px) { .header { flex-direction: column; align-items: flex-start; } .indicators { flex-direction: column; } }
     </style>
 </head>
 <body>
-    
-    <div class="header-container">
-        <div>
-            <h1>Live Dashboard</h1>
-            <span class="mode-badge extended-hours">Extended Hours</span><a href="data/reg_dashboard.html" class="switch-btn">Switch to Regular Hours</a>
-            <span class="vix-display"><span class="negative">VIX: 14.91 (-11.62%)</span></span>
-            <span class="fear-greed-display"><span class="neutral">N/A</span></span>
-            <span class="aaii-display"><span class="neutral">N/A</span></span>
+    <div class="container">
+        
+        <div class="header">
+            <div>
+                <h1>Stock Dashboard</h1>
+                <span class="mode">Extended Hours</span>
+                <a href="reg_dashboard.html" class="switch-btn">Switch to Regular Hours</a>
+            </div>
+            <button onclick="location.reload()" style="padding:10px 16px;background:#0066cc;color:white;border:none;border-radius:8px;cursor:pointer;">Refresh</button>
         </div>
-        <div class="controls">
-            <button class="refresh-btn" onclick="location.reload()">Refresh Now</button>
+        <div class="indicators">
+            <span>VIX: 14.91 (-11.62%)</span>
+            <span>F&G: N/A</span>
+            <span>AAII: N/A</span>
         </div>
+        <div class="info">Last updated: 01:33 PM on Dec 21, 2025 • Auto-refresh every 60s</div>
+        <table>
+            <thead>
+                <tr><th>TICKER</th><th>PRICE</th><th>DAY</th><th>1M</th><th>6M</th><th>VOL</th><th>52W</th><th>TECH</th></tr>
+            </thead>
+            <tbody>
+
+                <tr>
+                    <td>
+                        <div class="ticker"><a href="https://finance.yahoo.com/quote/SOXL" target="_blank">SOXL</a></div>
+                        <div class="links">
+                            <a href="https://finance.yahoo.com/quote/SOXL" target="_blank">Yahoo</a>
+                            <a href="https://www.tradingview.com/chart/?symbol=SOXL" target="_blank">TV</a>
+                            <a href="https://finviz.com/quote.ashx?t=SOXL" target="_blank">Finviz</a>
+                        </div>
+                    </td>
+                    <td>$42.53</td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +10.24%</span></td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +1.72%</span></td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +123.56%</span></td>
+                    <td>87.2M</td>
+                    <td>
+                        <div class="bar"><div class="fill" style="width:81%"></div><div class="marker" style="left:81%"></div></div>
+                        <small>$7 – $51</small>
+                    </td>
+                    <td>RSI 50.7 (Neutral) • Bearish</td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <div class="ticker"><a href="https://finance.yahoo.com/quote/ORCL" target="_blank">ORCL</a></div>
+                        <div class="links">
+                            <a href="https://finance.yahoo.com/quote/ORCL" target="_blank">Yahoo</a>
+                            <a href="https://www.tradingview.com/chart/?symbol=ORCL" target="_blank">TV</a>
+                            <a href="https://finviz.com/quote.ashx?t=ORCL" target="_blank">Finviz</a>
+                        </div>
+                    </td>
+                    <td>$193.31</td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +7.38%</span></td>
+                    <td><span style="color:#cc0000;font-weight:bold">▼ -18.14%</span></td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +15.44%</span></td>
+                    <td>115.9M</td>
+                    <td>
+                        <div class="bar"><div class="fill" style="width:33%"></div><div class="marker" style="left:33%"></div></div>
+                        <small>$118 – $345</small>
+                    </td>
+                    <td>RSI 44.9 (Neutral) • Bearish • Vol Spike</td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <div class="ticker"><a href="https://finance.yahoo.com/quote/FNGU" target="_blank">FNGU</a></div>
+                        <div class="links">
+                            <a href="https://finance.yahoo.com/quote/FNGU" target="_blank">Yahoo</a>
+                            <a href="https://www.tradingview.com/chart/?symbol=FNGU" target="_blank">TV</a>
+                            <a href="https://finviz.com/quote.ashx?t=FNGU" target="_blank">Finviz</a>
+                        </div>
+                    </td>
+                    <td>$25.93</td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +4.34%</span></td>
+                    <td><span style="color:#cc0000;font-weight:bold">▼ -17.61%</span></td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +23.06%</span></td>
+                    <td>2.9M</td>
+                    <td>
+                        <div class="bar"><div class="fill" style="width:69%"></div><div class="marker" style="left:69%"></div></div>
+                        <small>$8 – $34</small>
+                    </td>
+                    <td>RSI 28.7 (Oversold) • Bearish</td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <div class="ticker"><a href="https://finance.yahoo.com/quote/NVDA" target="_blank">NVDA</a></div>
+                        <div class="links">
+                            <a href="https://finance.yahoo.com/quote/NVDA" target="_blank">Yahoo</a>
+                            <a href="https://www.tradingview.com/chart/?symbol=NVDA" target="_blank">TV</a>
+                            <a href="https://finviz.com/quote.ashx?t=NVDA" target="_blank">Finviz</a>
+                        </div>
+                    </td>
+                    <td>$181.37</td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +4.15%</span></td>
+                    <td><span style="color:#cc0000;font-weight:bold">▼ -6.10%</span></td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +27.82%</span></td>
+                    <td>265.4M</td>
+                    <td>
+                        <div class="bar"><div class="fill" style="width:75%"></div><div class="marker" style="left:75%"></div></div>
+                        <small>$87 – $212</small>
+                    </td>
+                    <td>RSI 51.3 (Neutral) • Bearish</td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <div class="ticker"><a href="https://finance.yahoo.com/quote/AVGO" target="_blank">AVGO</a></div>
+                        <div class="links">
+                            <a href="https://finance.yahoo.com/quote/AVGO" target="_blank">Yahoo</a>
+                            <a href="https://www.tradingview.com/chart/?symbol=AVGO" target="_blank">TV</a>
+                            <a href="https://finviz.com/quote.ashx?t=AVGO" target="_blank">Finviz</a>
+                        </div>
+                    </td>
+                    <td>$342.00</td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +3.67%</span></td>
+                    <td><span style="color:#cc0000;font-weight:bold">▼ -2.83%</span></td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +31.53%</span></td>
+                    <td>109.0M</td>
+                    <td>
+                        <div class="bar"><div class="fill" style="width:74%"></div><div class="marker" style="left:74%"></div></div>
+                        <small>$138 – $415</small>
+                    </td>
+                    <td>RSI 33.9 (Neutral) • Bearish • Vol Spike</td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <div class="ticker"><a href="https://finance.yahoo.com/quote/COIN" target="_blank">COIN</a></div>
+                        <div class="links">
+                            <a href="https://finance.yahoo.com/quote/COIN" target="_blank">Yahoo</a>
+                            <a href="https://www.tradingview.com/chart/?symbol=COIN" target="_blank">TV</a>
+                            <a href="https://finviz.com/quote.ashx?t=COIN" target="_blank">Finviz</a>
+                        </div>
+                    </td>
+                    <td>$246.15</td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +2.91%</span></td>
+                    <td><span style="color:#cc0000;font-weight:bold">▼ -19.03%</span></td>
+                    <td><span style="color:#cc0000;font-weight:bold">▼ -3.85%</span></td>
+                    <td>8.9M</td>
+                    <td>
+                        <div class="bar"><div class="fill" style="width:34%"></div><div class="marker" style="left:34%"></div></div>
+                        <small>$143 – $445</small>
+                    </td>
+                    <td>RSI 40.8 (Neutral) • Bearish</td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <div class="ticker"><a href="https://finance.yahoo.com/quote/GOOGL" target="_blank">GOOGL</a></div>
+                        <div class="links">
+                            <a href="https://finance.yahoo.com/quote/GOOGL" target="_blank">Yahoo</a>
+                            <a href="https://www.tradingview.com/chart/?symbol=GOOGL" target="_blank">TV</a>
+                            <a href="https://finviz.com/quote.ashx?t=GOOGL" target="_blank">Finviz</a>
+                        </div>
+                    </td>
+                    <td>$307.75</td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +1.75%</span></td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +5.71%</span></td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +83.64%</span></td>
+                    <td>37.6M</td>
+                    <td>
+                        <div class="bar"><div class="fill" style="width:89%"></div><div class="marker" style="left:89%"></div></div>
+                        <small>$140 – $329</small>
+                    </td>
+                    <td>RSI 43.5 (Neutral) • Bearish</td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <div class="ticker"><a href="https://finance.yahoo.com/quote/QQQ" target="_blank">QQQ</a></div>
+                        <div class="links">
+                            <a href="https://finance.yahoo.com/quote/QQQ" target="_blank">Yahoo</a>
+                            <a href="https://www.tradingview.com/chart/?symbol=QQQ" target="_blank">TV</a>
+                            <a href="https://finviz.com/quote.ashx?t=QQQ" target="_blank">Finviz</a>
+                        </div>
+                    </td>
+                    <td>$618.80</td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +1.59%</span></td>
+                    <td><span style="color:#cc0000;font-weight:bold">▼ -0.45%</span></td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +17.29%</span></td>
+                    <td>147.2M</td>
+                    <td>
+                        <div class="bar"><div class="fill" style="width:92%"></div><div class="marker" style="left:92%"></div></div>
+                        <small>$401 – $637</small>
+                    </td>
+                    <td>RSI 49.9 (Neutral) • Bearish • Vol Spike</td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <div class="ticker"><a href="https://finance.yahoo.com/quote/SPY" target="_blank">SPY</a></div>
+                        <div class="links">
+                            <a href="https://finance.yahoo.com/quote/SPY" target="_blank">Yahoo</a>
+                            <a href="https://www.tradingview.com/chart/?symbol=SPY" target="_blank">TV</a>
+                            <a href="https://finviz.com/quote.ashx?t=SPY" target="_blank">Finviz</a>
+                        </div>
+                    </td>
+                    <td>$681.47</td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +1.04%</span></td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +0.07%</span></td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +15.35%</span></td>
+                    <td>88.6M</td>
+                    <td>
+                        <div class="bar"><div class="fill" style="width:97%"></div><div class="marker" style="left:97%"></div></div>
+                        <small>$478 – $688</small>
+                    </td>
+                    <td>RSI 52.7 (Neutral) • Bearish</td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <div class="ticker"><a href="https://finance.yahoo.com/quote/AMZN" target="_blank">AMZN</a></div>
+                        <div class="links">
+                            <a href="https://finance.yahoo.com/quote/AMZN" target="_blank">Yahoo</a>
+                            <a href="https://www.tradingview.com/chart/?symbol=AMZN" target="_blank">TV</a>
+                            <a href="https://finviz.com/quote.ashx?t=AMZN" target="_blank">Finviz</a>
+                        </div>
+                    </td>
+                    <td>$227.87</td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +0.49%</span></td>
+                    <td><span style="color:#cc0000;font-weight:bold">▼ -8.52%</span></td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +9.96%</span></td>
+                    <td>67.8M</td>
+                    <td>
+                        <div class="bar"><div class="fill" style="width:68%"></div><div class="marker" style="left:68%"></div></div>
+                        <small>$161 – $259</small>
+                    </td>
+                    <td>RSI 39.3 (Neutral) • Bearish • Vol Spike</td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <div class="ticker"><a href="https://finance.yahoo.com/quote/MSFT" target="_blank">MSFT</a></div>
+                        <div class="links">
+                            <a href="https://finance.yahoo.com/quote/MSFT" target="_blank">Yahoo</a>
+                            <a href="https://www.tradingview.com/chart/?symbol=MSFT" target="_blank">TV</a>
+                            <a href="https://finviz.com/quote.ashx?t=MSFT" target="_blank">Finviz</a>
+                        </div>
+                    </td>
+                    <td>$485.63</td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +0.34%</span></td>
+                    <td><span style="color:#cc0000;font-weight:bold">▼ -4.35%</span></td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +5.06%</span></td>
+                    <td>37.4M</td>
+                    <td>
+                        <div class="bar"><div class="fill" style="width:68%"></div><div class="marker" style="left:68%"></div></div>
+                        <small>$343 – $554</small>
+                    </td>
+                    <td>RSI 49.4 (Neutral) • Bullish</td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <div class="ticker"><a href="https://finance.yahoo.com/quote/AAPL" target="_blank">AAPL</a></div>
+                        <div class="links">
+                            <a href="https://finance.yahoo.com/quote/AAPL" target="_blank">Yahoo</a>
+                            <a href="https://www.tradingview.com/chart/?symbol=AAPL" target="_blank">TV</a>
+                            <a href="https://finviz.com/quote.ashx?t=AAPL" target="_blank">Finviz</a>
+                        </div>
+                    </td>
+                    <td>$273.10</td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +0.33%</span></td>
+                    <td><span style="color:#cc0000;font-weight:bold">▼ -0.78%</span></td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +34.93%</span></td>
+                    <td>89.1M</td>
+                    <td>
+                        <div class="bar"><div class="fill" style="width:87%"></div><div class="marker" style="left:87%"></div></div>
+                        <small>$169 – $289</small>
+                    </td>
+                    <td>RSI 30.3 (Neutral) • Bearish • Vol Spike</td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <div class="ticker"><a href="https://finance.yahoo.com/quote/TSLA" target="_blank">TSLA</a></div>
+                        <div class="links">
+                            <a href="https://finance.yahoo.com/quote/TSLA" target="_blank">Yahoo</a>
+                            <a href="https://www.tradingview.com/chart/?symbol=TSLA" target="_blank">TV</a>
+                            <a href="https://finviz.com/quote.ashx?t=TSLA" target="_blank">Finviz</a>
+                        </div>
+                    </td>
+                    <td>$482.60</td>
+                    <td><span style="color:#cc0000;font-weight:bold">▼ -0.16%</span></td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +9.78%</span></td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +45.34%</span></td>
+                    <td>93.4M</td>
+                    <td>
+                        <div class="bar"><div class="fill" style="width:95%"></div><div class="marker" style="left:95%"></div></div>
+                        <small>$214 – $495</small>
+                    </td>
+                    <td>RSI 67.9 (Neutral) • Bullish</td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <div class="ticker"><a href="https://finance.yahoo.com/quote/META" target="_blank">META</a></div>
+                        <div class="links">
+                            <a href="https://finance.yahoo.com/quote/META" target="_blank">Yahoo</a>
+                            <a href="https://www.tradingview.com/chart/?symbol=META" target="_blank">TV</a>
+                            <a href="https://finviz.com/quote.ashx?t=META" target="_blank">Finviz</a>
+                        </div>
+                    </td>
+                    <td>$661.83</td>
+                    <td><span style="color:#cc0000;font-weight:bold">▼ -0.39%</span></td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +5.63%</span></td>
+                    <td><span style="color:#cc0000;font-weight:bold">▼ -3.58%</span></td>
+                    <td>26.8M</td>
+                    <td>
+                        <div class="bar"><div class="fill" style="width:58%"></div><div class="marker" style="left:58%"></div></div>
+                        <small>$479 – $795</small>
+                    </td>
+                    <td>RSI 57.5 (Neutral) • Bullish</td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <div class="ticker"><a href="https://finance.yahoo.com/quote/TSLL" target="_blank">TSLL</a></div>
+                        <div class="links">
+                            <a href="https://finance.yahoo.com/quote/TSLL" target="_blank">Yahoo</a>
+                            <a href="https://www.tradingview.com/chart/?symbol=TSLL" target="_blank">TV</a>
+                            <a href="https://finviz.com/quote.ashx?t=TSLL" target="_blank">Finviz</a>
+                        </div>
+                    </td>
+                    <td>$22.24</td>
+                    <td><span style="color:#cc0000;font-weight:bold">▼ -0.45%</span></td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +16.37%</span></td>
+                    <td><span style="color:#00aa00;font-weight:bold">▲ +68.80%</span></td>
+                    <td>275.7M</td>
+                    <td>
+                        <div class="bar"><div class="fill" style="width:56%"></div><div class="marker" style="left:56%"></div></div>
+                        <small>$6 – $35</small>
+                    </td>
+                    <td>RSI 66.6 (Neutral) • Bullish • Vol Spike</td>
+                </tr>
+
+            </tbody>
+        </table>
     </div>
-    <div class="refresh-info">
-        <strong>Last updated:</strong> 01:18:49 PM PST on December 21, 2025 | 
-        <strong>Auto-refresh:</strong> every 60 seconds
-    </div>
-    <table id="stockTable">
-        <tr>
-            <th class="sortable" data-column="ticker">TICKER</th>
-            <th class="sortable" data-column="price" data-type="number">PRICE</th>
-            <th class="sortable" data-column="day" data-type="number">DAY %</th>
-            <th class="sortable" data-column="1m" data-type="number">1M %</th>
-            <th class="sortable" data-column="6m" data-type="number">6M %</th>
-            <th class="sortable" data-column="volume" data-type="number">VOLUME</th>
-            <th>52W RANGE</th>
-            <th class="sortable" data-column="tech">TECHNICAL</th>
-            <th class="sortable" data-column="risk">RISK / SENTIMENT</th>
-        </tr>
-    </table>
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const headers = document.querySelectorAll('th.sortable');
-            const colMap = {ticker:0, price:1, day:2, '1m':3, '6m':4, volume:5, tech:7, risk:8};
-            headers.forEach(th => {
-                th.addEventListener('click', () => {
-                    const col = th.dataset.column;
-                    const asc = th.classList.toggle('sort-asc');
-                    th.classList.toggle('sort-desc', !asc);
-                    headers.forEach(h => { if (h !== th) h.classList.remove('sort-asc', 'sort-desc'); });
-                    
-                    const rows = Array.from(document.querySelectorAll('#stockTable tr')).slice(1);
-                    rows.sort((a, b) => {
-                        const i = colMap[col];
-                        let aVal = a.cells[i].dataset.value || '';
-                        let bVal = b.cells[i].dataset.value || '';
-                        const num = th.dataset.type === 'number';
-                        if (num) { aVal = parseFloat(aVal) || 0; bVal = parseFloat(bVal) || 0; }
-                        return (aVal > bVal ? 1 : -1) * (asc ? 1 : -1);
-                    });
-                    rows.forEach(row => document.querySelector('#stockTable').appendChild(row));
-                });
-            });
-        });
-    </script>
 </body>
 </html>
