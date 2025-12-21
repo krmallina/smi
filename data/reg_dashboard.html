@@ -2,333 +2,1518 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Regular Hours Dashboard</title>
+    <title>Regular Dashboard</title>
     <meta http-equiv="refresh" content="60">
     <style>
-        body { font-family: system-ui, sans-serif; margin: 0; padding: 10px; background: #f5f5f5; }
-        .container { max-width: 1200px; margin: auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
-        .header { padding: 16px; background: #000; color: white; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; }
-        h1 { margin: 0; font-size: 1.8em; }
-        .mode { padding: 8px 16px; border-radius: 8px; font-weight: bold; background: #0066cc; }
-        .switch-btn { padding: 10px 16px; background: #ff6600; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; }
-        .indicators { padding: 12px; background: #eee; display: flex; flex-wrap: wrap; gap: 20px; font-weight: bold; }
-        .info { padding: 10px 16px; color: #666; }
-        table { width: 100%; border-collapse: collapse; }
-        th { background: #0066cc; color: white; padding: 12px; text-align: left; font-size: 0.9em; }
-        td { padding: 12px; border-bottom: 1px solid #ddd; vertical-align: top; }
-        .ticker a { font-weight: bold; font-size: 1.2em; color: #000; text-decoration: none; }
-        .links a { margin-right: 10px; color: #0066cc; font-size: 0.9em; }
-        .bar-container { margin: 8px 0; }
-        .bar { height: 20px; background: linear-gradient(to right, #cc0000 0%, #cc0000 var(--pos), #00aa00 var(--pos), #00aa00 100%); border-radius: 10px; position: relative; }
-        .bar-labels { display: flex; justify-content: space-between; font-size: 0.8em; margin-top: 4px; }
-        .tech-items, .risk-items { font-size: 0.9em; line-height: 1.6; }
-        .badge-red { background: #cc0000; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.9em; }
-        .badge-green { background: #00aa00; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.9em; }
-        @media (max-width: 768px) { 
-            th, td { padding: 8px; font-size: 0.85em; }
-            .header { flex-direction: column; align-items: flex-start; }
-            .indicators { flex-direction: column; }
-        }
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
+        h1 { color: #333; display: inline-block; }
+        .header-container { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 10px; }
+        .controls { display: flex; gap: 15px; align-items: center; flex-wrap: wrap; }
+        .refresh-btn { padding: 8px 16px; background: #0066cc; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .refresh-btn:hover { background: #0052a3; }
+        .vix-display, .fear-greed-display, .aaii-display { font-size: 1.2em; font-weight: bold; margin-left: 20px; }
+        .mode-badge { padding: 8px 16px; border-radius: 4px; font-weight: bold; font-size: 0.9em; }
+        .regular-hours { background-color: #0066cc; color: white; }
+        .extended-hours { background-color: #ff6600; color: white; }
+        .refresh-info { color: #666; font-size: 0.9em; margin-bottom: 15px; }
+        .alert-banner { background-color: #ff4444; color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.8; } 100% { opacity: 1; } }
+        table { border-collapse: collapse; width: 100%; background-color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        th { background-color: #0066cc; color: white; padding: 12px; text-align: left; font-size: 0.9em; cursor: pointer; }
+        th.sortable::after { content: ' ⇅'; opacity: 0.5; }
+        th.sort-asc::after { content: ' ▲'; } th.sort-desc::after { content: ' ▼'; }
+        td { padding: 12px 10px; border-bottom: 1px solid #ddd; font-size: 0.9em; vertical-align: top; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        tr:hover { background-color: #f0f0f0; }
+        .positive { background-color: #00aa00; color: white; padding: 4px 8px; border-radius: 3px; font-weight: bold; display: inline-block; }
+        .negative { background-color: #cc0000; color: white; padding: 4px 8px; border-radius: 3px; font-weight: bold; display: inline-block; }
+        .bullish { color: #00aa00; font-weight: bold; }
+        .bearish { color: #cc0000; font-weight: bold; }
+        .high-risk { color: #cc6600; font-weight: bold; }
+        .neutral { color: #666; font-style: italic; }
+        .ticker { font-weight: bold; font-size: 1.1em; }
+        .link-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; font-size: 0.8em; }
+        .item { font-size: 0.85em; margin: 4px 0; line-height: 1.4; }
+        .switch-btn {display:inline-block;margin-left:12px;padding:6px 14px;background:#ff6600;color:white;border-radius:4px;font-weight:bold;text-decoration:none}
+        .switch-btn:hover {background:#e65c00}
     </style>
 </head>
 <body>
-    <div class="container">
-        
-        <div class="header">
-            <div>
-                <h1>Stock Dashboard</h1>
-                <span class="mode">Regular Hours</span>
-                <a href="extnd_dashboard.html" class="switch-btn">Switch to Extended Hours</a>
-            </div>
-            <button onclick="location.reload()" style="padding:10px;background:#0066cc;color:white;border:none;border-radius:8px;cursor:pointer;">Refresh</button>
+    
+    <div class="header-container">
+        <div>
+            <h1>Live Dashboard</h1>
+            <span class="mode-badge regular-hours">Regular Hours</span><a href="extnd_dashboard.html" class="switch-btn">Switch to Extended Hours</a>
+            <span class="vix-display"><span class="negative">VIX: 14.91 (-11.62%)</span></span>
+            <span class="fear-greed-display"><span class="neutral">N/A</span></span>
+            <span class="aaii-display"><span class="neutral">N/A</span></span>
         </div>
-        <div class="indicators">
-            <div>VIX 14.91 (-11.62%)</div>
-            <div>F&G N/A</div>
-            <div>AAII N/A</div>
+        <div class="controls">
+            <button class="refresh-btn" onclick="location.reload()">Refresh Now</button>
         </div>
-        <div class="info">Last updated: 01:42 PM on Dec 21, 2025 • Auto-refresh: 60s</div>
-        <table>
-            <thead>
-                <tr>
-                    <th>TICKER</th>
-                    <th>PRICE / DAY %</th>
-                    <th>1M / 6M %</th>
-                    <th>VOLUME</th>
-                    <th>52W RANGE</th>
-                    <th>TECHNICAL INDICATORS</th>
-                    <th>RISK / SENTIMENT</th>
-                </tr>
-            </thead>
-            <tbody>
-
-                <tr>
-                    <td>
-                        <div class="ticker"><a href="https://finance.yahoo.com/quote/NVDA" target="_blank">NVDA</a></div>
-                        <div class="links">
-                            <a href="https://finance.yahoo.com/quote/NVDA" target="_blank">Yahoo</a>
-                            <a href="https://www.tradingview.com/chart/?symbol=NVDA" target="_blank">TV</a>
-                            <a href="https://finviz.com/quote.ashx?t=NVDA" target="_blank">Finviz</a>
-                        </div>
-                    </td>
-                    <td>
-                        $180.99<br>
-                        <span style="color:#00aa00;font-weight:bold">▲ +3.93%</span>
-                    </td>
-                    <td>
-                        <span style="color:#cc0000;font-weight:bold">▼ -6.30%</span><br>
-                        <span style="color:#00aa00;font-weight:bold">▲ +27.55%</span>
-                    </td>
-                    <td>200.5M</td>
-                    <td class="bar-container">
-                        <div class="bar" style="--pos: 75.2%;"></div>
-                        <div class="bar-labels">
-                            <span>$86.60</span>
-                            <span>$212.18</span>
-                        </div>
-                    </td>
-                    <td class="tech-items">
-                        RSI(14): 51.3 (Neutral)<br>MACD: -2.603 / -2.388 (<span class="badge-red">Bearish</span>)<br>Vol Spike: No
-                    </td>
-                    <td class="risk-items">
-                        Beta: 2.28<br>P/E: 44.8<br>Short %: 1.0%<br>Days to Cover: 1.2<br>P/C Vol Ratio: <span class="badge-red">0.51</span><br><span class="badge-red">Volume Bias: Down Days Higher</span><br>Options Direction: <span class="badge-red">Bearish</span><br>Implied Move (2025-12-26): ±2.6%<br>Expected Range: $176.22 – $185.76<br>Sentiment: <span class="badge-green">Strong Buy</span><br>Rating: <span class="badge-green">Strong_Buy</span><br>Upside: <span class="badge-green">+39.8%</span>
-                    </td>
-                </tr>
-
-                <tr>
-                    <td>
-                        <div class="ticker"><a href="https://finance.yahoo.com/quote/GOOGL" target="_blank">GOOGL</a></div>
-                        <div class="links">
-                            <a href="https://finance.yahoo.com/quote/GOOGL" target="_blank">Yahoo</a>
-                            <a href="https://www.tradingview.com/chart/?symbol=GOOGL" target="_blank">TV</a>
-                            <a href="https://finviz.com/quote.ashx?t=GOOGL" target="_blank">Finviz</a>
-                        </div>
-                    </td>
-                    <td>
-                        $307.17<br>
-                        <span style="color:#00aa00;font-weight:bold">▲ +1.56%</span>
-                    </td>
-                    <td>
-                        <span style="color:#00aa00;font-weight:bold">▲ +5.51%</span><br>
-                        <span style="color:#00aa00;font-weight:bold">▲ +83.29%</span>
-                    </td>
-                    <td>22.5M</td>
-                    <td class="bar-container">
-                        <div class="bar" style="--pos: 88.6%;"></div>
-                        <div class="bar-labels">
-                            <span>$140.14</span>
-                            <span>$328.62</span>
-                        </div>
-                    </td>
-                    <td class="tech-items">
-                        RSI(14): 43.5 (Neutral)<br>MACD: 4.527 / 7.873 (<span class="badge-red">Bearish</span>)<br>Vol Spike: No
-                    </td>
-                    <td class="risk-items">
-                        Beta: 1.07<br>P/E: 30.3<br>Short %: 1.4%<br>Days to Cover: 2.1<br>P/C Vol Ratio: <span class="badge-red">0.85</span><br><span class="badge-red">Volume Bias: Down Days Higher</span><br>Options Direction: <span class="badge-red">Bearish</span><br>Implied Move (2025-12-26): ±2.0%<br>Expected Range: $300.90 – $313.44<br>Sentiment: <span class="badge-green">Strong Buy</span><br>Rating: <span class="badge-green">Strong_Buy</span><br>Upside: <span class="badge-green">+7.2%</span>
-                    </td>
-                </tr>
-
-                <tr>
-                    <td>
-                        <div class="ticker"><a href="https://finance.yahoo.com/quote/SPY" target="_blank">SPY</a></div>
-                        <div class="links">
-                            <a href="https://finance.yahoo.com/quote/SPY" target="_blank">Yahoo</a>
-                            <a href="https://www.tradingview.com/chart/?symbol=SPY" target="_blank">TV</a>
-                            <a href="https://finviz.com/quote.ashx?t=SPY" target="_blank">Finviz</a>
-                        </div>
-                    </td>
-                    <td>
-                        $680.59<br>
-                        <span style="color:#00aa00;font-weight:bold">▲ +0.91%</span>
-                    </td>
-                    <td>
-                        <span style="color:#cc0000;font-weight:bold">▼ -0.06%</span><br>
-                        <span style="color:#00aa00;font-weight:bold">▲ +15.20%</span>
-                    </td>
-                    <td>85.9M</td>
-                    <td class="bar-container">
-                        <div class="bar" style="--pos: 96.6%;"></div>
-                        <div class="bar-labels">
-                            <span>$477.64</span>
-                            <span>$687.67</span>
-                        </div>
-                    </td>
-                    <td class="tech-items">
-                        RSI(14): 52.7 (Neutral)<br>MACD: 1.627 / 2.411 (<span class="badge-red">Bearish</span>)<br>Vol Spike: No
-                    </td>
-                    <td class="risk-items">
-                        Beta: nan<br>P/E: 27.5<br>Short %: nan%<br>Days to Cover: nan<br>P/C Vol Ratio: <span class="badge-red">1.6</span><br><span class="badge-red">Volume Bias: Down Days Higher</span><br>Options Direction: <span class="badge-red">Bearish</span><br>Implied Move (2025-12-22): ±0.4%<br>Expected Range: $677.70 – $683.48<br>Upside: <span class="badge-red">+nan%</span>
-                    </td>
-                </tr>
-
-                <tr>
-                    <td>
-                        <div class="ticker"><a href="https://finance.yahoo.com/quote/AAPL" target="_blank">AAPL</a></div>
-                        <div class="links">
-                            <a href="https://finance.yahoo.com/quote/AAPL" target="_blank">Yahoo</a>
-                            <a href="https://www.tradingview.com/chart/?symbol=AAPL" target="_blank">TV</a>
-                            <a href="https://finviz.com/quote.ashx?t=AAPL" target="_blank">Finviz</a>
-                        </div>
-                    </td>
-                    <td>
-                        $273.67<br>
-                        <span style="color:#00aa00;font-weight:bold">▲ +0.54%</span>
-                    </td>
-                    <td>
-                        <span style="color:#cc0000;font-weight:bold">▼ -0.57%</span><br>
-                        <span style="color:#00aa00;font-weight:bold">▲ +35.22%</span>
-                    </td>
-                    <td>41.1M</td>
-                    <td class="bar-container">
-                        <div class="bar" style="--pos: 87.5%;"></div>
-                        <div class="bar-labels">
-                            <span>$168.63</span>
-                            <span>$288.62</span>
-                        </div>
-                    </td>
-                    <td class="tech-items">
-                        RSI(14): 30.3 (Neutral)<br>MACD: 1.026 / 2.440 (<span class="badge-red">Bearish</span>)<br>Vol Spike: No
-                    </td>
-                    <td class="risk-items">
-                        Beta: 1.11<br>P/E: 36.6<br>Short %: 0.9%<br>Days to Cover: 2.5<br>P/C Vol Ratio: <span class="badge-red">0.61</span><br>Options Direction: <span class="badge-green">Bullish</span><br>Implied Move (2025-12-26): ±1.5%<br>Expected Range: $269.48 – $277.86<br>Sentiment: <span class="badge-green">Buy</span><br>Rating: <span class="badge-green">Buy</span><br>Upside: <span class="badge-green">+5.1%</span>
-                    </td>
-                </tr>
-
-                <tr>
-                    <td>
-                        <div class="ticker"><a href="https://finance.yahoo.com/quote/MSFT" target="_blank">MSFT</a></div>
-                        <div class="links">
-                            <a href="https://finance.yahoo.com/quote/MSFT" target="_blank">Yahoo</a>
-                            <a href="https://www.tradingview.com/chart/?symbol=MSFT" target="_blank">TV</a>
-                            <a href="https://finviz.com/quote.ashx?t=MSFT" target="_blank">Finviz</a>
-                        </div>
-                    </td>
-                    <td>
-                        $486.06<br>
-                        <span style="color:#00aa00;font-weight:bold">▲ +0.43%</span>
-                    </td>
-                    <td>
-                        <span style="color:#cc0000;font-weight:bold">▼ -4.27%</span><br>
-                        <span style="color:#00aa00;font-weight:bold">▲ +5.15%</span>
-                    </td>
-                    <td>18.6M</td>
-                    <td class="bar-container">
-                        <div class="bar" style="--pos: 68.0%;"></div>
-                        <div class="bar-labels">
-                            <span>$342.95</span>
-                            <span>$553.50</span>
-                        </div>
-                    </td>
-                    <td class="tech-items">
-                        RSI(14): 49.4 (Neutral)<br>MACD: -4.933 / -6.064 (<span class="badge-green">Bullish</span>)<br>Vol Spike: No
-                    </td>
-                    <td class="risk-items">
-                        Beta: 1.07<br>P/E: 34.6<br>Short %: 0.8%<br>Days to Cover: 2.2<br>P/C Vol Ratio: <span class="badge-red">0.81</span><br><span class="badge-red">Volume Bias: Down Days Higher</span><br>Options Direction: <span class="badge-red">Bearish</span><br>Implied Move (2025-12-26): ±1.6%<br>Expected Range: $478.21 – $493.91<br>Sentiment: <span class="badge-green">Strong Buy</span><br>Rating: <span class="badge-green">Strong_Buy</span><br>Upside: <span class="badge-green">+28.1%</span>
-                    </td>
-                </tr>
-
-                <tr>
-                    <td>
-                        <div class="ticker"><a href="https://finance.yahoo.com/quote/AMZN" target="_blank">AMZN</a></div>
-                        <div class="links">
-                            <a href="https://finance.yahoo.com/quote/AMZN" target="_blank">Yahoo</a>
-                            <a href="https://www.tradingview.com/chart/?symbol=AMZN" target="_blank">TV</a>
-                            <a href="https://finviz.com/quote.ashx?t=AMZN" target="_blank">Finviz</a>
-                        </div>
-                    </td>
-                    <td>
-                        $227.37<br>
-                        <span style="color:#00aa00;font-weight:bold">▲ +0.27%</span>
-                    </td>
-                    <td>
-                        <span style="color:#cc0000;font-weight:bold">▼ -8.72%</span><br>
-                        <span style="color:#00aa00;font-weight:bold">▲ +9.72%</span>
-                    </td>
-                    <td>44.6M</td>
-                    <td class="bar-container">
-                        <div class="bar" style="--pos: 67.9%;"></div>
-                        <div class="bar-labels">
-                            <span>$161.38</span>
-                            <span>$258.60</span>
-                        </div>
-                    </td>
-                    <td class="tech-items">
-                        RSI(14): 39.3 (Neutral)<br>MACD: -1.656 / -1.297 (<span class="badge-red">Bearish</span>)<br>Vol Spike: No
-                    </td>
-                    <td class="risk-items">
-                        Beta: 1.37<br>P/E: 32.2<br>Short %: 0.8%<br>Days to Cover: 1.7<br>P/C Vol Ratio: <span class="badge-red">0.4</span><br><span class="badge-red">Volume Bias: Down Days Higher</span><br>Options Direction: <span class="badge-red">Bearish</span><br>Implied Move (2025-12-26): ±2.0%<br>Expected Range: $222.73 – $232.01<br>Sentiment: <span class="badge-green">Strong Buy</span><br>Rating: <span class="badge-green">Strong_Buy</span><br>Upside: <span class="badge-green">+30.0%</span>
-                    </td>
-                </tr>
-
-                <tr>
-                    <td>
-                        <div class="ticker"><a href="https://finance.yahoo.com/quote/TSLA" target="_blank">TSLA</a></div>
-                        <div class="links">
-                            <a href="https://finance.yahoo.com/quote/TSLA" target="_blank">Yahoo</a>
-                            <a href="https://www.tradingview.com/chart/?symbol=TSLA" target="_blank">TV</a>
-                            <a href="https://finviz.com/quote.ashx?t=TSLA" target="_blank">Finviz</a>
-                        </div>
-                    </td>
-                    <td>
-                        $480.91<br>
-                        <span style="color:#cc0000;font-weight:bold">▼ -0.51%</span>
-                    </td>
-                    <td>
-                        <span style="color:#00aa00;font-weight:bold">▲ +9.39%</span><br>
-                        <span style="color:#00aa00;font-weight:bold">▲ +44.83%</span>
-                    </td>
-                    <td>82.0M</td>
-                    <td class="bar-container">
-                        <div class="bar" style="--pos: 94.9%;"></div>
-                        <div class="bar-labels">
-                            <span>$214.25</span>
-                            <span>$495.28</span>
-                        </div>
-                    </td>
-                    <td class="tech-items">
-                        RSI(14): 67.9 (Neutral)<br>MACD: 13.676 / 9.288 (<span class="badge-green">Bullish</span>)<br>Vol Spike: No
-                    </td>
-                    <td class="risk-items">
-                        Beta: 1.88<br>P/E: 334.2<br>Short %: 2.7%<br>Days to Cover: 0.9<br>P/C Vol Ratio: <span class="badge-red">0.71</span><br>Options Direction: <span class="badge-green">Bullish</span><br>Implied Move (2025-12-26): ±3.5%<br>Expected Range: $464.15 – $497.67<br>Sentiment: <span class="badge-red">Hold</span><br>Rating: <span class="badge-red">Hold</span><br>Upside: <span class="badge-red">-17.4%</span>
-                    </td>
-                </tr>
-
-                <tr>
-                    <td>
-                        <div class="ticker"><a href="https://finance.yahoo.com/quote/META" target="_blank">META</a></div>
-                        <div class="links">
-                            <a href="https://finance.yahoo.com/quote/META" target="_blank">Yahoo</a>
-                            <a href="https://www.tradingview.com/chart/?symbol=META" target="_blank">TV</a>
-                            <a href="https://finviz.com/quote.ashx?t=META" target="_blank">Finviz</a>
-                        </div>
-                    </td>
-                    <td>
-                        $658.79<br>
-                        <span style="color:#cc0000;font-weight:bold">▼ -0.85%</span>
-                    </td>
-                    <td>
-                        <span style="color:#00aa00;font-weight:bold">▲ +5.14%</span><br>
-                        <span style="color:#cc0000;font-weight:bold">▼ -4.02%</span>
-                    </td>
-                    <td>11.9M</td>
-                    <td class="bar-container">
-                        <div class="bar" style="--pos: 56.9%;"></div>
-                        <div class="bar-labels">
-                            <span>$478.72</span>
-                            <span>$795.06</span>
-                        </div>
-                    </td>
-                    <td class="tech-items">
-                        RSI(14): 57.5 (Neutral)<br>MACD: 2.084 / -1.039 (<span class="badge-green">Bullish</span>)<br>Vol Spike: No
-                    </td>
-                    <td class="risk-items">
-                        Beta: 1.27<br>P/E: 29.1<br>Short %: 1.5%<br>Days to Cover: 1.7<br><span class="badge-red">Trend: Death Cross</span><br>P/C Vol Ratio: <span class="badge-red">0.55</span><br>Options Direction: <span class="badge-red">Bearish</span><br>Implied Move (2025-12-26): ±2.0%<br>Expected Range: $645.35 – $672.23<br>Sentiment: <span class="badge-green">Strong Buy</span><br>Rating: <span class="badge-green">Strong_Buy</span><br>Upside: <span class="badge-green">+27.1%</span>
-                    </td>
-                </tr>
-
-            </tbody>
-        </table>
     </div>
+    <div class="refresh-info">
+        <strong>Last updated:</strong> 02:14:35 PM PST on December 21, 2025 | 
+        <strong>Auto-refresh:</strong> every 60 seconds
+    </div>
+    <table id="stockTable">
+        <tr>
+            <th class="sortable" data-column="ticker">TICKER</th>
+            <th class="sortable" data-column="price" data-type="number">PRICE</th>
+            <th class="sortable" data-column="day" data-type="number">DAY %</th>
+            <th class="sortable" data-column="1m" data-type="number">1M %</th>
+            <th class="sortable" data-column="6m" data-type="number">6M %</th>
+            <th class="sortable" data-column="volume" data-type="number">VOLUME</th>
+            <th>52W RANGE</th>
+            <th class="sortable" data-column="tech">TECHNICAL</th>
+            <th class="sortable" data-column="risk">RISK / SENTIMENT</th>
+        </tr>
+        <tr>
+            <td data-value="CRWG">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/CRWG" target="_blank" class="ticker-main">CRWG</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/CRWG" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=CRWG" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=CRWG" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="3.94">3.94</td>
+            <td data-value="44.852941756533085"><span class="positive">▲ +44.85%</span></td>
+            <td data-value="8.839784027008479"><span class="positive">▲ +8.84%</span></td>
+            <td data-value="-77.16339188557102"><span class="negative">▼ -77.16%</span></td>
+            <td data-value="68939053">68.9M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:8.8%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:91.2%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:8.8%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>2.42</span><span>19.63</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="51.97368423632472"><div class="item"><strong>RSI(14):</strong> <span class="">52.0 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bullish">-0.900 / -1.041 (Bullish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="spike">Yes</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.41</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2026-01-16):</strong> <span class="high-risk">±31.3%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$2.71 – $5.17</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="RKLX">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/RKLX" target="_blank" class="ticker-main">RKLX</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/RKLX" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=RKLX" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=RKLX" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="47.64">47.64</td>
+            <td data-value="34.881367450177265"><span class="positive">▲ +34.88%</span></td>
+            <td data-value="134.87312949747178"><span class="positive">▲ +134.87%</span></td>
+            <td data-value="333.0918051979758"><span class="positive">▲ +333.09%</span></td>
+            <td data-value="7456961">7.5M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:72.5%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:27.5%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:72.5%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>3.81</span><span>64.24</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="77.55642431468986"><div class="item"><strong>RSI(14):</strong> <span class="overbought">77.6 (Overbought)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bullish">2.455 / 0.228 (Bullish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="spike">Yes</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.79</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bullish">Bullish</span></div><br><div class="item"><strong>Implied Move (2026-01-16):</strong> <span class="high-risk">±41.6%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$27.84 – $67.45</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="CRWV">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/CRWV" target="_blank" class="ticker-main">CRWV</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/CRWV" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=CRWV" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=CRWV" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="82.95">82.95</td>
+            <td data-value="22.56057494611909"><span class="positive">▲ +22.56%</span></td>
+            <td data-value="10.114158345026066"><span class="positive">▲ +10.11%</span></td>
+            <td data-value="-47.66624763560972"><span class="negative">▼ -47.67%</span></td>
+            <td data-value="77668909">77.7M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:32.2%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:67.8%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:32.2%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>33.51</span><span>187.00</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="54.61610302360653"><div class="item"><strong>RSI(14):</strong> <span class="">54.6 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bullish">-5.844 / -6.520 (Bullish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="spike">Yes</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" style=color:#cc6600>14.2%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">0.9</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.64</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2025-12-26):</strong> <span class="bearish">±7.2%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$76.96 – $88.93</span></div><br><div class="item"><strong>Sentiment:</strong> <span class="positive">Buy</span></div><br><div class="item"><strong>Rating:</strong> <span class="positive">Buy</span></div><br><div class="item"><strong>Upside:</strong> <span class="positive">+53.9%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="NBIS">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/NBIS" target="_blank" class="ticker-main">NBIS</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/NBIS" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=NBIS" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=NBIS" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="89.44">89.44</td>
+            <td data-value="14.534519958747142"><span class="positive">▲ +14.53%</span></td>
+            <td data-value="4.0241904505504245"><span class="positive">▲ +4.02%</span></td>
+            <td data-value="77.24931443553743"><span class="positive">▲ +77.25%</span></td>
+            <td data-value="26687603">26.7M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:57.9%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:42.1%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:57.9%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>18.31</span><span>141.10</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="40.68328598154903"><div class="item"><strong>RSI(14):</strong> <span class="">40.7 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">-5.047 / -4.261 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="1.149"><div class="item"><strong>Beta:</strong> <span class="high-risk" >1.15</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" style=color:#cc6600>13.4%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">2.2</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.37</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2025-12-26):</strong> <span class="bearish">±7.2%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$82.98 – $95.90</span></div><br><div class="item"><strong>Sentiment:</strong> <span class="positive">Buy</span></div><br><div class="item"><strong>Rating:</strong> <span class="positive">Buy</span></div><br><div class="item"><strong>Upside:</strong> <span class="positive">+69.4%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="MUU">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/MUU" target="_blank" class="ticker-main">MUU</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/MUU" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=MUU" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=MUU" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="88.41">88.41</td>
+            <td data-value="13.93041933060517"><span class="positive">▲ +13.93%</span></td>
+            <td data-value="13.490146802675051"><span class="positive">▲ +13.49%</span></td>
+            <td data-value="299.7531743869527"><span class="positive">▲ +299.75%</span></td>
+            <td data-value="2045853">2.0M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:98.2%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:1.8%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:98.2%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>6.45</span><span>89.88</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="58.74852046528287"><div class="item"><strong>RSI(14):</strong> <span class="">58.7 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bullish">2.844 / 2.651 (Bullish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >36.5</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">nan</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="neutral">Neutral</span></div><br><div class="item"><strong>Implied Move (N/A):</strong> <span class="">±nan%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$nan – $nan</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="ORCX">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/ORCX" target="_blank" class="ticker-main">ORCX</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/ORCX" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=ORCX" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=ORCX" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="16.85">16.85</td>
+            <td data-value="13.697710718269928"><span class="positive">▲ +13.70%</span></td>
+            <td data-value="-27.464482507486114"><span class="negative">▼ -27.46%</span></td>
+            <td data-value="-36.028852377154514"><span class="negative">▼ -36.03%</span></td>
+            <td data-value="13032355">13.0M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:15.2%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:84.8%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:15.2%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>9.05</span><span>60.53</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="43.30755557350826"><div class="item"><strong>RSI(14):</strong> <span class="">43.3 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bullish">-3.070 / -3.095 (Bullish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="spike">Yes</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >26.6</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.64</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bullish">Bullish</span></div><br><div class="item"><strong>Implied Move (2026-01-16):</strong> <span class="high-risk">±17.1%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$13.98 – $19.72</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="CRDO">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/CRDO" target="_blank" class="ticker-main">CRDO</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/CRDO" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=CRDO" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=CRDO" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="150.14">150.14</td>
+            <td data-value="8.349564446770097"><span class="positive">▲ +8.35%</span></td>
+            <td data-value="3.1322966762190445"><span class="positive">▲ +3.13%</span></td>
+            <td data-value="89.64254498182032"><span class="positive">▲ +89.64%</span></td>
+            <td data-value="6926054">6.9M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:65.5%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:34.5%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:65.5%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>29.09</span><span>213.80</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="38.93805466220884"><div class="item"><strong>RSI(14):</strong> <span class="">38.9 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">-4.207 / -0.895 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="2.633"><div class="item"><strong>Beta:</strong> <span class="high-risk" style=color:#cc6600>2.63</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" style=color:#cc6600>129.4</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >5.4%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">1.3</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bearish">1.17</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2025-12-26):</strong> <span class="bearish">±6.3%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$140.62 – $159.66</span></div><br><div class="item"><strong>Sentiment:</strong> <span class="positive">Strong Buy</span></div><br><div class="item"><strong>Rating:</strong> <span class="positive">Strong_Buy</span></div><br><div class="item"><strong>Upside:</strong> <span class="positive">+40.9%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="SOXL">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/SOXL" target="_blank" class="ticker-main">SOXL</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/SOXL" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=SOXL" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=SOXL" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="41.79">41.79</td>
+            <td data-value="8.333323445575209"><span class="positive">▲ +8.33%</span></td>
+            <td data-value="13.450048848627242"><span class="positive">▲ +13.45%</span></td>
+            <td data-value="91.50362034967655"><span class="positive">▲ +91.50%</span></td>
+            <td data-value="87217661">87.2M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:79.4%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:20.6%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:79.4%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>7.21</span><span>50.76</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="50.66278643981087"><div class="item"><strong>RSI(14):</strong> <span class="">50.7 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">0.009 / 0.699 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >39.3</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.90</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="neutral">Neutral</span></div><br><div class="item"><strong>Implied Move (2025-12-26):</strong> <span class="bearish">±6.6%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$39.04 – $44.55</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="PLTU">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/PLTU" target="_blank" class="ticker-main">PLTU</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/PLTU" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=PLTU" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=PLTU" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="88.05">88.05</td>
+            <td data-value="8.26263502939845"><span class="positive">▲ +8.26%</span></td>
+            <td data-value="25.407829256824666"><span class="positive">▲ +25.41%</span></td>
+            <td data-value="58.169470726137185"><span class="positive">▲ +58.17%</span></td>
+            <td data-value="1136554">1.1M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:80.2%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:19.8%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:80.2%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>13.69</span><span>106.46</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="71.99307814689786"><div class="item"><strong>RSI(14):</strong> <span class="overbought">72.0 (Overbought)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bullish">2.022 / 0.577 (Bullish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" style=color:#cc6600>65.3</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.50</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bullish">Bullish</span></div><br><div class="item"><strong>Implied Move (2026-01-16):</strong> <span class="bearish">±7.1%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$81.76 – $94.34</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="NVDU">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/NVDU" target="_blank" class="ticker-main">NVDU</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/NVDU" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=NVDU" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=NVDU" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="112.10">112.10</td>
+            <td data-value="7.912977895686903"><span class="positive">▲ +7.91%</span></td>
+            <td data-value="-8.099019730115863"><span class="negative">▼ -8.10%</span></td>
+            <td data-value="39.65557095965918"><span class="positive">▲ +39.66%</span></td>
+            <td data-value="818940">818.9K</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:63.0%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:37.0%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:63.0%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>31.09</span><span>159.77</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="49.82637962809724"><div class="item"><strong>RSI(14):</strong> <span class="">49.8 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">-4.154 / -3.926 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" style=color:#cc6600>43.6</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.46</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2026-01-16):</strong> <span class="high-risk">±17.5%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$92.52 – $131.68</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="MU">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/MU" target="_blank" class="ticker-main">MU</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/MU" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=MU" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=MU" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="265.94">265.94</td>
+            <td data-value="6.996579833486126"><span class="positive">▲ +7.00%</span></td>
+            <td data-value="9.915274145796328"><span class="positive">▲ +9.92%</span></td>
+            <td data-value="122.2605452055799"><span class="positive">▲ +122.26%</span></td>
+            <td data-value="39468183">39.5M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:98.8%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:1.2%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:98.8%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>61.44</span><span>268.38</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="59.83315518055663"><div class="item"><strong>RSI(14):</strong> <span class="">59.8 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bullish">6.539 / 6.328 (Bullish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="1.548"><div class="item"><strong>Beta:</strong> <span class="high-risk" style=color:#cc6600>1.55</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >25.3</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >2.0%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">0.7</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.71</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2025-12-26):</strong> <span class="bearish">±4.6%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$253.71 – $278.17</span></div><br><div class="item"><strong>Sentiment:</strong> <span class="positive">Buy</span></div><br><div class="item"><strong>Rating:</strong> <span class="positive">Buy</span></div><br><div class="item"><strong>Upside:</strong> <span class="positive">+12.5%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="ORCL">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/ORCL" target="_blank" class="ticker-main">ORCL</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/ORCL" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=ORCL" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=ORCL" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="192.32">192.32</td>
+            <td data-value="6.826644797119892"><span class="positive">▲ +6.83%</span></td>
+            <td data-value="-12.526149917983837"><span class="negative">▼ -12.53%</span></td>
+            <td data-value="-8.54424078830888"><span class="negative">▼ -8.54%</span></td>
+            <td data-value="49909938">49.9M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:32.7%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:67.3%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:32.7%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>117.98</span><span>345.12</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="44.87954976537795"><div class="item"><strong>RSI(14):</strong> <span class="">44.9 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">-13.046 / -12.566 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="spike">Yes</span></div></td>
+            <td data-value="1.659"><div class="item"><strong>Beta:</strong> <span class="high-risk" style=color:#cc6600>1.66</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >36.1</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >1.5%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">0.5</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.50</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bullish">Bullish</span></div><br><div class="item"><strong>Implied Move (2025-12-26):</strong> <span class="">±3.6%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$185.42 – $199.22</span></div><br><div class="item"><strong>Sentiment:</strong> <span class="positive">Buy</span></div><br><div class="item"><strong>Rating:</strong> <span class="positive">Buy</span></div><br><div class="item"><strong>Upside:</strong> <span class="positive">+51.2%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="AVL">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/AVL" target="_blank" class="ticker-main">AVL</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/AVL" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=AVL" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=AVL" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="42.81">42.81</td>
+            <td data-value="6.466059059977364"><span class="positive">▲ +6.47%</span></td>
+            <td data-value="-5.8157018688336874"><span class="negative">▼ -5.82%</span></td>
+            <td data-value="57.527078161041835"><span class="positive">▲ +57.53%</span></td>
+            <td data-value="1023938">1.0M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:60.0%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:40.0%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:60.0%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>8.86</span><span>65.40</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="33.11552131040571"><div class="item"><strong>RSI(14):</strong> <span class="">33.1 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">-2.138 / 0.124 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="spike">Yes</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >34.7</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="negative">1.36</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2026-01-16):</strong> <span class="high-risk">±15.1%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$36.35 – $49.27</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="BULZ">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/BULZ" target="_blank" class="ticker-main">BULZ</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/BULZ" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=BULZ" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=BULZ" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="262.88">262.88</td>
+            <td data-value="6.411921966955801"><span class="positive">▲ +6.41%</span></td>
+            <td data-value="5.82504770636589"><span class="positive">▲ +5.83%</span></td>
+            <td data-value="67.23710210565267"><span class="positive">▲ +67.24%</span></td>
+            <td data-value="334444">334.4K</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:73.9%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:26.1%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:73.9%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>57.00</span><span>335.58</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="49.51371113928344"><div class="item"><strong>RSI(14):</strong> <span class="">49.5 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">-4.099 / -2.514 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" style=color:#cc6600>50.1</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">nan</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="neutral">Neutral</span></div><br><div class="item"><strong>Implied Move (N/A):</strong> <span class="">±nan%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$nan – $nan</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="TECL">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/TECL" target="_blank" class="ticker-main">TECL</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/TECL" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=TECL" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=TECL" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="118.94">118.94</td>
+            <td data-value="6.367378613855955"><span class="positive">▲ +6.37%</span></td>
+            <td data-value="3.507991612705711"><span class="positive">▲ +3.51%</span></td>
+            <td data-value="52.59318393729995"><span class="positive">▲ +52.59%</span></td>
+            <td data-value="837492">837.5K</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:76.3%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:23.7%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:76.3%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>30.54</span><span>146.37</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="51.881041531133086"><div class="item"><strong>RSI(14):</strong> <span class="">51.9 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">-1.317 / -0.541 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >36.8</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.63</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bullish">Bullish</span></div><br><div class="item"><strong>Implied Move (2026-01-16):</strong> <span class="high-risk">±10.6%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$106.34 – $131.54</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="HIBL">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/HIBL" target="_blank" class="ticker-main">HIBL</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/HIBL" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=HIBL" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=HIBL" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="68.77">68.77</td>
+            <td data-value="4.752467699422083"><span class="positive">▲ +4.75%</span></td>
+            <td data-value="29.564042978629267"><span class="positive">▲ +29.56%</span></td>
+            <td data-value="87.12469740065056"><span class="positive">▲ +87.12%</span></td>
+            <td data-value="91308">91.3K</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:92.3%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:7.7%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:92.3%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>13.62</span><span>73.35</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="65.68412294792091"><div class="item"><strong>RSI(14):</strong> <span class="">65.7 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bullish">2.298 / 2.234 (Bullish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >29.0</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.00</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bullish">Bullish</span></div><br><div class="item"><strong>Implied Move (2026-01-16):</strong> <span class="bearish">±8.0%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$63.24 – $74.29</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="NVDA">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/NVDA" target="_blank" class="ticker-main">NVDA</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/NVDA" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=NVDA" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=NVDA" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="180.99">180.99</td>
+            <td data-value="3.9336201490321216"><span class="positive">▲ +3.93%</span></td>
+            <td data-value="-3.0010294940350435"><span class="negative">▼ -3.00%</span></td>
+            <td data-value="25.102145361083416"><span class="positive">▲ +25.10%</span></td>
+            <td data-value="200450972">200.5M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:75.2%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:24.8%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:75.2%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>86.60</span><span>212.18</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="51.305004520869005"><div class="item"><strong>RSI(14):</strong> <span class="">51.3 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">-2.603 / -2.388 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="2.284"><div class="item"><strong>Beta:</strong> <span class="high-risk" style=color:#cc6600>2.28</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" style=color:#cc6600>44.8</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >1.0%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">1.2</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.51</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2025-12-26):</strong> <span class="">±2.7%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$176.16 – $185.82</span></div><br><div class="item"><strong>Sentiment:</strong> <span class="positive">Strong Buy</span></div><br><div class="item"><strong>Rating:</strong> <span class="positive">Strong_Buy</span></div><br><div class="item"><strong>Upside:</strong> <span class="positive">+39.8%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="SPYU">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/SPYU" target="_blank" class="ticker-main">SPYU</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/SPYU" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=SPYU" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=SPYU" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="54.96">54.96</td>
+            <td data-value="3.5028261088520662"><span class="positive">▲ +3.50%</span></td>
+            <td data-value="6.946876312949186"><span class="positive">▲ +6.95%</span></td>
+            <td data-value="40.13257871970905"><span class="positive">▲ +40.13%</span></td>
+            <td data-value="481777">481.8K</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:87.1%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:12.9%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:87.1%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>18.15</span><span>60.42</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="48.90029569506799"><div class="item"><strong>RSI(14):</strong> <span class="">48.9 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">-0.032 / 0.213 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">nan</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="neutral">Neutral</span></div><br><div class="item"><strong>Implied Move (N/A):</strong> <span class="">±nan%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$nan – $nan</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="FNGU">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/FNGU" target="_blank" class="ticker-main">FNGU</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/FNGU" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=FNGU" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=FNGU" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="25.70">25.70</td>
+            <td data-value="3.420524621414329"><span class="positive">▲ +3.42%</span></td>
+            <td data-value="-9.31545298318343"><span class="negative">▼ -9.32%</span></td>
+            <td data-value="18.487782988226936"><span class="positive">▲ +18.49%</span></td>
+            <td data-value="2892287">2.9M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:67.8%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:32.2%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:67.8%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>7.95</span><span>34.14</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="28.721174590994636"><div class="item"><strong>RSI(14):</strong> <span class="oversold">28.7 (Oversold)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">-1.099 / -0.646 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >1.9</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">nan</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="neutral">Neutral</span></div><br><div class="item"><strong>Implied Move (N/A):</strong> <span class="">±nan%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$nan – $nan</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="AVGO">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/AVGO" target="_blank" class="ticker-main">AVGO</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/AVGO" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=AVGO" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=AVGO" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="340.51">340.51</td>
+            <td data-value="3.2208681468203735"><span class="positive">▲ +3.22%</span></td>
+            <td data-value="-0.6260000151407803"><span class="negative">▼ -0.63%</span></td>
+            <td data-value="35.61730133473614"><span class="positive">▲ +35.62%</span></td>
+            <td data-value="42766241">42.8M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:73.3%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:26.7%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:73.3%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>137.54</span><span>414.61</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="33.912737770258275"><div class="item"><strong>RSI(14):</strong> <span class="">33.9 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">-5.938 / 1.997 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="1.204"><div class="item"><strong>Beta:</strong> <span class="high-risk" style=color:#cc6600>1.20</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" style=color:#cc6600>71.4</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >1.4%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">0.9</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.34</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bullish">Bullish</span></div><br><div class="item"><strong>Implied Move (2025-12-26):</strong> <span class="">±3.3%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$329.23 – $351.78</span></div><br><div class="item"><strong>Sentiment:</strong> <span class="positive">Strong Buy</span></div><br><div class="item"><strong>Rating:</strong> <span class="positive">Strong_Buy</span></div><br><div class="item"><strong>Upside:</strong> <span class="positive">+33.4%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="SHPU">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/SHPU" target="_blank" class="ticker-main">SHPU</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/SHPU" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=SHPU" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=SHPU" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="32.66">32.66</td>
+            <td data-value="3.184631007708214"><span class="positive">▲ +3.18%</span></td>
+            <td data-value="45.19069412500398"><span class="positive">▲ +45.19%</span></td>
+            <td data-value="8.68583681338187"><span class="positive">▲ +8.69%</span></td>
+            <td data-value="25318">25.3K</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:64.4%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:35.6%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:64.4%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>21.30</span><span>38.93</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="70.69370968191528"><div class="item"><strong>RSI(14):</strong> <span class="overbought">70.7 (Overbought)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bullish">0.805 / 0.391 (Bullish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" style=color:#cc6600>57.4</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">nan</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="neutral">Neutral</span></div><br><div class="item"><strong>Implied Move (N/A):</strong> <span class="">±nan%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$nan – $nan</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="GGLL">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/GGLL" target="_blank" class="ticker-main">GGLL</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/GGLL" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=GGLL" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=GGLL" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="94.05">94.05</td>
+            <td data-value="3.091088009490789"><span class="positive">▲ +3.09%</span></td>
+            <td data-value="14.129442942138892"><span class="positive">▲ +14.13%</span></td>
+            <td data-value="175.95131546341352"><span class="positive">▲ +175.95%</span></td>
+            <td data-value="601100">601.1K</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:83.1%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:16.9%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:83.1%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>22.64</span><span>108.54</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="42.17028098965262"><div class="item"><strong>RSI(14):</strong> <span class="">42.2 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">2.070 / 4.069 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" style=color:#cc6600>53.2</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bearish">1.04</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2026-01-16):</strong> <span class="high-risk">±15.9%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$79.12 – $108.98</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="UPRO">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/UPRO" target="_blank" class="ticker-main">UPRO</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/UPRO" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=UPRO" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=UPRO" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="115.79">115.79</td>
+            <td data-value="2.59613706302518"><span class="positive">▲ +2.60%</span></td>
+            <td data-value="6.317139860506288"><span class="positive">▲ +6.32%</span></td>
+            <td data-value="37.1730195662456"><span class="positive">▲ +37.17%</span></td>
+            <td data-value="2460171">2.5M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:91.6%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:8.4%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:91.6%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>45.67</span><span>122.19</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="50.74418560087891"><div class="item"><strong>RSI(14):</strong> <span class="">50.7 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">0.340 / 0.727 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >27.1</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.46</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bullish">Bullish</span></div><br><div class="item"><strong>Implied Move (2025-12-26):</strong> <span class="">±2.6%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$112.82 – $118.77</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="COIN">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/COIN" target="_blank" class="ticker-main">COIN</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/COIN" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=COIN" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=COIN" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="245.12">245.12</td>
+            <td data-value="2.4749156540442074"><span class="positive">▲ +2.47%</span></td>
+            <td data-value="-7.133933024816183"><span class="negative">▼ -7.13%</span></td>
+            <td data-value="-6.2889520000056"><span class="negative">▼ -6.29%</span></td>
+            <td data-value="7220663">7.2M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:33.9%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:66.1%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:33.9%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>142.58</span><span>444.65</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="40.84121210556137"><div class="item"><strong>RSI(14):</strong> <span class="">40.8 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">-12.302 / -11.610 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="3.691"><div class="item"><strong>Beta:</strong> <span class="high-risk" style=color:#cc6600>3.69</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >21.2</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >8.3%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">2.0</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.47</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2025-12-26):</strong> <span class="bearish">±4.3%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$234.60 – $255.64</span></div><br><div class="item"><strong>Sentiment:</strong> <span class="positive">Buy</span></div><br><div class="item"><strong>Rating:</strong> <span class="positive">Buy</span></div><br><div class="item"><strong>Upside:</strong> <span class="positive">+51.8%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="TNA">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/TNA" target="_blank" class="ticker-main">TNA</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/TNA" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=TNA" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=TNA" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="48.34">48.34</td>
+            <td data-value="2.3935629951894897"><span class="positive">▲ +2.39%</span></td>
+            <td data-value="23.91695009611062"><span class="positive">▲ +23.92%</span></td>
+            <td data-value="54.17751332137099"><span class="positive">▲ +54.18%</span></td>
+            <td data-value="8150105">8.2M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:88.2%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:11.8%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:88.2%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>17.90</span><span>52.42</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="58.99939462902583"><div class="item"><strong>RSI(14):</strong> <span class="">59.0 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">1.015 / 1.100 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >19.7</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.91</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="neutral">Neutral</span></div><br><div class="item"><strong>Implied Move (2025-12-26):</strong> <span class="">±3.9%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$46.46 – $50.22</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="FNGG">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/FNGG" target="_blank" class="ticker-main">FNGG</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/FNGG" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=FNGG" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=FNGG" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="207.93">207.93</td>
+            <td data-value="2.315111907674526"><span class="positive">▲ +2.32%</span></td>
+            <td data-value="-5.2000324458538945"><span class="negative">▼ -5.20%</span></td>
+            <td data-value="17.455336129792915"><span class="positive">▲ +17.46%</span></td>
+            <td data-value="8963">9.0K</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:74.9%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:25.1%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:74.9%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>87.38</span><span>248.40</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="31.334630697294145"><div class="item"><strong>RSI(14):</strong> <span class="">31.3 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">-5.135 / -2.732 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >33.7</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="negative">2.21</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2026-01-16):</strong> <span class="high-risk">±16.4%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$173.93 – $241.93</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="MIDU">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/MIDU" target="_blank" class="ticker-main">MIDU</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/MIDU" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=MIDU" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=MIDU" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="52.98">52.98</td>
+            <td data-value="2.27799290068627"><span class="positive">▲ +2.28%</span></td>
+            <td data-value="19.24375237077037"><span class="positive">▲ +19.24%</span></td>
+            <td data-value="24.859462869419882"><span class="positive">▲ +24.86%</span></td>
+            <td data-value="49343">49.3K</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:77.4%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:22.6%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:77.4%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>25.14</span><span>61.11</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="58.72674787769938"><div class="item"><strong>RSI(14):</strong> <span class="">58.7 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bullish">0.995 / 0.956 (Bullish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >21.5</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.51</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bullish">Bullish</span></div><br><div class="item"><strong>Implied Move (2026-01-16):</strong> <span class="high-risk">±8.6%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$48.40 – $57.56</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="QTUM">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/QTUM" target="_blank" class="ticker-main">QTUM</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/QTUM" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=QTUM" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=QTUM" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="111.09">111.09</td>
+            <td data-value="2.0016459484701"><span class="positive">▲ +2.00%</span></td>
+            <td data-value="5.649067737340737"><span class="positive">▲ +5.65%</span></td>
+            <td data-value="25.176271061422717"><span class="positive">▲ +25.18%</span></td>
+            <td data-value="374562">374.6K</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:91.0%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:9.0%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:91.0%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>62.37</span><span>115.90</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="58.466141702366144"><div class="item"><strong>RSI(14):</strong> <span class="">58.5 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">0.473 / 0.754 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >31.0</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.70</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bullish">Bullish</span></div><br><div class="item"><strong>Implied Move (2026-01-16):</strong> <span class="bearish">±5.5%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$105.03 – $117.15</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="SSO">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/SSO" target="_blank" class="ticker-main">SSO</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/SSO" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=SSO" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=SSO" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="57.90">57.90</td>
+            <td data-value="1.7574691971584326"><span class="positive">▲ +1.76%</span></td>
+            <td data-value="4.446649393925235"><span class="positive">▲ +4.45%</span></td>
+            <td data-value="25.158935477601347"><span class="positive">▲ +25.16%</span></td>
+            <td data-value="2478226">2.5M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:93.7%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:6.3%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:93.7%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>30.30</span><span>59.74</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="51.243095087053014"><div class="item"><strong>RSI(14):</strong> <span class="">51.2 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">0.162 / 0.294 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >27.3</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.53</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bullish">Bullish</span></div><br><div class="item"><strong>Implied Move (2025-12-26):</strong> <span class="">±1.6%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$56.97 – $58.83</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="SHOP">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/SHOP" target="_blank" class="ticker-main">SHOP</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/SHOP" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=SHOP" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=SHOP" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="169.57">169.57</td>
+            <td data-value="1.6606739938736146"><span class="positive">▲ +1.66%</span></td>
+            <td data-value="21.18203115833331"><span class="positive">▲ +21.18%</span></td>
+            <td data-value="56.473196481087065"><span class="positive">▲ +56.47%</span></td>
+            <td data-value="12749233">12.7M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:88.8%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:11.2%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:88.8%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>69.84</span><span>182.19</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="71.11343777270528"><div class="item"><strong>RSI(14):</strong> <span class="overbought">71.1 (Overbought)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bullish">2.630 / 1.685 (Bullish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="spike">Yes</span></div></td>
+            <td data-value="2.83"><div class="item"><strong>Beta:</strong> <span class="high-risk" style=color:#cc6600>2.83</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" style=color:#cc6600>124.7</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >1.4%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">2.4</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.61</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bullish">Bullish</span></div><br><div class="item"><strong>Implied Move (2025-12-26):</strong> <span class="">±3.4%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$163.86 – $175.28</span></div><br><div class="item"><strong>Sentiment:</strong> <span class="positive">Buy</span></div><br><div class="item"><strong>Rating:</strong> <span class="positive">Buy</span></div><br><div class="item"><strong>Upside:</strong> <span class="positive">+4.4%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="GOOGL">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/GOOGL" target="_blank" class="ticker-main">GOOGL</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/GOOGL" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=GOOGL" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=GOOGL" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="307.17">307.17</td>
+            <td data-value="1.557238016835622"><span class="positive">▲ +1.56%</span></td>
+            <td data-value="7.841886637602682"><span class="positive">▲ +7.84%</span></td>
+            <td data-value="74.03735717519702"><span class="positive">▲ +74.04%</span></td>
+            <td data-value="22535717">22.5M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:88.6%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:11.4%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:88.6%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>140.14</span><span>328.62</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="43.530727417948086"><div class="item"><strong>RSI(14):</strong> <span class="">43.5 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">4.527 / 7.873 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="1.07"><div class="item"><strong>Beta:</strong> <span class="high-risk" >1.07</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >30.3</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >1.4%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">2.1</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.85</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2025-12-26):</strong> <span class="">±2.0%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$300.88 – $313.46</span></div><br><div class="item"><strong>Sentiment:</strong> <span class="positive">Strong Buy</span></div><br><div class="item"><strong>Rating:</strong> <span class="positive">Strong_Buy</span></div><br><div class="item"><strong>Upside:</strong> <span class="positive">+7.2%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="AAPU">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/AAPU" target="_blank" class="ticker-main">AAPU</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/AAPU" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=AAPU" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=AAPU" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="34.39">34.39</td>
+            <td data-value="1.236379610988484"><span class="positive">▲ +1.24%</span></td>
+            <td data-value="3.736663014744659"><span class="positive">▲ +3.74%</span></td>
+            <td data-value="78.15672443846623"><span class="positive">▲ +78.16%</span></td>
+            <td data-value="716800">716.8K</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:83.2%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:16.8%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:83.2%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>14.81</span><span>38.34</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="28.1389334648498"><div class="item"><strong>RSI(14):</strong> <span class="oversold">28.1 (Oversold)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">0.134 / 0.486 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >33.6</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.13</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2026-01-16):</strong> <span class="high-risk">±12.4%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$30.12 – $38.66</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="DDM">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/DDM" target="_blank" class="ticker-main">DDM</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/DDM" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=DDM" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=DDM" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="57.23">57.23</td>
+            <td data-value="0.6507191838077575"><span class="positive">▲ +0.65%</span></td>
+            <td data-value="6.533876101589675"><span class="positive">▲ +6.53%</span></td>
+            <td data-value="25.483614781011138"><span class="positive">▲ +25.48%</span></td>
+            <td data-value="758258">758.3K</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:92.5%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:7.5%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:92.5%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>34.35</span><span>59.09</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="61.856969318705055"><div class="item"><strong>RSI(14):</strong> <span class="">61.9 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">0.681 / 0.682 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="spike">Yes</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >23.3</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.62</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bullish">Bullish</span></div><br><div class="item"><strong>Implied Move (2026-01-16):</strong> <span class="">±2.2%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$55.97 – $58.49</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="MSFU">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/MSFU" target="_blank" class="ticker-main">MSFU</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/MSFU" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=MSFU" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=MSFU" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="42.19">42.19</td>
+            <td data-value="0.6440850895926099"><span class="positive">▲ +0.64%</span></td>
+            <td data-value="-9.619311713433566"><span class="negative">▼ -9.62%</span></td>
+            <td data-value="-3.649392443086187"><span class="negative">▼ -3.65%</span></td>
+            <td data-value="985716">985.7K</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:54.3%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:45.7%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:54.3%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>23.53</span><span>57.88</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="47.34961147160138"><div class="item"><strong>RSI(14):</strong> <span class="">47.3 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bullish">-1.110 / -1.308 (Bullish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >32.0</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.41</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2026-01-16):</strong> <span class="high-risk">±10.4%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$37.81 – $46.57</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="AMZU">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/AMZU" target="_blank" class="ticker-main">AMZU</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/AMZU" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=AMZU" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=AMZU" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="34.32">34.32</td>
+            <td data-value="0.5566909486167113"><span class="positive">▲ +0.56%</span></td>
+            <td data-value="-6.022606304775122"><span class="negative">▼ -6.02%</span></td>
+            <td data-value="-0.16897451290000787"><span class="negative">▼ -0.17%</span></td>
+            <td data-value="1698545">1.7M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:50.7%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:49.3%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:50.7%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>20.28</span><span>47.96</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="37.5684006211835"><div class="item"><strong>RSI(14):</strong> <span class="">37.6 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">-0.703 / -0.617 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >30.0</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.76</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2026-01-16):</strong> <span class="high-risk">±14.0%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$29.52 – $39.12</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="AAPL">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/AAPL" target="_blank" class="ticker-main">AAPL</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/AAPL" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=AAPL" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=AAPL" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="273.67">273.67</td>
+            <td data-value="0.5437418615868244"><span class="positive">▲ +0.54%</span></td>
+            <td data-value="2.3218508079924427"><span class="positive">▲ +2.32%</span></td>
+            <td data-value="38.214994945027996"><span class="positive">▲ +38.21%</span></td>
+            <td data-value="41055857">41.1M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:87.5%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:12.5%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:87.5%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>168.63</span><span>288.62</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="30.329619963078486"><div class="item"><strong>RSI(14):</strong> <span class="">30.3 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">1.026 / 2.440 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="1.107"><div class="item"><strong>Beta:</strong> <span class="high-risk" >1.11</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >36.6</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >0.9%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">2.5</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.61</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bullish">Bullish</span></div><br><div class="item"><strong>Implied Move (2025-12-26):</strong> <span class="">±1.5%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$269.44 – $277.90</span></div><br><div class="item"><strong>Sentiment:</strong> <span class="positive">Buy</span></div><br><div class="item"><strong>Rating:</strong> <span class="positive">Buy</span></div><br><div class="item"><strong>Upside:</strong> <span class="positive">+5.1%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="TPL">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/TPL" target="_blank" class="ticker-main">TPL</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/TPL" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=TPL" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=TPL" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="899.75">899.75</td>
+            <td data-value="0.4846971762250196"><span class="positive">▲ +0.48%</span></td>
+            <td data-value="-5.854102285915295"><span class="negative">▼ -5.85%</span></td>
+            <td data-value="-17.386431663076838"><span class="negative">▼ -17.39%</span></td>
+            <td data-value="128784">128.8K</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:14.2%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:85.8%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:14.2%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>807.70</span><span>1455.48</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="58.07907117446123"><div class="item"><strong>RSI(14):</strong> <span class="">58.1 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bullish">-12.459 / -15.061 (Bullish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="0.964"><div class="item"><strong>Beta:</strong> <span class="high-risk" >0.96</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" style=color:#cc6600>43.5</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >7.7%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="high-risk">8.1</span></div><br><div class="item"><strong>Trend:</strong> <span class="negative">Death Cross</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.38</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2026-01-16):</strong> <span class="bearish">±6.9%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$837.40 – $962.10</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">-6.4%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="NFLX">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/NFLX" target="_blank" class="ticker-main">NFLX</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/NFLX" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=NFLX" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=NFLX" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="94.41">94.41</td>
+            <td data-value="0.4361741086269947"><span class="positive">▲ +0.44%</span></td>
+            <td data-value="-14.398401597240607"><span class="negative">▼ -14.40%</span></td>
+            <td data-value="-22.952625094421812"><span class="negative">▼ -22.95%</span></td>
+            <td data-value="49281582">49.3M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:23.7%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:76.3%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:23.7%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>82.11</span><span>134.12</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="17.900721568809885"><div class="item"><strong>RSI(14):</strong> <span class="oversold">17.9 (Oversold)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">-4.485 / -4.275 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="1.706"><div class="item"><strong>Beta:</strong> <span class="high-risk" style=color:#cc6600>1.71</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >39.3</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >1.8%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">1.3</span></div><br><div class="item"><strong>Trend:</strong> <span class="negative">Death Cross</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.47</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2025-12-26):</strong> <span class="">±2.4%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$92.15 – $96.67</span></div><br><div class="item"><strong>Sentiment:</strong> <span class="positive">Buy</span></div><br><div class="item"><strong>Rating:</strong> <span class="positive">Buy</span></div><br><div class="item"><strong>Upside:</strong> <span class="positive">+33.7%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="MSFT">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/MSFT" target="_blank" class="ticker-main">MSFT</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/MSFT" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=MSFT" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=MSFT" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="486.06">486.06</td>
+            <td data-value="0.4297670410037621"><span class="positive">▲ +0.43%</span></td>
+            <td data-value="-4.04348235241951"><span class="negative">▼ -4.04%</span></td>
+            <td data-value="1.801192809903991"><span class="positive">▲ +1.80%</span></td>
+            <td data-value="18622670">18.6M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:68.0%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:32.0%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:68.0%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>342.95</span><span>553.50</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="49.40130207718255"><div class="item"><strong>RSI(14):</strong> <span class="">49.4 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bullish">-4.933 / -6.064 (Bullish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="1.07"><div class="item"><strong>Beta:</strong> <span class="high-risk" >1.07</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >34.6</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >0.8%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">2.2</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.81</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2025-12-26):</strong> <span class="">±1.6%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$478.15 – $493.96</span></div><br><div class="item"><strong>Sentiment:</strong> <span class="positive">Strong Buy</span></div><br><div class="item"><strong>Rating:</strong> <span class="positive">Strong_Buy</span></div><br><div class="item"><strong>Upside:</strong> <span class="positive">+28.1%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="ARM">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/ARM" target="_blank" class="ticker-main">ARM</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/ARM" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=ARM" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=ARM" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="113.97">113.97</td>
+            <td data-value="0.40524982452258484"><span class="positive">▲ +0.41%</span></td>
+            <td data-value="-18.743757532980297"><span class="negative">▼ -18.74%</span></td>
+            <td data-value="-19.762034210241072"><span class="negative">▼ -19.76%</span></td>
+            <td data-value="5152470">5.2M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:32.9%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:67.1%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:32.9%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>80.00</span><span>183.16</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="23.047270118322317"><div class="item"><strong>RSI(14):</strong> <span class="oversold">23.0 (Oversold)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">-7.970 / -5.992 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="4.251"><div class="item"><strong>Beta:</strong> <span class="high-risk" style=color:#cc6600>4.25</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" style=color:#cc6600>146.2</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" style=color:#cc6600>10.3%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">2.9</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="negative">1.39</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2025-12-26):</strong> <span class="">±3.4%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$110.04 – $117.90</span></div><br><div class="item"><strong>Sentiment:</strong> <span class="positive">Buy</span></div><br><div class="item"><strong>Rating:</strong> <span class="positive">Buy</span></div><br><div class="item"><strong>Upside:</strong> <span class="positive">+44.6%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="ARMG">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/ARMG" target="_blank" class="ticker-main">ARMG</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/ARMG" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=ARMG" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=ARMG" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="6.49">6.49</td>
+            <td data-value="0.3864002500484023"><span class="positive">▲ +0.39%</span></td>
+            <td data-value="-35.94674885947045"><span class="negative">▼ -35.95%</span></td>
+            <td data-value="-46.97959277094627"><span class="negative">▼ -46.98%</span></td>
+            <td data-value="169732">169.7K</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:10.3%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:89.7%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:10.3%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>4.28</span><span>25.87</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="23.45772863897487"><div class="item"><strong>RSI(14):</strong> <span class="oversold">23.5 (Oversold)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">-1.184 / -0.959 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.10</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2026-01-16):</strong> <span class="high-risk">±16.1%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$5.45 – $7.54</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="AMZN">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/AMZN" target="_blank" class="ticker-main">AMZN</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/AMZN" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=AMZN" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=AMZN" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="227.37">227.37</td>
+            <td data-value="0.2690071551986977"><span class="positive">▲ +0.27%</span></td>
+            <td data-value="-2.361832831761871"><span class="negative">▼ -2.36%</span></td>
+            <td data-value="5.21517292705367"><span class="positive">▲ +5.22%</span></td>
+            <td data-value="44592971">44.6M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:67.9%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:32.1%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:67.9%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>161.38</span><span>258.60</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="39.27045620932074"><div class="item"><strong>RSI(14):</strong> <span class="">39.3 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">-1.656 / -1.297 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="1.372"><div class="item"><strong>Beta:</strong> <span class="high-risk" style=color:#cc6600>1.37</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >32.2</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >0.8%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">1.7</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.40</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2025-12-26):</strong> <span class="">±2.0%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$222.81 – $231.93</span></div><br><div class="item"><strong>Sentiment:</strong> <span class="positive">Strong Buy</span></div><br><div class="item"><strong>Rating:</strong> <span class="positive">Strong_Buy</span></div><br><div class="item"><strong>Upside:</strong> <span class="positive">+30.0%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="COST">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/COST" target="_blank" class="ticker-main">COST</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/COST" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=COST" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=COST" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="856.00">856.00</td>
+            <td data-value="-0.18552027987108166"><span class="negative">▼ -0.19%</span></td>
+            <td data-value="-6.201141997241149"><span class="negative">▼ -6.20%</span></td>
+            <td data-value="-12.79637379047745"><span class="negative">▼ -12.80%</span></td>
+            <td data-value="2264487">2.3M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:5.2%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:94.8%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:5.2%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>844.06</span><span>1073.82</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="22.766809007287748"><div class="item"><strong>RSI(14):</strong> <span class="oversold">22.8 (Oversold)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">-14.854 / -11.583 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="0.982"><div class="item"><strong>Beta:</strong> <span class="high-risk" >0.98</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" style=color:#cc6600>45.9</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >1.7%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">2.0</span></div><br><div class="item"><strong>Trend:</strong> <span class="negative">Death Cross</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.84</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2025-12-26):</strong> <span class="">±1.4%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$844.23 – $867.77</span></div><br><div class="item"><strong>Sentiment:</strong> <span class="positive">Buy</span></div><br><div class="item"><strong>Rating:</strong> <span class="positive">Buy</span></div><br><div class="item"><strong>Upside:</strong> <span class="positive">+20.5%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="LB">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/LB" target="_blank" class="ticker-main">LB</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/LB" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=LB" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=LB" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="52.49">52.49</td>
+            <td data-value="-0.20911938943955424"><span class="negative">▼ -0.21%</span></td>
+            <td data-value="-15.034092412813385"><span class="negative">▼ -15.03%</span></td>
+            <td data-value="-25.41971380338707"><span class="negative">▼ -25.42%</span></td>
+            <td data-value="282990">283.0K</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:10.6%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:89.4%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:10.6%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>48.38</span><span>87.17</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="41.83878298626201"><div class="item"><strong>RSI(14):</strong> <span class="">41.8 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">-2.365 / -1.864 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" style=color:#cc6600>59.6</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" style=color:#cc6600>12.9%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="high-risk">9.4</span></div><br><div class="item"><strong>Trend:</strong> <span class="negative">Death Cross</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="negative">6.33</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="negative">Strong Bearish</span></div><br><div class="item"><strong>Implied Move (2026-01-16):</strong> <span class="high-risk">±9.9%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$47.31 – $57.68</span></div><br><div class="item"><strong>Sentiment:</strong> <span class="positive">Buy</span></div><br><div class="item"><strong>Rating:</strong> <span class="positive">Buy</span></div><br><div class="item"><strong>Upside:</strong> <span class="positive">+41.5%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="TSLA">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/TSLA" target="_blank" class="ticker-main">TSLA</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/TSLA" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=TSLA" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=TSLA" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="480.91">480.91</td>
+            <td data-value="-0.5089251463533081"><span class="negative">▼ -0.51%</span></td>
+            <td data-value="17.604907529696465"><span class="positive">▲ +17.60%</span></td>
+            <td data-value="46.115515610112325"><span class="positive">▲ +46.12%</span></td>
+            <td data-value="82029250">82.0M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:94.9%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:5.1%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:94.9%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>214.25</span><span>495.28</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="67.92836685551558"><div class="item"><strong>RSI(14):</strong> <span class="">67.9 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bullish">13.676 / 9.288 (Bullish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="1.878"><div class="item"><strong>Beta:</strong> <span class="high-risk" style=color:#cc6600>1.88</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" style=color:#cc6600>334.2</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >2.7%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">0.9</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.71</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bullish">Bullish</span></div><br><div class="item"><strong>Implied Move (2025-12-26):</strong> <span class="">±3.5%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$464.29 – $497.53</span></div><br><div class="item"><strong>Sentiment:</strong> <span class="">Hold</span></div><br><div class="item"><strong>Rating:</strong> <span class="">Hold</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">-17.4%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="META">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/META" target="_blank" class="ticker-main">META</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/META" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=META" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=META" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="658.79">658.79</td>
+            <td data-value="-0.8518374709464118"><span class="negative">▼ -0.85%</span></td>
+            <td data-value="9.520984356225192"><span class="positive">▲ +9.52%</span></td>
+            <td data-value="-6.031407384397924"><span class="negative">▼ -6.03%</span></td>
+            <td data-value="11851564">11.9M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:56.9%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:43.1%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:56.9%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>478.72</span><span>795.06</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="57.45490345434328"><div class="item"><strong>RSI(14):</strong> <span class="">57.5 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bullish">2.084 / -1.039 (Bullish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="1.273"><div class="item"><strong>Beta:</strong> <span class="high-risk" style=color:#cc6600>1.27</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >29.1</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >1.5%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">1.7</span></div><br><div class="item"><strong>Trend:</strong> <span class="negative">Death Cross</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.55</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2025-12-26):</strong> <span class="">±2.0%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$645.40 – $672.18</span></div><br><div class="item"><strong>Sentiment:</strong> <span class="positive">Strong Buy</span></div><br><div class="item"><strong>Rating:</strong> <span class="positive">Strong_Buy</span></div><br><div class="item"><strong>Upside:</strong> <span class="positive">+27.1%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="TSLL">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/TSLL" target="_blank" class="ticker-main">TSLL</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/TSLL" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=TSLL" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=TSLL" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="22.11">22.11</td>
+            <td data-value="-1.029541363766216"><span class="negative">▼ -1.03%</span></td>
+            <td data-value="34.63481782674327"><span class="positive">▲ +34.63%</span></td>
+            <td data-value="77.93105406655143"><span class="positive">▲ +77.93%</span></td>
+            <td data-value="275535516">275.5M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:55.2%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:44.8%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:55.2%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>6.04</span><span>35.13</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="66.63189641695777"><div class="item"><strong>RSI(14):</strong> <span class="">66.6 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bullish">1.008 / 0.616 (Bullish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="spike">Yes</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" style=color:#cc6600>71.6</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="negative">1.27</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2025-12-26):</strong> <span class="bearish">±6.7%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$20.64 – $23.58</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="FBL">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/FBL" target="_blank" class="ticker-main">FBL</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/FBL" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=FBL" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=FBL" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="33.17">33.17</td>
+            <td data-value="-1.7185239438657407"><span class="negative">▼ -1.72%</span></td>
+            <td data-value="18.0007024145364"><span class="positive">▲ +18.00%</span></td>
+            <td data-value="-20.531871501918637"><span class="negative">▼ -20.53%</span></td>
+            <td data-value="2697574">2.7M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:41.2%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:58.8%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:41.2%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>20.15</span><span>51.74</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="56.542804091030106"><div class="item"><strong>RSI(14):</strong> <span class="">56.5 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bullish">-0.053 / -0.406 (Bullish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>Trend:</strong> <span class="negative">Death Cross</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="bullish">0.81</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="bearish">Bearish</span></div><br><div class="item"><strong>Implied Move (2026-01-16):</strong> <span class="bearish">±8.5%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$30.36 – $35.97</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+        <tr>
+            <td data-value="NAIL">
+                <div class="ticker"><a href="https://finance.yahoo.com/quote/NAIL" target="_blank" class="ticker-main">NAIL</a></div>
+                <div class="link-group">
+                    <a href="https://finance.yahoo.com/quote/NAIL" target="_blank" class="yahoo-link">Yahoo</a>
+                    <a href="https://www.tradingview.com/chart/?symbol=NAIL" target="_blank" class="tradingview-link">TV</a>
+                    <a href="https://finviz.com/quote.ashx?t=NAIL" target="_blank" class="finviz-link">Finviz</a>
+                </div>
+            </td>
+            <td data-value="52.96">52.96</td>
+            <td data-value="-5.325164761988866"><span class="negative">▼ -5.33%</span></td>
+            <td data-value="10.890082481649157"><span class="positive">▲ +10.89%</span></td>
+            <td data-value="9.151718887192093"><span class="positive">▲ +9.15%</span></td>
+            <td data-value="1350581">1.4M</td>
+            <td>
+                <div style="width:180px;position:relative;margin:8px 0;">
+                    <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+                        <div style="width:20.7%;height:100%;background:#00aa00;float:left;"></div>
+                        <div style="width:79.3%;height:100%;background:#ff4444;float:left;"></div>
+                        <div style="position:absolute;left:20.7%;top:-4px;width:3px;height:16px;background:#000;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.8em;">
+                        <span>39.66</span><span>104.05</span>
+                    </div>
+                </div>
+            </td>
+            <td data-value="33.59735745901308"><div class="item"><strong>RSI(14):</strong> <span class="">33.6 (Neutral)</span></div><br><div class="item"><strong>MACD:</strong> <span class="bearish">-0.808 / -0.295 (Bearish)</span></div><br><div class="item"><strong>Vol Spike:</strong> <span class="">No</span></div></td>
+            <td data-value="nan"><div class="item"><strong>Beta:</strong> <span class="high-risk" >nan</span></div><br><div class="item"><strong>P/E:</strong> <span class="high-risk" >12.1</span></div><br><div class="item"><strong>Short %:</strong> <span class="high-risk" >nan%</span></div><br><div class="item"><strong>Days to Cover:</strong> <span class="">nan</span></div><br><div class="item"><strong>Trend:</strong> <span class="negative">Death Cross</span></div><br><div class="item"><strong>P/C Vol Ratio:</strong> <span class="negative">4.67</span></div><br><div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span></div><br><div class="item"><strong>Options Direction:</strong> <span class="negative">Strong Bearish</span></div><br><div class="item"><strong>Implied Move (2025-12-26):</strong> <span class="bearish">±5.5%</span></div><br><div class="item"><strong>Expected Range:</strong> <span class="neutral">$50.05 – $55.88</span></div><br><div class="item"><strong>Upside:</strong> <span class="negative">+nan%</span></div></td>
+        </tr>
+    </table>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const headers = document.querySelectorAll('th.sortable');
+            const colMap = {ticker:0, price:1, day:2, '1m':3, '6m':4, volume:5, tech:7, risk:8};
+            headers.forEach(th => {
+                th.addEventListener('click', () => {
+                    const col = th.dataset.column;
+                    const asc = th.classList.toggle('sort-asc');
+                    th.classList.toggle('sort-desc', !asc);
+                    headers.forEach(h => { if (h !== th) h.classList.remove('sort-asc', 'sort-desc'); });
+                    
+                    const rows = Array.from(document.querySelectorAll('#stockTable tr')).slice(1);
+                    rows.sort((a, b) => {
+                        const i = colMap[col];
+                        let aVal = a.cells[i].dataset.value || '';
+                        let bVal = b.cells[i].dataset.value || '';
+                        const num = th.dataset.type === 'number';
+                        if (num) { aVal = parseFloat(aVal) || 0; bVal = parseFloat(bVal) || 0; }
+                        return (aVal > bVal ? 1 : -1) * (asc ? 1 : -1);
+                    });
+                    rows.forEach(row => document.querySelector('#stockTable').appendChild(row));
+                });
+            });
+        });
+    </script>
 </body>
 </html>
