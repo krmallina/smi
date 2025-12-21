@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Live Dashboard</title>
+    <title>Regular Dashboard</title>
     <meta http-equiv="refresh" content="60">
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
@@ -41,6 +41,8 @@
         .ticker { font-weight: bold; font-size: 1.1em; }
         .link-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; font-size: 0.8em; }
         .item { font-size: 0.85em; margin: 4px 0; line-height: 1.4; }
+        .switch-btn {display:inline-block;margin-left:12px;padding:6px 14px;background:#ff6600;color:white;border-radius:4px;font-weight:bold;text-decoration:none}
+        .switch-btn:hover {background:#e65c00}
     </style>
 </head>
 <body>
@@ -48,24 +50,17 @@
     <div class="header-container">
         <div>
             <h1>Live Dashboard</h1>
-            <span class="mode-badge regular-hours">Regular Hours</span>
+            <span class="mode-badge regular-hours">Regular Hours</span><a href="data/extnd_dashboard.html" class="switch-btn">Switch to Extended Hours</a>
             <span class="vix-display"><span class="negative">VIX: 14.91 (-11.62%)</span></span>
             <span class="fear-greed-display"><span class="neutral">N/A</span></span>
             <span class="aaii-display"><span class="neutral">N/A</span></span>
         </div>
         <div class="controls">
-            <div class="mode-switch">
-                <label>Extended Hours:</label>
-                <label class="switch">
-                    <input type="checkbox" id="extendedToggle" >
-                    <span class="slider"></span>
-                </label>
-            </div>
             <button class="refresh-btn" onclick="location.reload()">Refresh Now</button>
         </div>
     </div>
     <div class="refresh-info">
-        <strong>Last updated:</strong> 12:23:22 PM PST on December 21, 2025 | 
+        <strong>Last updated:</strong> 01:10:11 PM PST on December 21, 2025 | 
         <strong>Auto-refresh:</strong> every 60 seconds
     </div>
     <table id="stockTable">
@@ -208,7 +203,7 @@
             <td data-value="88.41">88.41</td>
             <td data-value="13.93041933060517"><span class="positive">▲ +13.93%</span></td>
             <td data-value="13.490146802675051"><span class="positive">▲ +13.49%</span></td>
-            <td data-value="299.7531743869527"><span class="positive">▲ +299.75%</span></td>
+            <td data-value="299.7532088626099"><span class="positive">▲ +299.75%</span></td>
             <td data-value="2045853">2.0M</td>
             <td>
                 <div style="width:180px;position:relative;margin:8px 0;">
@@ -440,7 +435,7 @@
             <td data-value="42.81">42.81</td>
             <td data-value="6.466059059977364"><span class="positive">▲ +6.47%</span></td>
             <td data-value="-5.8157018688336874"><span class="negative">▼ -5.82%</span></td>
-            <td data-value="57.527089216972506"><span class="positive">▲ +57.53%</span></td>
+            <td data-value="57.52706710511273"><span class="positive">▲ +57.53%</span></td>
             <td data-value="1023938">1.0M</td>
             <td>
                 <div style="width:180px;position:relative;margin:8px 0;">
@@ -672,7 +667,7 @@
             <td data-value="32.66">32.66</td>
             <td data-value="3.184631007708214"><span class="positive">▲ +3.18%</span></td>
             <td data-value="45.19069412500398"><span class="positive">▲ +45.19%</span></td>
-            <td data-value="8.68583681338187"><span class="positive">▲ +8.69%</span></td>
+            <td data-value="8.685829914800623"><span class="positive">▲ +8.69%</span></td>
             <td data-value="25318">25.3K</td>
             <td>
                 <div style="width:180px;position:relative;margin:8px 0;">
@@ -846,7 +841,7 @@
             <td data-value="52.98">52.98</td>
             <td data-value="2.27799290068627"><span class="positive">▲ +2.28%</span></td>
             <td data-value="19.24375237077037"><span class="positive">▲ +19.24%</span></td>
-            <td data-value="24.859462869419882"><span class="positive">▲ +24.86%</span></td>
+            <td data-value="24.859474094542442"><span class="positive">▲ +24.86%</span></td>
             <td data-value="49343">49.3K</td>
             <td>
                 <div style="width:180px;position:relative;margin:8px 0;">
@@ -991,7 +986,7 @@
             <td data-value="34.39">34.39</td>
             <td data-value="1.236379610988484"><span class="positive">▲ +1.24%</span></td>
             <td data-value="3.736663014744659"><span class="positive">▲ +3.74%</span></td>
-            <td data-value="78.15672443846623"><span class="positive">▲ +78.16%</span></td>
+            <td data-value="78.15674204210286"><span class="positive">▲ +78.16%</span></td>
             <td data-value="716800">716.8K</td>
             <td>
                 <div style="width:180px;position:relative;margin:8px 0;">
@@ -1078,7 +1073,7 @@
             <td data-value="34.32">34.32</td>
             <td data-value="0.5566909486167113"><span class="positive">▲ +0.56%</span></td>
             <td data-value="-6.022606304775122"><span class="negative">▼ -6.02%</span></td>
-            <td data-value="-0.16896343534499356"><span class="negative">▼ -0.17%</span></td>
+            <td data-value="-0.16897451290000787"><span class="negative">▼ -0.17%</span></td>
             <td data-value="1698545">1.7M</td>
             <td>
                 <div style="width:180px;position:relative;margin:8px 0;">
@@ -1426,7 +1421,7 @@
             <td data-value="22.11">22.11</td>
             <td data-value="-1.029541363766216"><span class="negative">▼ -1.03%</span></td>
             <td data-value="34.63481782674327"><span class="positive">▲ +34.63%</span></td>
-            <td data-value="77.93106772227975"><span class="positive">▲ +77.93%</span></td>
+            <td data-value="77.93105406655143"><span class="positive">▲ +77.93%</span></td>
             <td data-value="275535516">275.5M</td>
             <td>
                 <div style="width:180px;position:relative;margin:8px 0;">
@@ -1524,12 +1519,6 @@
                     });
                     rows.forEach(row => document.querySelector('#stockTable').appendChild(row));
                 });
-            });
-            
-            document.getElementById('extendedToggle').addEventListener('change', function() {
-                const url = new URL(window.location);
-                this.checked ? url.searchParams.set('extended', '1') : url.searchParams.delete('extended');
-                window.location = url;
             });
         });
     </script>
