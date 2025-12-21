@@ -1,29 +1,35 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Regular Hours - Stock Dashboard</title>
+    <title>Regular Hours Dashboard</title>
     <meta http-equiv="refresh" content="60">
     <style>
-        body { font-family: system-ui, sans-serif; margin: 0; padding: 12px; background: #f0f0f0; }
-        .container { max-width: 1400px; margin: auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
-        .header { padding: 16px; background: #111; color: white; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
-        h1 { margin: 0; font-size: 1.6em; }
+        body { font-family: system-ui, sans-serif; margin: 0; padding: 10px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+        .header { padding: 16px; background: #000; color: white; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; }
+        h1 { margin: 0; font-size: 1.8em; }
         .mode { padding: 8px 16px; border-radius: 8px; font-weight: bold; background: #0066cc; }
         .switch-btn { padding: 10px 16px; background: #ff6600; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; }
-        .indicators { padding: 12px 16px; display: flex; flex-wrap: wrap; gap: 16px; font-weight: bold; }
-        .info { padding: 0 16px 12px; color: #666; font-size: 0.9em; }
+        .indicators { padding: 12px; background: #eee; display: flex; flex-wrap: wrap; gap: 20px; font-weight: bold; }
+        .info { padding: 10px 16px; color: #666; }
         table { width: 100%; border-collapse: collapse; }
-        th { background: #0066cc; color: white; padding: 12px; text-align: left; }
-        td { padding: 12px; border-bottom: 1px solid #eee; }
-        tr:hover { background: #f8f8ff; }
+        th { background: #0066cc; color: white; padding: 12px; text-align: left; font-size: 0.9em; }
+        td { padding: 12px; border-bottom: 1px solid #ddd; vertical-align: top; }
         .ticker a { font-weight: bold; font-size: 1.2em; color: #000; text-decoration: none; }
-        .links a { margin-right: 12px; color: #0066cc; font-size: 0.9em; }
-        .bar { height: 8px; background: #eee; border-radius: 4px; overflow: hidden; margin: 6px 0; position: relative; }
-        .fill { height: 100%; background: #00aa00; }
-        .marker { position: absolute; top: 0; width: 3px; height: 100%; background: black; left: 50%; }
-        @media (max-width: 768px) { .header { flex-direction: column; align-items: flex-start; } .indicators { flex-direction: column; } }
+        .links a { margin-right: 10px; color: #0066cc; font-size: 0.9em; }
+        .bar-container { margin: 8px 0; }
+        .bar { height: 20px; background: linear-gradient(to right, #cc0000 0%, #cc0000 var(--pos), #00aa00 var(--pos), #00aa00 100%); border-radius: 10px; position: relative; }
+        .bar-labels { display: flex; justify-content: space-between; font-size: 0.8em; margin-top: 4px; }
+        .tech-items, .risk-items { font-size: 0.9em; line-height: 1.6; }
+        .badge-red { background: #cc0000; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.9em; }
+        .badge-green { background: #00aa00; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.9em; }
+        @media (max-width: 768px) { 
+            th, td { padding: 8px; font-size: 0.85em; }
+            .header { flex-direction: column; align-items: flex-start; }
+            .indicators { flex-direction: column; }
+        }
     </style>
 </head>
 <body>
@@ -35,61 +41,27 @@
                 <span class="mode">Regular Hours</span>
                 <a href="extnd_dashboard.html" class="switch-btn">Switch to Extended Hours</a>
             </div>
-            <button onclick="location.reload()" style="padding:10px 16px;background:#0066cc;color:white;border:none;border-radius:8px;cursor:pointer;">Refresh</button>
+            <button onclick="location.reload()" style="padding:10px;background:#0066cc;color:white;border:none;border-radius:8px;cursor:pointer;">Refresh</button>
         </div>
         <div class="indicators">
-            <span>VIX: 14.91 (-11.62%)</span>
-            <span>F&G: N/A</span>
-            <span>AAII: N/A</span>
+            <div>VIX 14.91 (-11.62%)</div>
+            <div>F&G N/A</div>
+            <div>AAII N/A</div>
         </div>
-        <div class="info">Last updated: 01:32 PM on Dec 21, 2025 • Auto-refresh every 60s</div>
+        <div class="info">Last updated: 01:42 PM on Dec 21, 2025 • Auto-refresh: 60s</div>
         <table>
             <thead>
-                <tr><th>TICKER</th><th>PRICE</th><th>DAY</th><th>1M</th><th>6M</th><th>VOL</th><th>52W</th><th>TECH</th></tr>
+                <tr>
+                    <th>TICKER</th>
+                    <th>PRICE / DAY %</th>
+                    <th>1M / 6M %</th>
+                    <th>VOLUME</th>
+                    <th>52W RANGE</th>
+                    <th>TECHNICAL INDICATORS</th>
+                    <th>RISK / SENTIMENT</th>
+                </tr>
             </thead>
             <tbody>
-
-                <tr>
-                    <td>
-                        <div class="ticker"><a href="https://finance.yahoo.com/quote/SOXL" target="_blank">SOXL</a></div>
-                        <div class="links">
-                            <a href="https://finance.yahoo.com/quote/SOXL" target="_blank">Yahoo</a>
-                            <a href="https://www.tradingview.com/chart/?symbol=SOXL" target="_blank">TV</a>
-                            <a href="https://finviz.com/quote.ashx?t=SOXL" target="_blank">Finviz</a>
-                        </div>
-                    </td>
-                    <td>$41.79</td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +8.33%</span></td>
-                    <td><span style="color:#cc0000;font-weight:bold">▼ -0.04%</span></td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +119.69%</span></td>
-                    <td>87.2M</td>
-                    <td>
-                        <div class="bar"><div class="fill" style="width:79%"></div><div class="marker" style="left:79%"></div></div>
-                        <small>$7 – $51</small>
-                    </td>
-                    <td>RSI 50.7 (Neutral) • Bearish</td>
-                </tr>
-
-                <tr>
-                    <td>
-                        <div class="ticker"><a href="https://finance.yahoo.com/quote/ORCL" target="_blank">ORCL</a></div>
-                        <div class="links">
-                            <a href="https://finance.yahoo.com/quote/ORCL" target="_blank">Yahoo</a>
-                            <a href="https://www.tradingview.com/chart/?symbol=ORCL" target="_blank">TV</a>
-                            <a href="https://finviz.com/quote.ashx?t=ORCL" target="_blank">Finviz</a>
-                        </div>
-                    </td>
-                    <td>$192.32</td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +6.83%</span></td>
-                    <td><span style="color:#cc0000;font-weight:bold">▼ -18.56%</span></td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +14.85%</span></td>
-                    <td>49.9M</td>
-                    <td>
-                        <div class="bar"><div class="fill" style="width:33%"></div><div class="marker" style="left:33%"></div></div>
-                        <small>$118 – $345</small>
-                    </td>
-                    <td>RSI 44.9 (Neutral) • Bearish • Vol Spike</td>
-                </tr>
 
                 <tr>
                     <td>
@@ -100,79 +72,28 @@
                             <a href="https://finviz.com/quote.ashx?t=NVDA" target="_blank">Finviz</a>
                         </div>
                     </td>
-                    <td>$180.99</td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +3.93%</span></td>
-                    <td><span style="color:#cc0000;font-weight:bold">▼ -6.30%</span></td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +27.55%</span></td>
+                    <td>
+                        $180.99<br>
+                        <span style="color:#00aa00;font-weight:bold">▲ +3.93%</span>
+                    </td>
+                    <td>
+                        <span style="color:#cc0000;font-weight:bold">▼ -6.30%</span><br>
+                        <span style="color:#00aa00;font-weight:bold">▲ +27.55%</span>
+                    </td>
                     <td>200.5M</td>
-                    <td>
-                        <div class="bar"><div class="fill" style="width:75%"></div><div class="marker" style="left:75%"></div></div>
-                        <small>$87 – $212</small>
-                    </td>
-                    <td>RSI 51.3 (Neutral) • Bearish</td>
-                </tr>
-
-                <tr>
-                    <td>
-                        <div class="ticker"><a href="https://finance.yahoo.com/quote/FNGU" target="_blank">FNGU</a></div>
-                        <div class="links">
-                            <a href="https://finance.yahoo.com/quote/FNGU" target="_blank">Yahoo</a>
-                            <a href="https://www.tradingview.com/chart/?symbol=FNGU" target="_blank">TV</a>
-                            <a href="https://finviz.com/quote.ashx?t=FNGU" target="_blank">Finviz</a>
+                    <td class="bar-container">
+                        <div class="bar" style="--pos: 75.2%;"></div>
+                        <div class="bar-labels">
+                            <span>$86.60</span>
+                            <span>$212.18</span>
                         </div>
                     </td>
-                    <td>$25.70</td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +3.42%</span></td>
-                    <td><span style="color:#cc0000;font-weight:bold">▼ -18.33%</span></td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +21.97%</span></td>
-                    <td>2.9M</td>
-                    <td>
-                        <div class="bar"><div class="fill" style="width:68%"></div><div class="marker" style="left:68%"></div></div>
-                        <small>$8 – $34</small>
+                    <td class="tech-items">
+                        RSI(14): 51.3 (Neutral)<br>MACD: -2.603 / -2.388 (<span class="badge-red">Bearish</span>)<br>Vol Spike: No
                     </td>
-                    <td>RSI 28.7 (Oversold) • Bearish</td>
-                </tr>
-
-                <tr>
-                    <td>
-                        <div class="ticker"><a href="https://finance.yahoo.com/quote/AVGO" target="_blank">AVGO</a></div>
-                        <div class="links">
-                            <a href="https://finance.yahoo.com/quote/AVGO" target="_blank">Yahoo</a>
-                            <a href="https://www.tradingview.com/chart/?symbol=AVGO" target="_blank">TV</a>
-                            <a href="https://finviz.com/quote.ashx?t=AVGO" target="_blank">Finviz</a>
-                        </div>
+                    <td class="risk-items">
+                        Beta: 2.28<br>P/E: 44.8<br>Short %: 1.0%<br>Days to Cover: 1.2<br>P/C Vol Ratio: <span class="badge-red">0.51</span><br><span class="badge-red">Volume Bias: Down Days Higher</span><br>Options Direction: <span class="badge-red">Bearish</span><br>Implied Move (2025-12-26): ±2.6%<br>Expected Range: $176.22 – $185.76<br>Sentiment: <span class="badge-green">Strong Buy</span><br>Rating: <span class="badge-green">Strong_Buy</span><br>Upside: <span class="badge-green">+39.8%</span>
                     </td>
-                    <td>$340.51</td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +3.22%</span></td>
-                    <td><span style="color:#cc0000;font-weight:bold">▼ -3.25%</span></td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +30.95%</span></td>
-                    <td>42.8M</td>
-                    <td>
-                        <div class="bar"><div class="fill" style="width:73%"></div><div class="marker" style="left:73%"></div></div>
-                        <small>$138 – $415</small>
-                    </td>
-                    <td>RSI 33.9 (Neutral) • Bearish</td>
-                </tr>
-
-                <tr>
-                    <td>
-                        <div class="ticker"><a href="https://finance.yahoo.com/quote/COIN" target="_blank">COIN</a></div>
-                        <div class="links">
-                            <a href="https://finance.yahoo.com/quote/COIN" target="_blank">Yahoo</a>
-                            <a href="https://www.tradingview.com/chart/?symbol=COIN" target="_blank">TV</a>
-                            <a href="https://finviz.com/quote.ashx?t=COIN" target="_blank">Finviz</a>
-                        </div>
-                    </td>
-                    <td>$245.12</td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +2.47%</span></td>
-                    <td><span style="color:#cc0000;font-weight:bold">▼ -19.37%</span></td>
-                    <td><span style="color:#cc0000;font-weight:bold">▼ -4.25%</span></td>
-                    <td>7.2M</td>
-                    <td>
-                        <div class="bar"><div class="fill" style="width:34%"></div><div class="marker" style="left:34%"></div></div>
-                        <small>$143 – $445</small>
-                    </td>
-                    <td>RSI 40.8 (Neutral) • Bearish</td>
                 </tr>
 
                 <tr>
@@ -184,37 +105,28 @@
                             <a href="https://finviz.com/quote.ashx?t=GOOGL" target="_blank">Finviz</a>
                         </div>
                     </td>
-                    <td>$307.17</td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +1.56%</span></td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +5.51%</span></td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +83.29%</span></td>
-                    <td>22.5M</td>
                     <td>
-                        <div class="bar"><div class="fill" style="width:89%"></div><div class="marker" style="left:89%"></div></div>
-                        <small>$140 – $329</small>
+                        $307.17<br>
+                        <span style="color:#00aa00;font-weight:bold">▲ +1.56%</span>
                     </td>
-                    <td>RSI 43.5 (Neutral) • Bearish</td>
-                </tr>
-
-                <tr>
                     <td>
-                        <div class="ticker"><a href="https://finance.yahoo.com/quote/QQQ" target="_blank">QQQ</a></div>
-                        <div class="links">
-                            <a href="https://finance.yahoo.com/quote/QQQ" target="_blank">Yahoo</a>
-                            <a href="https://www.tradingview.com/chart/?symbol=QQQ" target="_blank">TV</a>
-                            <a href="https://finviz.com/quote.ashx?t=QQQ" target="_blank">Finviz</a>
+                        <span style="color:#00aa00;font-weight:bold">▲ +5.51%</span><br>
+                        <span style="color:#00aa00;font-weight:bold">▲ +83.29%</span>
+                    </td>
+                    <td>22.5M</td>
+                    <td class="bar-container">
+                        <div class="bar" style="--pos: 88.6%;"></div>
+                        <div class="bar-labels">
+                            <span>$140.14</span>
+                            <span>$328.62</span>
                         </div>
                     </td>
-                    <td>$617.24</td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +1.33%</span></td>
-                    <td><span style="color:#cc0000;font-weight:bold">▼ -0.70%</span></td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +17.00%</span></td>
-                    <td>145.5M</td>
-                    <td>
-                        <div class="bar"><div class="fill" style="width:92%"></div><div class="marker" style="left:92%"></div></div>
-                        <small>$401 – $637</small>
+                    <td class="tech-items">
+                        RSI(14): 43.5 (Neutral)<br>MACD: 4.527 / 7.873 (<span class="badge-red">Bearish</span>)<br>Vol Spike: No
                     </td>
-                    <td>RSI 49.9 (Neutral) • Bearish • Vol Spike</td>
+                    <td class="risk-items">
+                        Beta: 1.07<br>P/E: 30.3<br>Short %: 1.4%<br>Days to Cover: 2.1<br>P/C Vol Ratio: <span class="badge-red">0.85</span><br><span class="badge-red">Volume Bias: Down Days Higher</span><br>Options Direction: <span class="badge-red">Bearish</span><br>Implied Move (2025-12-26): ±2.0%<br>Expected Range: $300.90 – $313.44<br>Sentiment: <span class="badge-green">Strong Buy</span><br>Rating: <span class="badge-green">Strong_Buy</span><br>Upside: <span class="badge-green">+7.2%</span>
+                    </td>
                 </tr>
 
                 <tr>
@@ -226,16 +138,28 @@
                             <a href="https://finviz.com/quote.ashx?t=SPY" target="_blank">Finviz</a>
                         </div>
                     </td>
-                    <td>$680.59</td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +0.91%</span></td>
-                    <td><span style="color:#cc0000;font-weight:bold">▼ -0.06%</span></td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +15.20%</span></td>
-                    <td>85.9M</td>
                     <td>
-                        <div class="bar"><div class="fill" style="width:97%"></div><div class="marker" style="left:97%"></div></div>
-                        <small>$478 – $688</small>
+                        $680.59<br>
+                        <span style="color:#00aa00;font-weight:bold">▲ +0.91%</span>
                     </td>
-                    <td>RSI 52.7 (Neutral) • Bearish</td>
+                    <td>
+                        <span style="color:#cc0000;font-weight:bold">▼ -0.06%</span><br>
+                        <span style="color:#00aa00;font-weight:bold">▲ +15.20%</span>
+                    </td>
+                    <td>85.9M</td>
+                    <td class="bar-container">
+                        <div class="bar" style="--pos: 96.6%;"></div>
+                        <div class="bar-labels">
+                            <span>$477.64</span>
+                            <span>$687.67</span>
+                        </div>
+                    </td>
+                    <td class="tech-items">
+                        RSI(14): 52.7 (Neutral)<br>MACD: 1.627 / 2.411 (<span class="badge-red">Bearish</span>)<br>Vol Spike: No
+                    </td>
+                    <td class="risk-items">
+                        Beta: nan<br>P/E: 27.5<br>Short %: nan%<br>Days to Cover: nan<br>P/C Vol Ratio: <span class="badge-red">1.6</span><br><span class="badge-red">Volume Bias: Down Days Higher</span><br>Options Direction: <span class="badge-red">Bearish</span><br>Implied Move (2025-12-22): ±0.4%<br>Expected Range: $677.70 – $683.48<br>Upside: <span class="badge-red">+nan%</span>
+                    </td>
                 </tr>
 
                 <tr>
@@ -247,16 +171,28 @@
                             <a href="https://finviz.com/quote.ashx?t=AAPL" target="_blank">Finviz</a>
                         </div>
                     </td>
-                    <td>$273.67</td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +0.54%</span></td>
-                    <td><span style="color:#cc0000;font-weight:bold">▼ -0.57%</span></td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +35.22%</span></td>
-                    <td>41.1M</td>
                     <td>
-                        <div class="bar"><div class="fill" style="width:88%"></div><div class="marker" style="left:88%"></div></div>
-                        <small>$169 – $289</small>
+                        $273.67<br>
+                        <span style="color:#00aa00;font-weight:bold">▲ +0.54%</span>
                     </td>
-                    <td>RSI 30.3 (Neutral) • Bearish</td>
+                    <td>
+                        <span style="color:#cc0000;font-weight:bold">▼ -0.57%</span><br>
+                        <span style="color:#00aa00;font-weight:bold">▲ +35.22%</span>
+                    </td>
+                    <td>41.1M</td>
+                    <td class="bar-container">
+                        <div class="bar" style="--pos: 87.5%;"></div>
+                        <div class="bar-labels">
+                            <span>$168.63</span>
+                            <span>$288.62</span>
+                        </div>
+                    </td>
+                    <td class="tech-items">
+                        RSI(14): 30.3 (Neutral)<br>MACD: 1.026 / 2.440 (<span class="badge-red">Bearish</span>)<br>Vol Spike: No
+                    </td>
+                    <td class="risk-items">
+                        Beta: 1.11<br>P/E: 36.6<br>Short %: 0.9%<br>Days to Cover: 2.5<br>P/C Vol Ratio: <span class="badge-red">0.61</span><br>Options Direction: <span class="badge-green">Bullish</span><br>Implied Move (2025-12-26): ±1.5%<br>Expected Range: $269.48 – $277.86<br>Sentiment: <span class="badge-green">Buy</span><br>Rating: <span class="badge-green">Buy</span><br>Upside: <span class="badge-green">+5.1%</span>
+                    </td>
                 </tr>
 
                 <tr>
@@ -268,16 +204,28 @@
                             <a href="https://finviz.com/quote.ashx?t=MSFT" target="_blank">Finviz</a>
                         </div>
                     </td>
-                    <td>$486.06</td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +0.43%</span></td>
-                    <td><span style="color:#cc0000;font-weight:bold">▼ -4.27%</span></td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +5.15%</span></td>
-                    <td>18.6M</td>
                     <td>
-                        <div class="bar"><div class="fill" style="width:68%"></div><div class="marker" style="left:68%"></div></div>
-                        <small>$343 – $554</small>
+                        $486.06<br>
+                        <span style="color:#00aa00;font-weight:bold">▲ +0.43%</span>
                     </td>
-                    <td>RSI 49.4 (Neutral) • Bullish</td>
+                    <td>
+                        <span style="color:#cc0000;font-weight:bold">▼ -4.27%</span><br>
+                        <span style="color:#00aa00;font-weight:bold">▲ +5.15%</span>
+                    </td>
+                    <td>18.6M</td>
+                    <td class="bar-container">
+                        <div class="bar" style="--pos: 68.0%;"></div>
+                        <div class="bar-labels">
+                            <span>$342.95</span>
+                            <span>$553.50</span>
+                        </div>
+                    </td>
+                    <td class="tech-items">
+                        RSI(14): 49.4 (Neutral)<br>MACD: -4.933 / -6.064 (<span class="badge-green">Bullish</span>)<br>Vol Spike: No
+                    </td>
+                    <td class="risk-items">
+                        Beta: 1.07<br>P/E: 34.6<br>Short %: 0.8%<br>Days to Cover: 2.2<br>P/C Vol Ratio: <span class="badge-red">0.81</span><br><span class="badge-red">Volume Bias: Down Days Higher</span><br>Options Direction: <span class="badge-red">Bearish</span><br>Implied Move (2025-12-26): ±1.6%<br>Expected Range: $478.21 – $493.91<br>Sentiment: <span class="badge-green">Strong Buy</span><br>Rating: <span class="badge-green">Strong_Buy</span><br>Upside: <span class="badge-green">+28.1%</span>
+                    </td>
                 </tr>
 
                 <tr>
@@ -289,16 +237,28 @@
                             <a href="https://finviz.com/quote.ashx?t=AMZN" target="_blank">Finviz</a>
                         </div>
                     </td>
-                    <td>$227.37</td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +0.27%</span></td>
-                    <td><span style="color:#cc0000;font-weight:bold">▼ -8.72%</span></td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +9.72%</span></td>
-                    <td>44.6M</td>
                     <td>
-                        <div class="bar"><div class="fill" style="width:68%"></div><div class="marker" style="left:68%"></div></div>
-                        <small>$161 – $259</small>
+                        $227.37<br>
+                        <span style="color:#00aa00;font-weight:bold">▲ +0.27%</span>
                     </td>
-                    <td>RSI 39.3 (Neutral) • Bearish</td>
+                    <td>
+                        <span style="color:#cc0000;font-weight:bold">▼ -8.72%</span><br>
+                        <span style="color:#00aa00;font-weight:bold">▲ +9.72%</span>
+                    </td>
+                    <td>44.6M</td>
+                    <td class="bar-container">
+                        <div class="bar" style="--pos: 67.9%;"></div>
+                        <div class="bar-labels">
+                            <span>$161.38</span>
+                            <span>$258.60</span>
+                        </div>
+                    </td>
+                    <td class="tech-items">
+                        RSI(14): 39.3 (Neutral)<br>MACD: -1.656 / -1.297 (<span class="badge-red">Bearish</span>)<br>Vol Spike: No
+                    </td>
+                    <td class="risk-items">
+                        Beta: 1.37<br>P/E: 32.2<br>Short %: 0.8%<br>Days to Cover: 1.7<br>P/C Vol Ratio: <span class="badge-red">0.4</span><br><span class="badge-red">Volume Bias: Down Days Higher</span><br>Options Direction: <span class="badge-red">Bearish</span><br>Implied Move (2025-12-26): ±2.0%<br>Expected Range: $222.73 – $232.01<br>Sentiment: <span class="badge-green">Strong Buy</span><br>Rating: <span class="badge-green">Strong_Buy</span><br>Upside: <span class="badge-green">+30.0%</span>
+                    </td>
                 </tr>
 
                 <tr>
@@ -310,16 +270,28 @@
                             <a href="https://finviz.com/quote.ashx?t=TSLA" target="_blank">Finviz</a>
                         </div>
                     </td>
-                    <td>$480.91</td>
-                    <td><span style="color:#cc0000;font-weight:bold">▼ -0.51%</span></td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +9.39%</span></td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +44.83%</span></td>
-                    <td>82.0M</td>
                     <td>
-                        <div class="bar"><div class="fill" style="width:95%"></div><div class="marker" style="left:95%"></div></div>
-                        <small>$214 – $495</small>
+                        $480.91<br>
+                        <span style="color:#cc0000;font-weight:bold">▼ -0.51%</span>
                     </td>
-                    <td>RSI 67.9 (Neutral) • Bullish</td>
+                    <td>
+                        <span style="color:#00aa00;font-weight:bold">▲ +9.39%</span><br>
+                        <span style="color:#00aa00;font-weight:bold">▲ +44.83%</span>
+                    </td>
+                    <td>82.0M</td>
+                    <td class="bar-container">
+                        <div class="bar" style="--pos: 94.9%;"></div>
+                        <div class="bar-labels">
+                            <span>$214.25</span>
+                            <span>$495.28</span>
+                        </div>
+                    </td>
+                    <td class="tech-items">
+                        RSI(14): 67.9 (Neutral)<br>MACD: 13.676 / 9.288 (<span class="badge-green">Bullish</span>)<br>Vol Spike: No
+                    </td>
+                    <td class="risk-items">
+                        Beta: 1.88<br>P/E: 334.2<br>Short %: 2.7%<br>Days to Cover: 0.9<br>P/C Vol Ratio: <span class="badge-red">0.71</span><br>Options Direction: <span class="badge-green">Bullish</span><br>Implied Move (2025-12-26): ±3.5%<br>Expected Range: $464.15 – $497.67<br>Sentiment: <span class="badge-red">Hold</span><br>Rating: <span class="badge-red">Hold</span><br>Upside: <span class="badge-red">-17.4%</span>
+                    </td>
                 </tr>
 
                 <tr>
@@ -331,37 +303,28 @@
                             <a href="https://finviz.com/quote.ashx?t=META" target="_blank">Finviz</a>
                         </div>
                     </td>
-                    <td>$658.79</td>
-                    <td><span style="color:#cc0000;font-weight:bold">▼ -0.85%</span></td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +5.14%</span></td>
-                    <td><span style="color:#cc0000;font-weight:bold">▼ -4.02%</span></td>
-                    <td>11.9M</td>
                     <td>
-                        <div class="bar"><div class="fill" style="width:57%"></div><div class="marker" style="left:57%"></div></div>
-                        <small>$479 – $795</small>
+                        $658.79<br>
+                        <span style="color:#cc0000;font-weight:bold">▼ -0.85%</span>
                     </td>
-                    <td>RSI 57.5 (Neutral) • Bullish</td>
-                </tr>
-
-                <tr>
                     <td>
-                        <div class="ticker"><a href="https://finance.yahoo.com/quote/TSLL" target="_blank">TSLL</a></div>
-                        <div class="links">
-                            <a href="https://finance.yahoo.com/quote/TSLL" target="_blank">Yahoo</a>
-                            <a href="https://www.tradingview.com/chart/?symbol=TSLL" target="_blank">TV</a>
-                            <a href="https://finviz.com/quote.ashx?t=TSLL" target="_blank">Finviz</a>
+                        <span style="color:#00aa00;font-weight:bold">▲ +5.14%</span><br>
+                        <span style="color:#cc0000;font-weight:bold">▼ -4.02%</span>
+                    </td>
+                    <td>11.9M</td>
+                    <td class="bar-container">
+                        <div class="bar" style="--pos: 56.9%;"></div>
+                        <div class="bar-labels">
+                            <span>$478.72</span>
+                            <span>$795.06</span>
                         </div>
                     </td>
-                    <td>$22.11</td>
-                    <td><span style="color:#cc0000;font-weight:bold">▼ -1.03%</span></td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +15.69%</span></td>
-                    <td><span style="color:#00aa00;font-weight:bold">▲ +67.82%</span></td>
-                    <td>275.5M</td>
-                    <td>
-                        <div class="bar"><div class="fill" style="width:55%"></div><div class="marker" style="left:55%"></div></div>
-                        <small>$6 – $35</small>
+                    <td class="tech-items">
+                        RSI(14): 57.5 (Neutral)<br>MACD: 2.084 / -1.039 (<span class="badge-green">Bullish</span>)<br>Vol Spike: No
                     </td>
-                    <td>RSI 66.6 (Neutral) • Bullish • Vol Spike</td>
+                    <td class="risk-items">
+                        Beta: 1.27<br>P/E: 29.1<br>Short %: 1.5%<br>Days to Cover: 1.7<br><span class="badge-red">Trend: Death Cross</span><br>P/C Vol Ratio: <span class="badge-red">0.55</span><br>Options Direction: <span class="badge-red">Bearish</span><br>Implied Move (2025-12-26): ±2.0%<br>Expected Range: $645.35 – $672.23<br>Sentiment: <span class="badge-green">Strong Buy</span><br>Rating: <span class="badge-green">Strong_Buy</span><br>Upside: <span class="badge-green">+27.1%</span>
+                    </td>
                 </tr>
 
             </tbody>
