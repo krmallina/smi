@@ -2,8 +2,11 @@ name: Update Dashboard
 
 on:
   schedule:
+    # 4 AM - 4 PM PST on Weekdays
+    # UTC is +8 hours ahead of PST.
+    # 4 AM PST (12:00 UTC) to 4 PM PST (00:00 UTC next day)
     - cron: '0 0,12-23 * * 1-6'
-  workflow_dispatch:
+  workflow_dispatch: # Allows you to click "Run workflow" manually for testing
 
 permissions:
   contents: write
@@ -11,36 +14,53 @@ permissions:
 jobs:
   run-script:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # Required to allow 'git pull --rebase' to work
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: 'pip'
+          cache: 'pip' # Caches your requirements for faster subsequent runs
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements.txt ]; then 
+            pip install -r requirements.txt
+          else 
+            pip install yfinance pandas requests
+          fi
 
       - name: Run stocks.py
-        run: python stocks.py --refresh 30
+        run: python stocks.py
 
-      - name: Commit and push
+      - name: Commit and push updated dashboards
         if: success()
         run: |
+          # 1. Identity setup
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # 2. Stage the specific dashboard files
           git add data/*.html
+          
+          # 3. Check for changes (don't fail if nothing changed)
           if git diff --staged --quiet; then
-            echo "No changes to commit"
+            echo "No changes detected. Skipping commit."
             exit 0
           fi
+          
+          # 4. Commit changes
           git commit -m "Update dashboards $(date -u)"
+          
+          # 5. THE FIX: Pull remote changes and put your commit on top
+          # This prevents the [rejected] (fetch first) error
           git pull --rebase origin main
+          
+          # 6. Push back to the repository
           git push origin main
