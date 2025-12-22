@@ -1,9 +1,22 @@
-name: Update Stock Dashboard
+name: Update Dashboard
 
 on:
   schedule:
+    # -------------------------------------------------------------------------
+    # SCHEDULE EXPLANATION (PST to UTC Conversion):
+    # Goal: Hourly from 4 AM to 4 PM PST, Monday through Friday.
+    # 
+    # UTC is 8 hours ahead of PST.
+    # 4 AM PST  -> 12:00 PM UTC (12)
+    # 3 PM PST  -> 11:00 PM UTC (23)
+    # 4 PM PST  -> 12:00 AM UTC (00) - This lands on the NEXT DAY in UTC.
+    #
+    # Day of Week: 1-6 (Mon-Sat in UTC) is required because Friday 4 PM PST 
+    # is actually Saturday 12 AM UTC.
+    # -------------------------------------------------------------------------
     - cron: '0 0,12-23 * * 1-6'
-  workflow_dispatch: 
+    
+  workflow_dispatch: # Allows manual trigger for testing
 
 permissions:
   contents: write
@@ -16,8 +29,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # CRITICAL: Without this, git pull --rebase WILL fail
-          fetch-depth: 0 
+          fetch-depth: 0 # Fetches all history for reliable merging/rebasing
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -33,7 +45,7 @@ jobs:
       - name: Run stocks.py
         run: python stocks.py --refresh 30
 
-      - name: Push changes
+      - name: Sync and Push
         if: success()
         run: |
           git config --global user.name "github-actions[bot]"
@@ -41,17 +53,18 @@ jobs:
           
           git add data/*.html
           
+          # Skip if no changes were generated
           if git diff --staged --quiet; then
-            echo "No changes to commit"
+            echo "No changes to commit."
             exit 0
           fi
           
           git commit -m "Update dashboards $(date -u)"
 
-          # STRATEGY: Try to pull and rebase. 
-          # If a conflict occurs in the HTML files, we assume the newest run is the best one.
+          # Retry loop to handle race conditions if multiple jobs fire at once
           for i in {1..5}; do
-            echo "Attempt $i: Syncing and pushing..."
-            git pull --rebase -X theirs origin main && git push origin main && break || \
-            (echo "Conflict detected, retrying..." && sleep 5)
+            echo "Attempt $i: Pulling and Pushing..."
+            # -X ours ensures our new dashboard data wins if there's a conflict
+            git pull --rebase -X ours origin main && git push origin main && break || \
+            (echo "Conflict detected. Retrying in 5s..." && sleep 5)
           done
