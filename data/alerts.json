@@ -2,7 +2,7 @@
   {
     "ticker": "NVDA",
     "condition": "price_above",
-    "value": 500
+    "value": 200
   },
   {
     "ticker": "TSLA",
