@@ -3,20 +3,15 @@ name: Update Dashboard
 on:
   schedule:
     # -------------------------------------------------------------------------
-    # SCHEDULE EXPLANATION (PST to UTC Conversion):
-    # Goal: Hourly from 4 AM to 4 PM PST, Monday through Friday.
-    # 
-    # UTC is 8 hours ahead of PST.
-    # 4 AM PST  -> 12:00 PM UTC (12)
-    # 3 PM PST  -> 11:00 PM UTC (23)
-    # 4 PM PST  -> 12:00 AM UTC (00) - This lands on the NEXT DAY in UTC.
+    # PST to UTC Conversion (PST is UTC-8):
+    # 4 AM PST  -> 12:00 PM UTC
+    # 3 PM PST  -> 11:00 PM UTC
+    # 4 PM PST  -> 12:00 AM UTC (Next Day)
     #
-    # Day of Week: 1-6 (Mon-Sat in UTC) is required because Friday 4 PM PST 
-    # is actually Saturday 12 AM UTC.
+    # '1-6' (Mon-Sat UTC) ensures we catch Friday afternoon PST (which is Sat UTC).
     # -------------------------------------------------------------------------
     - cron: '0 0,12-23 * * 1-6'
-    
-  workflow_dispatch: # Allows manual trigger for testing
+  workflow_dispatch: 
 
 permissions:
   contents: write
@@ -29,7 +24,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Fetches all history for reliable merging/rebasing
+          fetch-depth: 0 # IMPORTANT: Fetches all history so rebase works
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -45,26 +40,30 @@ jobs:
       - name: Run stocks.py
         run: python stocks.py --refresh 30
 
-      - name: Sync and Push
+      - name: Sync and Push Changes
         if: success()
         run: |
+          # Configure Git
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
+          # Stage the updated HTML files
           git add data/*.html
           
-          # Skip if no changes were generated
+          # Check if there are changes; if not, exit cleanly
           if git diff --staged --quiet; then
             echo "No changes to commit."
             exit 0
           fi
           
+          # Create the local commit
           git commit -m "Update dashboards $(date -u)"
 
-          # Retry loop to handle race conditions if multiple jobs fire at once
+          # THE FIX: REBASE RETRY LOOP
+          # We pull the latest changes and put our commit on top.
+          # '-X ours' means if there's a conflict, keep the dashboard we just generated.
           for i in {1..5}; do
-            echo "Attempt $i: Pulling and Pushing..."
-            # -X ours ensures our new dashboard data wins if there's a conflict
+            echo "Attempt $i: Pulling latest and pushing..."
             git pull --rebase -X ours origin main && git push origin main && break || \
-            (echo "Conflict detected. Retrying in 5s..." && sleep 5)
+            (echo "Conflict detected, retrying in 5s..." && sleep 5)
           done
