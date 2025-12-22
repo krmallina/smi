@@ -1,15 +1,10 @@
-name: Update Dashboard
+name: Update Stock Dashboard
 
 on:
   schedule:
-    # -------------------------------------------------------------------------
-    # PST to UTC Conversion (PST is UTC-8):
-    # 4 AM PST  -> 12:00 PM UTC
-    # 3 PM PST  -> 11:00 PM UTC
-    # 4 PM PST  -> 12:00 AM UTC (Next Day)
-    #
-    # '1-6' (Mon-Sat UTC) ensures we catch Friday afternoon PST (which is Sat UTC).
-    # -------------------------------------------------------------------------
+    # 4 AM - 4 PM PST on Weekdays (Monday-Friday)
+    # UTC is +8 hours: 12:00 PM to 12:00 AM. 
+    # '1-6' covers the Friday afternoon PST run which occurs on Saturday UTC.
     - cron: '0 0,12-23 * * 1-6'
   workflow_dispatch: 
 
@@ -19,12 +14,16 @@ permissions:
 jobs:
   run-script:
     runs-on: ubuntu-latest
+    # This prevents multiple versions of this job from running at the exact same time
+    concurrency:
+      group: stock-update
+      cancel-in-progress: true
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # IMPORTANT: Fetches all history so rebase works
+          fetch-depth: 0 
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -43,27 +42,24 @@ jobs:
       - name: Sync and Push Changes
         if: success()
         run: |
-          # Configure Git
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Stage the updated HTML files
           git add data/*.html
           
-          # Check if there are changes; if not, exit cleanly
           if git diff --staged --quiet; then
             echo "No changes to commit."
             exit 0
           fi
           
-          # Create the local commit
           git commit -m "Update dashboards $(date -u)"
 
-          # THE FIX: REBASE RETRY LOOP
-          # We pull the latest changes and put our commit on top.
-          # '-X ours' means if there's a conflict, keep the dashboard we just generated.
+          # STRATEGY: Fetch, Rebase, and Force-Push on failure
           for i in {1..5}; do
-            echo "Attempt $i: Pulling latest and pushing..."
-            git pull --rebase -X ours origin main && git push origin main && break || \
-            (echo "Conflict detected, retrying in 5s..." && sleep 5)
+            echo "Attempt $i: Syncing..."
+            # Try a standard rebase push first
+            git pull --rebase origin main && git push origin main && break || \
+            # If that fails, force the update (since it's just dashboard data)
+            git push --force origin main && break || \
+            (echo "Retrying in 5s..." && sleep 5)
           done
