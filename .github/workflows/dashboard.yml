@@ -2,11 +2,8 @@ name: Update Stock Dashboard
 
 on:
   schedule:
-    # 4 AM - 4 PM PST on Weekdays (Mon-Fri)
-    # UTC is 8 hours ahead: 12:00 PM UTC to 12:00 AM UTC
-    # '1-6' includes Saturday UTC to capture Friday afternoon PST
     - cron: '0 0,12-23 * * 1-6'
-  workflow_dispatch: # Allows manual testing from the "Actions" tab
+  workflow_dispatch: 
 
 permissions:
   contents: write
@@ -19,48 +16,42 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Required so 'git pull --rebase' can see the history
+          # CRITICAL: Without this, git pull --rebase WILL fail
+          fetch-depth: 0 
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: 'pip' # Speeds up runs by caching requirements.txt
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then 
-            pip install -r requirements.txt
-          else 
-            pip install yfinance pandas requests
-          fi
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; else pip install yfinance pandas requests; fi
 
       - name: Run stocks.py
-        run: python stocks.py
+        run: python stocks.py --refresh 30
 
       - name: Push changes
         if: success()
         run: |
-          # 1. Identity setup
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # 2. Stage only the dashboard files
           git add data/*.html
           
-          # 3. Check for changes (don't fail if nothing changed)
           if git diff --staged --quiet; then
-            echo "No dashboard changes to commit. Skipping push."
-          else
-            git commit -m "Update dashboards $(date -u)"
-            
-            # 4. THE FIX: Retry loop for conflicts
-            # This handles the case where the repo changes while this script is running
-            for i in {1..5}; do
-              echo "Attempt $i: Syncing and pushing..."
-              # Pull the latest, put our commit on top, and push
-              git pull --rebase origin main && git push origin main && break || \
-              (echo "Conflict detected, retrying in 5s..." && sleep 5)
-            done
+            echo "No changes to commit"
+            exit 0
           fi
+          
+          git commit -m "Update dashboards $(date -u)"
+
+          # STRATEGY: Try to pull and rebase. 
+          # If a conflict occurs in the HTML files, we assume the newest run is the best one.
+          for i in {1..5}; do
+            echo "Attempt $i: Syncing and pushing..."
+            git pull --rebase -X theirs origin main && git push origin main && break || \
+            (echo "Conflict detected, retrying..." && sleep 5)
+          done
