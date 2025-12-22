@@ -1,12 +1,12 @@
-name: Update Dashboard
+name: Update Stock Dashboard
 
 on:
   schedule:
-    # 4 AM - 4 PM PST on Weekdays
-    # UTC is +8 hours ahead of PST.
-    # 4 AM PST (12:00 UTC) to 4 PM PST (00:00 UTC next day)
+    # 4 AM - 4 PM PST on Weekdays (Monday - Friday)
+    # UTC is 8 hours ahead: 12:00 UTC to 00:00 UTC
+    # We use 1-6 to cover the UTC shift for Friday afternoon PST
     - cron: '0 0,12-23 * * 1-6'
-  workflow_dispatch: # Allows you to click "Run workflow" manually for testing
+  workflow_dispatch: 
 
 permissions:
   contents: write
@@ -19,13 +19,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Required to allow 'git pull --rebase' to work
+          fetch-depth: 0 # Crucial: Allows git to see history for rebasing
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: 'pip' # Caches your requirements for faster subsequent runs
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
@@ -37,7 +37,7 @@ jobs:
           fi
 
       - name: Run stocks.py
-        run: python stocks.py
+        run: python stocks.py --refresh 30
 
       - name: Commit and push updated dashboards
         if: success()
@@ -49,7 +49,7 @@ jobs:
           # 2. Stage the specific dashboard files
           git add data/*.html
           
-          # 3. Check for changes (don't fail if nothing changed)
+          # 3. Check for changes
           if git diff --staged --quiet; then
             echo "No changes detected. Skipping commit."
             exit 0
@@ -58,9 +58,11 @@ jobs:
           # 4. Commit changes
           git commit -m "Update dashboards $(date -u)"
           
-          # 5. THE FIX: Pull remote changes and put your commit on top
-          # This prevents the [rejected] (fetch first) error
-          git pull --rebase origin main
-          
-          # 6. Push back to the repository
-          git push origin main
+          # 5. THE ULTIMATE FIX: Retry loop for Push/Pull conflicts
+          # This tries up to 5 times to sync and push if the repo changed mid-run
+          for i in {1..5}; do
+            echo "Attempt $i to push changes..."
+            git pull --rebase origin main && git push origin main && break || \
+            echo "Conflict detected. Retrying in 5 seconds..."
+            sleep 5
+          done
