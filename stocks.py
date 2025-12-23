@@ -254,7 +254,6 @@ def fetch(ticker, ext=False):
         if rec is not None:
             sentiment = "Strong Buy" if rec <= 1.5 else "Buy" if rec <= 2.5 else "Hold" if rec <= 3.5 else "Sell" if rec <= 4.5 else "Strong Sell"
 
-        # Fixed: replace underscore with space in analyst_rating
         analyst_rating = info.get('recommendationKey', 'none').title().replace('_', ' ')
 
         upside_potential = None
@@ -401,6 +400,10 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
             banner += f"<div class='alert-item'>{g}</div>"
         banner += "</div></div>"
 
+    # New: Compact meme stock banner
+    meme_tickers = sorted(MEME_STOCKS)
+    meme_banner = f'<div class="meme-banner">🚀 <strong>Meme Stocks:</strong> {", ".join(meme_tickers)}</div>'
+
     vix_h = '<span class="neutral">VIX: N/A</span>'
     if vix['price'] is not None:
         cls = "positive" if vix['change_pct'] >= 0 else "negative"
@@ -417,6 +420,9 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
         aaii_h = f'<span class="{cls}">AAII: Bull {aaii["bullish"]:.1f}% Bear {aaii["bearish"]:.1f}%</span>'
 
     html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Live Dashboard</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <style>
 body{{font-family:Arial;margin:20px;background:#f5f5f5}}
 .header-container{{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:20px;margin-bottom:20px}}
@@ -427,7 +433,8 @@ body{{font-family:Arial;margin:20px;background:#f5f5f5}}
 .switch-btn:hover{{background:#e65c00}}
 .mode-badge{{padding:10px 20px;border-radius:6px;font-weight:bold;font-size:1em}}
 .regular-hours{{background:#0066cc;color:white}}.extended-hours{{background:#ff6600;color:white}}
-.alert-banner{{background:#ff4444;color:white;padding:12px 15px;border-radius:8px;margin-bottom:30px;box-shadow:0 4px 8px rgba(0,0,0,0.2);font-size:1.05em}}
+.alert-banner{{background:#ff4444;color:white;padding:12px 15px;border-radius:8px;margin-bottom:20px;box-shadow:0 4px 8px rgba(0,0,0,0.2);font-size:1.05em}}
+.meme-banner{{background:#ffcc00;color:#333;padding:8px 15px;border-radius:6px;margin-bottom:20px;font-size:0.95em;box-shadow:0 2px 6px rgba(0,0,0,0.15)}}
 .alert-list{{margin-top:8px}}
 .alert-item{{margin:6px 0;position:relative;cursor:help}}
 .alert-tooltip{{visibility:hidden;position:absolute;top:100%;left:0;background:#333;color:white;padding:10px;border-radius:6px;font-size:0.9em;width:400px;max-height:300px;overflow-y:auto;z-index:10;opacity:0;transition:opacity 0.3s;box-shadow:0 4px 8px rgba(0,0,0,0.3)}}
@@ -447,6 +454,7 @@ td{{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}}
 .risk-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:4px 8px}}
 </style></head><body>
 {banner}
+{meme_banner}
 <div class="header-container">
     <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
         <h1 style="margin:0">Live Dashboard</h1>
@@ -465,6 +473,7 @@ td{{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}}
 <tr>
     <th>TICKER</th><th>PRICE</th><th>DAY %</th><th>1M %</th><th>6M %</th><th>YTD %</th><th>VOLUME</th><th>52W RANGE</th><th>TECHNICAL</th><th>RISK / SENTIMENT</th>
 </tr>"""
+    # Table rows unchanged (same as previous version)
     for _, r in df.iterrows():
         pos = ((r['price'] - r['52w_low']) / (r['52w_high'] - r['52w_low'])) * 100 if r['52w_high'] > r['52w_low'] else 50
 
