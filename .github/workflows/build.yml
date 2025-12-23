@@ -47,37 +47,19 @@ jobs:
           
           git commit -m "Update dashboards $(date -u)"
           
-          # STRATEGY: Fetch, rebase with auto-resolution, and retry on failure
+          # STRATEGY: Always force push dashboard changes (they're generated data, not source code)
           for i in {1..5}; do
-            echo "Attempt $i: Syncing..."
+            echo "Attempt $i: Pushing..."
             
-            # Fetch latest changes
+            # Fetch latest to update remote tracking
             git fetch origin main
             
-            # Try to rebase with strategy to prefer our dashboard changes
-            git rebase origin/main -X theirs || {
-              # If rebase fails, check if it's due to conflicts in our files
-              if git status | grep -q "data/.*\.html"; then
-                echo "Conflicts in dashboard files, resolving..."
-                # Take our version of the dashboard files
-                git checkout --ours data/*.html
-                git add data/*.html
-                git rebase --continue
-              else
-                echo "Unexpected conflicts, aborting..."
-                git rebase --abort
-                sleep 5
-                continue
-              fi
-            }
-            
-            # Try to push
-            if git push origin main; then
+            # Force push our dashboard changes (last write wins)
+            if git push --force-with-lease origin main; then
               echo "Successfully pushed changes"
               break
             else
               echo "Push failed, retrying in 5s..."
-              git rebase --abort 2>/dev/null || true
               sleep 5
             fi
           done
