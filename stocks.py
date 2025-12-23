@@ -31,6 +31,7 @@ def check_alerts(data):
     low_52w = []
     surge = []
     crash = []
+    volume_spike = []  # Grouped volume spike
     custom = []
 
     # Custom user alerts
@@ -63,6 +64,9 @@ def check_alerts(data):
         elif ch < -15:
             crash.append({'ticker': s['ticker'], 'msg': f"CRASHED < -15% → {ch:+.2f}%"})
 
+        if s['volume_spike']:
+            volume_spike.append({'ticker': s['ticker'], 'msg': "VOLUME SPIKE (>1.5x 30-day avg)"})
+
         if s['52w_high'] > s['52w_low']:
             pos_pct = (s['price'] - s['52w_low']) / (s['52w_high'] - s['52w_low']) * 100
             if pos_pct >= 95:
@@ -88,6 +92,10 @@ def check_alerts(data):
         tickers = ", ".join(a['ticker'] for a in crash)
         details = "<br>".join(f"{a['ticker']}: {a['msg']}" for a in crash)
         grouped.append(f"💥 <strong>Crash <-15%:</strong> {tickers}<div class='alert-tooltip'>{details}</div>")
+    if volume_spike:
+        tickers = ", ".join(a['ticker'] for a in volume_spike)
+        details = "<br>".join(f"{a['ticker']}: {a['msg']}" for a in volume_spike)
+        grouped.append(f"📈 <strong>Volume Spike:</strong> {tickers}<div class='alert-tooltip'>{details}</div>")
     if custom:
         details = "<br>".join(f"{a['ticker']}: {a['msg']}" for a in custom)
         grouped.append(f"⚡ <strong>Custom Alerts:</strong> {len(custom)} triggered<div class='alert-tooltip'>{details}</div>")
@@ -400,7 +408,7 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
             banner += f"<div class='alert-item'>{g}</div>"
         banner += "</div></div>"
 
-    # New: Compact meme stock banner
+    # Compact meme stock banner
     meme_tickers = sorted(MEME_STOCKS)
     meme_banner = f'<div class="meme-banner">🚀 <strong>Meme Stocks:</strong> {", ".join(meme_tickers)}</div>'
 
@@ -473,7 +481,6 @@ td{{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}}
 <tr>
     <th>TICKER</th><th>PRICE</th><th>DAY %</th><th>1M %</th><th>6M %</th><th>YTD %</th><th>VOLUME</th><th>52W RANGE</th><th>TECHNICAL</th><th>RISK / SENTIMENT</th>
 </tr>"""
-    # Table rows unchanged (same as previous version)
     for _, r in df.iterrows():
         pos = ((r['price'] - r['52w_low']) / (r['52w_high'] - r['52w_low'])) * 100 if r['52w_high'] > r['52w_low'] else 50
 
