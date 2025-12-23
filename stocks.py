@@ -24,48 +24,75 @@ def load_alerts():
         return []
 
 def check_alerts(data):
-    alerts = load_alerts()
-    triggered = []
-    now = datetime.now(UTC).astimezone(PST).strftime('%Y-%m-%d %I:%M:%S %p PST')
-    
-    # Custom user-defined alerts
-    for a in alerts:
+    custom_alerts = load_alerts()
+    now = datetime.now(UTC).astimezone(PST)
+
+    high_52w = []
+    low_52w = []
+    surge = []
+    crash = []
+    custom = []
+
+    # Custom user alerts
+    for a in custom_alerts:
         s = next((x for x in data if x['ticker'] == a['ticker'].upper()), None)
         if not s: continue
         msg = ""
         if a['condition'] == "price_above" and a.get('value') and s['price'] > a['value']:
-            msg = f"{s['ticker']} price ABOVE ${a['value']:.2f} → ${s['price']:.2f}"
+            msg = f"price ABOVE ${a['value']:.2f} → ${s['price']:.2f}"
         elif a['condition'] == "price_below" and a.get('value') and s['price'] < a['value']:
-            msg = f"{s['ticker']} price BELOW ${a['value']:.2f} → ${s['price']:.2f}"
+            msg = f"price BELOW ${a['value']:.2f} → ${s['price']:.2f}"
         elif a['condition'] == "day_change_above" and a.get('value') and s['change_pct'] > a['value']:
-            msg = f"{s['ticker']} DAY % ABOVE {a['value']}% → {s['change_pct']:+.2f}%"
+            msg = f"DAY % ABOVE {a['value']}% → {s['change_pct']:+.2f}%"
         elif a['condition'] == "day_change_below" and a.get('value') and s['change_pct'] < a['value']:
-            msg = f"{s['ticker']} DAY % BELOW {a['value']}% → {s['change_pct']:+.2f}%"
+            msg = f"DAY % BELOW {a['value']}% → {s['change_pct']:+.2f}%"
         elif a['condition'] == "rsi_oversold" and s['rsi'] is not None and s['rsi'] < 30:
-            msg = f"{s['ticker']} RSI OVERSOLD → {s['rsi']:.1f}"
+            msg = f"RSI OVERSOLD → {s['rsi']:.1f}"
         elif a['condition'] == "rsi_overbought" and s['rsi'] is not None and s['rsi'] > 70:
-            msg = f"{s['ticker']} RSI OVERBOUGHT → {s['rsi']:.1f}"
+            msg = f"RSI OVERBOUGHT → {s['rsi']:.1f}"
         elif a['condition'] == "volume_spike" and s['volume_spike']:
-            msg = f"{s['ticker']} VOLUME SPIKE"
-        if msg: triggered.append({'time': now, 'message': msg})
+            msg = "VOLUME SPIKE"
+        if msg:
+            custom.append({'ticker': s['ticker'], 'msg': msg})
 
     # Built-in alerts
     for s in data:
         ch = s['change_pct']
-        if ch > 15: 
-            triggered.append({'time': now, 'message': f"🚨 {s['ticker']} SURGED > +15% → {ch:+.2f}%"})
-        elif ch < -15: 
-            triggered.append({'time': now, 'message': f"🚨 {s['ticker']} CRASHED < -15% → {ch:+.2f}%"})
+        if ch > 15:
+            surge.append({'ticker': s['ticker'], 'msg': f"SURGED > +15% → {ch:+.2f}%"})
+        elif ch < -15:
+            crash.append({'ticker': s['ticker'], 'msg': f"CRASHED < -15% → {ch:+.2f}%"})
 
-        # 52-week high/low proximity alerts (within 5%)
         if s['52w_high'] > s['52w_low']:
             pos_pct = (s['price'] - s['52w_low']) / (s['52w_high'] - s['52w_low']) * 100
             if pos_pct >= 95:
-                triggered.append({'time': now, 'message': f"🔥 {s['ticker']} NEAR 52W HIGH ({pos_pct:.1f}%) @ ${s['price']:.2f} (High: ${s['52w_high']:.2f})"})
+                high_52w.append({'ticker': s['ticker'], 'msg': f"NEAR 52W HIGH ({pos_pct:.1f}%) @ ${s['price']:.2f} (High: ${s['52w_high']:.2f})"})
             elif pos_pct <= 5:
-                triggered.append({'time': now, 'message': f"🔔 {s['ticker']} NEAR 52W LOW ({pos_pct:.1f}%) @ ${s['price']:.2f} (Low: ${s['52w_low']:.2f})"})
+                low_52w.append({'ticker': s['ticker'], 'msg': f"NEAR 52W LOW ({pos_pct:.1f}%) @ ${s['price']:.2f} (Low: ${s['52w_low']:.2f})"})
 
-    return triggered
+    # Build grouped display lines
+    grouped = []
+    if high_52w:
+        tickers = ", ".join(a['ticker'] for a in high_52w)
+        details = "<br>".join(f"{a['ticker']}: {a['msg']}" for a in high_52w)
+        grouped.append(f"🔥 <strong>Near 52W High:</strong> {tickers}<div class='alert-tooltip'>{details}</div>")
+    if low_52w:
+        tickers = ", ".join(a['ticker'] for a in low_52w)
+        details = "<br>".join(f"{a['ticker']}: {a['msg']}" for a in low_52w)
+        grouped.append(f"🔔 <strong>Near 52W Low:</strong> {tickers}<div class='alert-tooltip'>{details}</div>")
+    if surge:
+        tickers = ", ".join(a['ticker'] for a in surge)
+        details = "<br>".join(f"{a['ticker']}: {a['msg']}" for a in surge)
+        grouped.append(f"🚀 <strong>Surge >15%:</strong> {tickers}<div class='alert-tooltip'>{details}</div>")
+    if crash:
+        tickers = ", ".join(a['ticker'] for a in crash)
+        details = "<br>".join(f"{a['ticker']}: {a['msg']}" for a in crash)
+        grouped.append(f"💥 <strong>Crash <-15%:</strong> {tickers}<div class='alert-tooltip'>{details}</div>")
+    if custom:
+        details = "<br>".join(f"{a['ticker']}: {a['msg']}" for a in custom)
+        grouped.append(f"⚡ <strong>Custom Alerts:</strong> {len(custom)} triggered<div class='alert-tooltip'>{details}</div>")
+
+    return {'grouped': grouped, 'time': now.strftime('%I:%M %p PST')}
 
 def rsi(series):
     if len(series) < 15: return None
@@ -279,7 +306,7 @@ def fetch(ticker, ext=False):
         }
     except Exception as e:
         print(f"Error {ticker}: {e}")
-        time.sleep(10)
+        time.sleep(20)  # Increased delay on error for better recovery
         return None
 
 def fmt_vol(v):
@@ -362,15 +389,15 @@ def get_aaii_sentiment():
     return {'bullish': None, 'bearish': None, 'spread': None}
 
 def html(df, vix, fg, aaii, file, ext=False, alerts=None):
-    alerts = alerts or []
+    alerts = alerts or {'grouped': [], 'time': ''}
     hours = "Extended Hours" if ext else "Regular Hours"
     update = datetime.now(UTC).astimezone(PST).strftime('%I:%M:%S %p PST on %B %d, %Y')
 
     banner = ""
-    if alerts:
-        banner = '<div class="alert-banner"><strong>🚨 ALERTS 🚨</strong><div class="alert-list">'
-        for a in alerts[-8:]:  # Show up to 8 recent alerts
-            banner += f"<div class='alert-item'>{a['time']} — {a['message']}</div>"
+    if alerts['grouped']:
+        banner = f'<div class="alert-banner"><strong>🚨 ALERTS @ {alerts["time"]} 🚨</strong><div class="alert-list">'
+        for g in alerts['grouped']:
+            banner += f"<div class='alert-item'>{g}</div>"
         banner += "</div></div>"
 
     vix_h = '<span class="neutral">VIX: N/A</span>'
@@ -399,8 +426,11 @@ body{{font-family:Arial;margin:20px;background:#f5f5f5}}
 .switch-btn:hover{{background:#e65c00}}
 .mode-badge{{padding:10px 20px;border-radius:6px;font-weight:bold;font-size:1em}}
 .regular-hours{{background:#0066cc;color:white}}.extended-hours{{background:#ff6600;color:white}}
-.alert-banner{{background:#ff4444;color:white;padding:15px;border-radius:8px;margin-bottom:30px;box-shadow:0 4px 8px rgba(0,0,0,0.2);font-size:1.05em}}
-.alert-item{{margin:8px 0}}
+.alert-banner{{background:#ff4444;color:white;padding:12px 15px;border-radius:8px;margin-bottom:30px;box-shadow:0 4px 8px rgba(0,0,0,0.2);font-size:1.05em}}
+.alert-list{{margin-top:8px}}
+.alert-item{{margin:6px 0;position:relative;cursor:help}}
+.alert-tooltip{{visibility:hidden;position:absolute;top:100%;left:0;background:#333;color:white;padding:10px;border-radius:6px;font-size:0.9em;width:400px;max-height:300px;overflow-y:auto;z-index:10;opacity:0;transition:opacity 0.3s;box-shadow:0 4px 8px rgba(0,0,0,0.3)}}
+.alert-item:hover .alert-tooltip{{visibility:visible;opacity:1}}
 table{{width:100%;border-collapse:collapse;background:white;box-shadow:0 4px 8px rgba(0,0,0,0.1);margin-top:30px}}
 th{{background:#0066cc;color:white;padding:14px;cursor:pointer;position:relative}}
 th::after{{content:"⇅";opacity:0.5;margin-left:8px}}
