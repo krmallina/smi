@@ -223,7 +223,7 @@ def fetch(ticker, ext=False):
         ticker_u = ticker.upper()
         return {
             'ticker': ticker_u,
-            'links': f"https://stockanalysis.com/stocks/{ticker_u.lower()}/ https://www.barchart.com/stocks/quotes/{ticker_u} https://www.tradingview.com/chart/?symbol={ticker_u} https://finviz.com/quote.ashx?t={ticker_u}",
+            'links': f"https://finance.yahoo.com/quote/{ticker_u} https://www.barchart.com/stocks/quotes/{ticker_u} https://www.tradingview.com/chart/?symbol={ticker_u} https://finviz.com/quote.ashx?t={ticker_u} https://www.zacks.com/stock/quote/{ticker_u}",
             'price': price,
             'change_pct': change_pct,
             'change_abs_day': change_abs_day,
@@ -312,12 +312,40 @@ def get_vix_data():
 def get_fear_greed_data():
     try:
         r = requests.get("https://edition.cnn.com/markets/fear-and-greed", headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
-        m = re.search(r'Fear & Greed Index\s*\n\s*(\d+)', r.text)
-        if m:
-            s = int(m.group(1))
-            rating = ("Extreme Fear", "Fear", "Neutral", "Greed", "Extreme Greed")[0 if s <= 24 else 1 if s <= 44 else 2 if s <= 55 else 3 if s <= 74 else 4]
-            return {'score': s, 'rating': rating}
-    except: pass
+        r.raise_for_status()
+        # Look for patterns like "greed is driving the US market" or the gauge value
+        text = r.text
+        # Find the current value (often in a data attribute or text)
+        m_value = re.search(r'Fear & Greed Index.*?(\d+(?:\.\d+)?)', text, re.DOTALL | re.IGNORECASE)
+        m_rating = re.search(r'(Extreme Fear|Fear|Neutral|Greed|Extreme Greed|greed is driving the US market|fear is driving the US market)', text, re.IGNORECASE)
+        
+        score = None
+        rating = "N/A"
+        if m_value:
+            score = float(m_value.group(1))
+        if m_rating:
+            rat = m_rating.group(1).title()
+            if "greed" in rat.lower():
+                if "extreme" in rat.lower(): rating = "Extreme Greed"
+                else: rating = "Greed"
+            elif "fear" in rat.lower():
+                if "extreme" in rat.lower(): rating = "Extreme Fear"
+                else: rating = "Fear"
+            else:
+                rating = rat
+        
+        if score is not None:
+            s = int(round(score))
+            rating = ("Extreme Fear", "Fear", "Neutral", "Greed", "Extreme Greed")[
+                0 if s <= 24 else
+                1 if s <= 44 else
+                2 if s <= 55 else
+                3 if s <= 74 else
+                4
+            ]
+            return {'score': score, 'rating': rating}
+    except Exception as e:
+        print(f"Error fetching Fear & Greed: {e}")
     return {'score': None, 'rating': "N/A"}
 
 def get_aaii_sentiment():
@@ -342,16 +370,16 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
             banner += f"<div class='alert-item'>{a['time']} — {a['message']}</div>"
         banner += "</div></div>"
 
-    vix_h = '<span class="neutral">N/A</span>'
+    vix_h = '<span class="neutral">VIX: N/A</span>'
     if vix['price'] is not None:
         vix_h = f'<span class="{"positive" if vix["change_pct"]>=0 else "negative"}">VIX: {vix["price"]:.2f} ({vix["change_pct"]:+.2f}%)</span>'
 
-    fg_h = '<span class="neutral">N/A</span>'
+    fg_h = '<span class="neutral">F&G: N/A</span>'
     if fg['score'] is not None:
         cls = "negative" if fg['score'] <= 24 else "high-risk" if fg['score'] <= 44 else "neutral" if fg['score'] <= 55 else "bullish" if fg['score'] <= 74 else "positive"
-        fg_h = f'<span class="{cls}">F&G: {fg["score"]:.0f} ({fg["rating"]})</span>'
+        fg_h = f'<span class="{cls}">F&G: {fg["score"]:.1f} ({fg["rating"]})</span>'
 
-    aaii_h = '<span class="neutral">N/A</span>'
+    aaii_h = '<span class="neutral">AAII: N/A</span>'
     if aaii['bullish'] is not None:
         cls = "positive" if aaii['spread'] > 20 else "bullish" if aaii['spread'] > 0 else "neutral" if aaii['spread'] > -20 else "high-risk" if aaii['spread'] > -40 else "negative"
         aaii_h = f'<span class="{cls}">AAII: Bull {aaii["bullish"]:.1f}% Bear {aaii["bearish"]:.1f}%</span>'
@@ -448,7 +476,6 @@ td{{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}}
             up_cls = "positive" if r['upside_potential'] > 0 else "negative"
             risk.append(f'<div class="risk-item"><strong>Upside:</strong> <span class="{up_cls}">{r["upside_potential"]:+.1f}%</span><span class="tooltip">Upside to analyst target</span></div>')
 
-        # Meme and Short Squeeze at the end
         meme_val = '<span class="high-risk">🚀 Yes</span>' if r['is_meme_stock'] else 'No'
         risk.append(f'<div class="risk-item"><strong>Meme:</strong> {meme_val}<span class="tooltip">High retail/meme interest</span></div>')
         risk.append(f'<div class="risk-item"><strong>Short Squeeze:</strong> {r["squeeze_level"]}<span class="tooltip">Short squeeze risk level</span></div>')
@@ -456,8 +483,8 @@ td{{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}}
         risk_h = f'<div class="risk-grid">{ "".join(risk)}</div>'
 
         link_urls = r['links'].split()
-        link_labels = ["SA", "BC", "TV", "FZ"]
-        links = " ".join([f'<a href="{url}" target="_blank">{lbl}</a>' for url, lbl in zip(link_urls, link_labels)])
+        link_labels = ["YF", "BC", "TV", "FZ", "Z"]
+        links = " ".join([f'<a href="{url}" target="_blank">{lbl}</a>' for url, lbl in zip(link_urls[1:], link_labels[1:])])
 
         vol_display = fmt_vol(r['volume'])
         vol_sort = r['volume_raw'] if r['volume_raw'] is not None else 0
