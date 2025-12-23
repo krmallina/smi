@@ -1,16 +1,13 @@
-name: Update Stock Dashboard
-
+name: Update Dashboard
 on:
   schedule:
-    # 4 AM - 4 PM PST on Weekdays (Monday-Friday)
+    # 4 AM - 4 PM PST on Weekdays (Monday-Friday) - every 30 minutes
     # UTC is +8 hours: 12:00 PM to 12:00 AM. 
     # '1-6' covers the Friday afternoon PST run which occurs on Saturday UTC.
-    - cron: '0 0,12-23 * * 1-6'
+    - cron: '0,30 0,12-23 * * 1-6'
   workflow_dispatch: 
-
 permissions:
   contents: write
-
 jobs:
   run-script:
     runs-on: ubuntu-latest
@@ -18,33 +15,29 @@ jobs:
     concurrency:
       group: stock-update
       cancel-in-progress: true
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0 
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; else pip install yfinance pandas requests; fi
-
       - name: Run stocks.py
         run: python stocks.py --refresh 30
-
       - name: Sync and Push Changes
         if: success()
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
+          # Only add the dashboard HTML files, not the workflow
           git add data/*.html
           
           if git diff --staged --quiet; then
@@ -53,13 +46,38 @@ jobs:
           fi
           
           git commit -m "Update dashboards $(date -u)"
-
-          # STRATEGY: Fetch, Rebase, and Force-Push on failure
+          
+          # STRATEGY: Fetch, rebase with auto-resolution, and retry on failure
           for i in {1..5}; do
             echo "Attempt $i: Syncing..."
-            # Try a standard rebase push first
-            git pull --rebase origin main && git push origin main && break || \
-            # If that fails, force the update (since it's just dashboard data)
-            git push --force origin main && break || \
-            (echo "Retrying in 5s..." && sleep 5)
+            
+            # Fetch latest changes
+            git fetch origin main
+            
+            # Try to rebase with strategy to prefer our dashboard changes
+            git rebase origin/main -X theirs || {
+              # If rebase fails, check if it's due to conflicts in our files
+              if git status | grep -q "data/.*\.html"; then
+                echo "Conflicts in dashboard files, resolving..."
+                # Take our version of the dashboard files
+                git checkout --ours data/*.html
+                git add data/*.html
+                git rebase --continue
+              else
+                echo "Unexpected conflicts, aborting..."
+                git rebase --abort
+                sleep 5
+                continue
+              fi
+            }
+            
+            # Try to push
+            if git push origin main; then
+              echo "Successfully pushed changes"
+              break
+            else
+              echo "Push failed, retrying in 5s..."
+              git rebase --abort 2>/dev/null || true
+              sleep 5
+            fi
           done
