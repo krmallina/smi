@@ -374,11 +374,10 @@ td{{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}}
 .bullish{{color:#00aa00;font-weight:bold}}.bearish{{color:#cc0000;font-weight:bold}}
 .high-risk{{color:#cc6600;font-weight:bold}}.neutral{{color:#666;font-style:italic}}
 .ticker{{font-weight:bold;font-size:1.1em}}.link-group{{display:flex;gap:8px;flex-wrap:wrap;font-size:0.8em}}
-.item{{font-size:0.85em;margin:4px 0;position:relative;cursor:help}}
-.tooltip{{visibility:hidden;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#333;color:white;padding:8px;border-radius:4px;white-space:nowrap;font-size:0.8em;z-index:10;opacity:0;transition:opacity 0.3s}}
-.item:hover .tooltip{{visibility:visible;opacity:1}}
 .risk-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}}
-.risk-item{{font-size:0.85em}}
+.risk-item{{font-size:0.85em;position:relative;cursor:help}}
+.tooltip{{visibility:hidden;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#333;color:white;padding:8px;border-radius:4px;white-space:nowrap;font-size:0.8em;z-index:10;opacity:0;transition:opacity 0.3s}}
+.risk-item:hover .tooltip{{visibility:visible;opacity:1}}
 </style></head><body>
 {banner}
 <div class="header-container">
@@ -423,6 +422,7 @@ td{{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}}
         risk.append(f'<div class="risk-item"><strong>P/E:</strong> {na(r["pe"])}<span class="tooltip">Price-to-Earnings ratio (lower = potentially undervalued)</span></div>')
         risk.append(f'<div class="risk-item"><strong>Short %:</strong> {na(r["short_percent"], "{:.1f}%")}<span class="tooltip">Percentage of float sold short</span></div>')
         risk.append(f'<div class="risk-item"><strong>Days to Cover:</strong> {na(r["days_to_cover"], "{:.1f}")}<span class="tooltip">Days needed for shorts to cover at current volume</span></div>')
+        risk.append(f'<div class="risk-item"><strong>Short Squeeze:</strong> {r["squeeze_level"]}<span class="tooltip">Short squeeze risk: Extreme/High/Moderate/None based on short % and days to cover</span></div>')
         if r['death_cross']:
             risk.append('<div class="risk-item"><strong>Trend:</strong> <span class="negative">Death Cross</span><span class="tooltip">50-day MA crossed below 200-day MA — bearish signal</span></div>')
         if r['put_call_vol_ratio'] is not None:
@@ -441,7 +441,7 @@ td{{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}}
         risk_h = f'<div class="risk-grid">{ "".join(risk)}</div>' if risk else '<span class="neutral">N/A</span>'
 
         link_urls = r['links'].split()
-        link_labels = ["SA", "BC", "TV", "FZ"]  # BA → BC
+        link_labels = ["SA", "BC", "TV", "FZ"]
         links = " ".join([f'<a href="{url}" target="_blank">{lbl}</a>' for url, lbl in zip(link_urls, link_labels)])
 
         html += f"""<tr>
@@ -476,10 +476,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const asc = th.classList.toggle('asc');
         th.classList.toggle('desc', !asc);
         rows.sort((a, b) => {
-            let av = a.children[index].dataset.sort || a.children[index].innerText.trim();
-            let bv = b.children[index].dataset.sort || b.children[index].innerText.trim();
-            const num = !isNaN(av) && !isNaN(bv);
-            if (num) [av, bv] = [parseFloat(av), parseFloat(bv)];
+            let av = a.children[index].querySelector('[data-sort]')?.dataset.sort || a.children[index].innerText.trim();
+            let bv = b.children[index].querySelector('[data-sort]')?.dataset.sort || b.children[index].innerText.trim();
+            av = isNaN(av) ? av : parseFloat(av);
+            bv = isNaN(bv) ? bv : parseFloat(bv);
             return (av > bv ? 1 : av < bv ? -1 : 0) * (asc ? 1 : -1);
         });
         rows.forEach(row => table.appendChild(row));
