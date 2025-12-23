@@ -26,7 +26,7 @@ def load_alerts():
 def check_alerts(data):
     alerts = load_alerts()
     triggered = []
-    now = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')
+    now = datetime.now(UTC).astimezone(PST).strftime('%Y-%m-%d %I:%M:%S %p PST')
     for a in alerts:
         s = next((x for x in data if x['ticker'] == a['ticker'].upper()), None)
         if not s: continue
@@ -84,19 +84,38 @@ def fetch(ticker, ext=False):
 
         reg = t.history(period="5d", prepost=False)
         change_pct = 0.0
+        change_abs_day = 0.0
         if len(reg) >= 2:
             prev = reg['Close'].iloc[-2]
-            if prev and prev > 0: change_pct = ((price - prev) / prev) * 100
+            if prev and prev > 0:
+                change_pct = ((price - prev) / prev) * 100
+                change_abs_day = price - prev
 
         change_1m = change_6m = None
+        change_abs_1m = change_abs_6m = None
         for d in [35, 190]:
             hist = t.history(start=(datetime.now() - timedelta(days=d)).strftime('%Y-%m-%d'))
             if len(hist) >= 2:
                 start = hist['Close'].iloc[0]
                 if start and start > 0:
                     pct = ((price - start) / start) * 100
-                    if d == 35: change_1m = pct
-                    else: change_6m = pct
+                    abs_change = price - start
+                    if d == 35:
+                        change_1m = pct
+                        change_abs_1m = abs_change
+                    else:
+                        change_6m = pct
+                        change_abs_6m = abs_change
+
+        # YTD change
+        ytd_start = datetime(datetime.now().year, 1, 1)
+        ytd_hist = t.history(start=ytd_start.strftime('%Y-%m-%d'))
+        ytd_pct = ytd_abs = None
+        if len(ytd_hist) >= 2:
+            ytd_start_price = ytd_hist['Close'].iloc[0]
+            if ytd_start_price and ytd_start_price > 0:
+                ytd_pct = ((price - ytd_start_price) / ytd_start_price) * 100
+                ytd_abs = price - ytd_start_price
 
         y = t.history(period="1y")
         high52 = y['High'].max() if not y.empty else price
@@ -197,9 +216,9 @@ def fetch(ticker, ext=False):
 
         analyst_rating = info.get('recommendationKey', 'none').title()
 
-        upside = None
+        upside_potential = None
         target = info.get('targetMeanPrice')
-        if target and price > 0: upside = ((target - price) / price) * 100
+        if target and price > 0: upside_potential = ((target - price) / price) * 100
 
         time.sleep(1.5)
 
@@ -209,8 +228,13 @@ def fetch(ticker, ext=False):
             'links': f"https://stockanalysis.com/stocks/{ticker_u.lower()}/ https://www.barchart.com/stocks/quotes/{ticker_u} https://www.tradingview.com/chart/?symbol={ticker_u} https://finviz.com/quote.ashx?t={ticker_u}",
             'price': price,
             'change_pct': change_pct,
+            'change_abs_day': change_abs_day,
             'change_1m_pct': change_1m,
+            'change_abs_1m': change_abs_1m,
             'change_6m_pct': change_6m,
+            'change_abs_6m': change_abs_6m,
+            'ytd_pct': ytd_pct,
+            'ytd_abs': ytd_abs,
             'volume': vol,
             '52w_high': high52,
             '52w_low': low52,
@@ -230,7 +254,7 @@ def fetch(ticker, ext=False):
             'is_meme_stock': ticker_u in MEME_STOCKS,
             'sentiment': sentiment,
             'analyst_rating': analyst_rating,
-            'upside_potential': upside,
+            'upside_potential': upside_potential,
             'put_call_vol_ratio': put_call_vol_ratio,
             'down_volume_bias': down_volume_bias,
             'options_direction': options_direction,
@@ -251,11 +275,12 @@ def fmt_vol(v):
     if v >= 1e3: return f"{v/1e3:.1f}K"
     return str(int(v))
 
-def fmt_change(p):
-    if p is None: return '<span class="neutral">N/A</span>'
+def fmt_change(p, abs_change):
+    if p is None: return '<span class="neutral" data-sort="0">N/A</span>'
     sign = "▲" if p >= 0 else "▼"
     cls = "positive" if p >= 0 else "negative"
-    return f'<span class="{cls}">{sign} {p:+.2f}%</span>'
+    abs_h = f' ({abs_change:+.2f})' if abs_change is not None else ''
+    return f'<span class="{cls}" data-sort="{p}">{sign} {p:+.2f}%{abs_h}</span>'
 
 def dashboard(csv='data/tickers.csv', ext=False):
     os.makedirs('data', exist_ok=True)
@@ -305,7 +330,7 @@ def get_aaii_sentiment():
     except: pass
     return {'bullish': None, 'bearish': None, 'spread': None}
 
-def html(df, vix, fg, aaii, file, ext=False, refresh=60, alerts=None):
+def html(df, vix, fg, aaii, file, ext=False, alerts=None):
     alerts = alerts or []
     hours = "Extended Hours" if ext else "Regular Hours"
     update = datetime.now(UTC).astimezone(PST).strftime('%I:%M:%S %p PST on %B %d, %Y')
@@ -331,7 +356,7 @@ def html(df, vix, fg, aaii, file, ext=False, refresh=60, alerts=None):
         cls = "positive" if aaii['spread'] > 20 else "bullish" if aaii['spread'] > 0 else "neutral" if aaii['spread'] > -20 else "high-risk" if aaii['spread'] > -40 else "negative"
         aaii_h = f'<span class="{cls}">AAII: Bull {aaii["bullish"]:.1f}% Bear {aaii["bearish"]:.1f}%</span>'
 
-    html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Live Dashboard</title><meta http-equiv="refresh" content="{refresh}">
+    html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Live Dashboard</title>
 <style>
 body{{font-family:Arial;margin:20px;background:#f5f5f5}}
 .header-container{{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}}
@@ -352,6 +377,8 @@ td{{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}}
 .item{{font-size:0.85em;margin:4px 0;position:relative;cursor:help}}
 .tooltip{{visibility:hidden;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#333;color:white;padding:8px;border-radius:4px;white-space:nowrap;font-size:0.8em;z-index:10;opacity:0;transition:opacity 0.3s}}
 .item:hover .tooltip{{visibility:visible;opacity:1}}
+.risk-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}}
+.risk-item{{font-size:0.85em}}
 </style></head><body>
 {banner}
 <div class="header-container">
@@ -365,9 +392,9 @@ td{{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}}
     <button class="refresh-btn" onclick="location.reload()">Refresh</button>
 </div>
 <div><strong>Last updated:</strong> {update}</div>
-<table>
+<table id="stockTable">
 <tr>
-    <th>TICKER</th><th>PRICE</th><th>DAY %</th><th>1M %</th><th>6M %</th><th>VOLUME</th><th>52W RANGE</th><th>TECHNICAL</th><th>RISK / SENTIMENT</th>
+    <th>TICKER</th><th>PRICE</th><th>DAY %</th><th>1M %</th><th>6M %</th><th>YTD %</th><th>VOLUME</th><th>52W RANGE</th><th>TECHNICAL</th><th>RISK / SENTIMENT</th>
 </tr>"""
     for _, r in df.iterrows():
         pos = ((r['price'] - r['52w_low']) / (r['52w_high'] - r['52w_low'])) * 100 if r['52w_high'] > r['52w_low'] else 50
@@ -383,45 +410,47 @@ td{{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}}
         tech_h = "<br>".join(tech) or '<span class="neutral">N/A</span>'
 
         risk = []
-        if r['is_meme_stock']: risk.append('<div class="item"><strong>Meme:</strong> <span class="high-risk">🚀 Yes</span><span class="tooltip">High retail interest / meme stock</span></div>')
+        if r['is_meme_stock']:
+            risk.append('<div class="risk-item"><strong>Meme:</strong> <span class="high-risk">🚀 Yes</span><span class="tooltip">Stock with high retail/meme interest</span></div>')
         vol_sc = 0.0
         if r['hv_30_annualized'] is not None and pd.notna(r['hv_30_annualized']): vol_sc += min(r['hv_30_annualized']/100*50, 50)
         if r['beta'] is not None and pd.notna(r['beta']): vol_sc += min(max(r['beta']-0.5,0)*33.33, 50)
         vol_sc = int(round(vol_sc))
         v_cls = "negative" if vol_sc >= 81 else "high-risk" if vol_sc >= 61 else "bearish" if vol_sc >= 31 else "neutral"
         v_emoji = "🔥🔥" if vol_sc >= 81 else "🔥" if vol_sc >= 61 else ""
-        risk.append(f'<div class="item"><strong>Vol Score:</strong> <span class="{v_cls}">{v_emoji} {vol_sc}/100</span><span class="tooltip">Volatility score based on HV and Beta (higher = riskier)</span></div>')
-        risk.append(f'<div class="item"><strong>Beta:</strong> {na(r["beta"])}<span class="tooltip">Stock volatility vs market (1.0 = market average)</span></div>')
-        risk.append(f'<div class="item"><strong>P/E:</strong> {na(r["pe"])}<span class="tooltip">Price to Earnings ratio</span></div>')
-        risk.append(f'<div class="item"><strong>Short %:</strong> {na(r["short_percent"], "{:.1f}%")}<span class="tooltip">Percentage of float sold short</span></div>')
-        risk.append(f'<div class="item"><strong>Days to Cover:</strong> {na(r["days_to_cover"], "{:.1f}")}<span class="tooltip">Days to cover short interest at avg volume</span></div>')
+        risk.append(f'<div class="risk-item"><strong>Vol Score:</strong> <span class="{v_cls}">{v_emoji} {vol_sc}/100</span><span class="tooltip">Volatility score based on historical volatility and beta (higher = riskier)</span></div>')
+        risk.append(f'<div class="risk-item"><strong>Beta:</strong> {na(r["beta"])}<span class="tooltip">Measures stock volatility relative to market (1.0 = market average)</span></div>')
+        risk.append(f'<div class="risk-item"><strong>P/E:</strong> {na(r["pe"])}<span class="tooltip">Price-to-Earnings ratio (lower = potentially undervalued)</span></div>')
+        risk.append(f'<div class="risk-item"><strong>Short %:</strong> {na(r["short_percent"], "{:.1f}%")}<span class="tooltip">Percentage of float sold short</span></div>')
+        risk.append(f'<div class="risk-item"><strong>Days to Cover:</strong> {na(r["days_to_cover"], "{:.1f}")}<span class="tooltip">Days needed for shorts to cover at current volume</span></div>')
         if r['death_cross']:
-            risk.append('<div class="item"><strong>Trend:</strong> <span class="negative">Death Cross</span><span class="tooltip">50-day MA crossed below 200-day MA (bearish signal)</span></div>')
+            risk.append('<div class="risk-item"><strong>Trend:</strong> <span class="negative">Death Cross</span><span class="tooltip">50-day MA crossed below 200-day MA — bearish signal</span></div>')
         if r['put_call_vol_ratio'] is not None:
-            risk.append(f'<div class="item"><strong>P/C Vol Ratio:</strong> {r["put_call_vol_ratio"]:.2f}<span class="tooltip">Put/Call volume ratio (higher = bearish)</span></div>')
+            risk.append(f'<div class="risk-item"><strong>P/C Vol Ratio:</strong> {r["put_call_vol_ratio"]:.2f}<span class="tooltip">Put/Call volume ratio (higher = more bearish sentiment)</span></div>')
         if r['down_volume_bias']:
-            risk.append('<div class="item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span><span class="tooltip">Higher volume on down days (bearish)</span></div>')
-        risk.append(f'<div class="item"><strong>Options Direction:</strong> <span class="{"bearish" if "Bearish" in r["options_direction"] else "bullish"}">{r["options_direction"]}</span><span class="tooltip">Options flow sentiment</span></div>')
+            risk.append('<div class="risk-item"><strong>Volume Bias:</strong> <span class="negative">Down Days Higher</span><span class="tooltip">Higher volume on down days — bearish pressure</span></div>')
+        risk.append(f'<div class="risk-item"><strong>Options Direction:</strong> <span class="{"bearish" if "Bearish" in r["options_direction"] else "bullish" if "Bullish" in r["options_direction"] else "neutral"}">{r["options_direction"]}</span><span class="tooltip">Overall options flow sentiment</span></div>')
         if r['implied_move_pct'] is not None:
-            risk.append(f'<div class="item"><strong>Implied Move ({r["exp_date_used"] or "N/A"}):</strong> ±{r["implied_move_pct"]*0.85:.1f}%<span class="tooltip">Expected price move from nearest options expiration (conservative)</span></div>')
-            risk.append(f'<div class="item"><strong>Expected Range:</strong> ${r["implied_low"]:.2f} – ${r["implied_high"]:.2f}<span class="tooltip">Conservative expected price range</span></div>')
-        risk.append(f'<div class="item"><strong>Sentiment:</strong> <span class="positive">{r["sentiment"]}</span><span class="tooltip">Analyst sentiment</span></div>')
-        risk.append(f'<div class="item"><strong>Rating:</strong> <span class="positive">{r["analyst_rating"]}</span><span class="tooltip">Analyst rating</span></div>')
+            risk.append(f'<div class="risk-item"><strong>Implied Move ({r["exp_date_used"] or "N/A"}):</strong> ±{r["implied_move_pct"]:.1f}%<span class="tooltip">Expected price move from nearest options expiration</span></div>')
+            risk.append(f'<div class="risk-item"><strong>Expected Range:</strong> ${r["implied_low"]:.2f} – ${r["implied_high"]:.2f}<span class="tooltip">Likely price range based on options pricing</span></div>')
+        risk.append(f'<div class="risk-item"><strong>Sentiment:</strong> <span class="{"positive" if "Buy" in r["sentiment"] else "negative" if "Sell" in r["sentiment"] else "neutral"}">{r["sentiment"]}</span><span class="tooltip">Analyst overall sentiment</span></div>')
+        risk.append(f'<div class="risk-item"><strong>Rating:</strong> <span class="{"positive" if "buy" in r["analyst_rating"].lower() else "negative" if "sell" in r["analyst_rating"].lower() else "neutral"}">{r["analyst_rating"]}</span><span class="tooltip">Analyst recommendation rating</span></div>')
         if r['upside_potential'] is not None:
             up_cls = "positive" if r['upside_potential'] > 0 else "negative"
-            risk.append(f'<div class="item"><strong>Upside:</strong> <span class="{up_cls}">{r["upside_potential"]:+.1f}%</span><span class="tooltip">Potential upside to analyst target price</span></div>')
-        risk_h = "<br>".join(risk) or '<span class="neutral">N/A</span>'
+            risk.append(f'<div class="risk-item"><strong>Upside:</strong> <span class="{up_cls}">{r["upside_potential"]:+.1f}%</span><span class="tooltip">Potential upside to average analyst target price</span></div>')
+        risk_h = f'<div class="risk-grid">{ "".join(risk)}</div>' if risk else '<span class="neutral">N/A</span>'
 
         link_urls = r['links'].split()
-        link_labels = ["SA", "BA", "TV", "FZ"]
+        link_labels = ["SA", "BC", "TV", "FZ"]  # BA → BC
         links = " ".join([f'<a href="{url}" target="_blank">{lbl}</a>' for url, lbl in zip(link_urls, link_labels)])
 
         html += f"""<tr>
     <td><div class="ticker"><a href="{link_urls[0]}" target="_blank">{r['ticker']}</a></div><div class="link-group">{links}</div></td>
     <td>{r['price']:.2f}</td>
-    <td>{fmt_change(r['change_pct'])}</td>
-    <td>{fmt_change(r['change_1m_pct'])}</td>
-    <td>{fmt_change(r['change_6m_pct'])}</td>
+    <td>{fmt_change(r['change_pct'], r['change_abs_day'])}</td>
+    <td>{fmt_change(r['change_1m_pct'], r['change_abs_1m'])}</td>
+    <td>{fmt_change(r['change_6m_pct'], r['change_abs_6m'])}</td>
+    <td>{fmt_change(r['ytd_pct'], r['ytd_abs'])}</td>
     <td>{fmt_vol(r['volume'])}</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
@@ -447,8 +476,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const asc = th.classList.toggle('asc');
         th.classList.toggle('desc', !asc);
         rows.sort((a, b) => {
-            let av = a.children[index].innerText.trim();
-            let bv = b.children[index].innerText.trim();
+            let av = a.children[index].dataset.sort || a.children[index].innerText.trim();
+            let bv = b.children[index].dataset.sort || b.children[index].innerText.trim();
             const num = !isNaN(av) && !isNaN(bv);
             if (num) [av, bv] = [parseFloat(av), parseFloat(bv)];
             return (av > bv ? 1 : av < bv ? -1 : 0) * (asc ? 1 : -1);
@@ -465,14 +494,13 @@ if __name__ == "__main__":
     os.makedirs('data', exist_ok=True)
     parser = argparse.ArgumentParser()
     parser.add_argument('csv_file', nargs='?', default='data/tickers.csv')
-    parser.add_argument('--refresh', type=int, default=60)
     args = parser.parse_args()
 
     for ext, file, name in [(False, 'data/reg_dashboard.html', 'Regular'), (True, 'data/extnd_dashboard.html', 'Extended')]:
         try:
             df = dashboard(args.csv_file, ext)
             alerts = check_alerts(df.to_dict('records'))
-            html(df, get_vix_data(), get_fear_greed_data(), get_aaii_sentiment(), file, ext, args.refresh, alerts)
+            html(df, get_vix_data(), get_fear_greed_data(), get_aaii_sentiment(), file, ext, alerts=alerts)
             print(f"✓ {name} → {file}")
         except Exception as e:
             print(f"✗ {name} failed: {e}")
