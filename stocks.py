@@ -254,7 +254,8 @@ def fetch(ticker, ext=False):
         if rec is not None:
             sentiment = "Strong Buy" if rec <= 1.5 else "Buy" if rec <= 2.5 else "Hold" if rec <= 3.5 else "Sell" if rec <= 4.5 else "Strong Sell"
 
-        analyst_rating = info.get('recommendationKey', 'none').title()
+        # Fixed: replace underscore with space in analyst_rating
+        analyst_rating = info.get('recommendationKey', 'none').title().replace('_', ' ')
 
         upside_potential = None
         target = info.get('targetMeanPrice')
@@ -306,7 +307,7 @@ def fetch(ticker, ext=False):
         }
     except Exception as e:
         print(f"Error {ticker}: {e}")
-        time.sleep(20)  # Increased delay on error for better recovery
+        time.sleep(20)
         return None
 
 def fmt_vol(v):
