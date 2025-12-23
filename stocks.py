@@ -236,6 +236,7 @@ def fetch(ticker, ext=False):
             'ytd_pct': ytd_pct,
             'ytd_abs': ytd_abs,
             'volume': vol,
+            'volume_raw': vol,  # for sorting
             '52w_high': high52,
             '52w_low': low52,
             'beta': beta,
@@ -374,10 +375,10 @@ td{{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}}
 .bullish{{color:#00aa00;font-weight:bold}}.bearish{{color:#cc0000;font-weight:bold}}
 .high-risk{{color:#cc6600;font-weight:bold}}.neutral{{color:#666;font-style:italic}}
 .ticker{{font-weight:bold;font-size:1.1em}}.link-group{{display:flex;gap:8px;flex-wrap:wrap;font-size:0.8em}}
-.risk-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}}
-.risk-item{{font-size:0.85em;position:relative;cursor:help}}
+.item, .risk-item{{font-size:0.85em;margin:4px 0;position:relative;cursor:help}}
 .tooltip{{visibility:hidden;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#333;color:white;padding:8px;border-radius:4px;white-space:nowrap;font-size:0.8em;z-index:10;opacity:0;transition:opacity 0.3s}}
-.risk-item:hover .tooltip{{visibility:visible;opacity:1}}
+.item:hover .tooltip, .risk-item:hover .tooltip{{visibility:visible;opacity:1}}
+.risk-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}}
 </style></head><body>
 {banner}
 <div class="header-container">
@@ -444,6 +445,9 @@ td{{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}}
         link_labels = ["SA", "BC", "TV", "FZ"]
         links = " ".join([f'<a href="{url}" target="_blank">{lbl}</a>' for url, lbl in zip(link_urls, link_labels)])
 
+        vol_display = fmt_vol(r['volume'])
+        vol_sort = r['volume_raw'] if r['volume_raw'] is not None else 0
+
         html += f"""<tr>
     <td><div class="ticker"><a href="{link_urls[0]}" target="_blank">{r['ticker']}</a></div><div class="link-group">{links}</div></td>
     <td>{r['price']:.2f}</td>
@@ -451,7 +455,7 @@ td{{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}}
     <td>{fmt_change(r['change_1m_pct'], r['change_abs_1m'])}</td>
     <td>{fmt_change(r['change_6m_pct'], r['change_abs_6m'])}</td>
     <td>{fmt_change(r['ytd_pct'], r['ytd_abs'])}</td>
-    <td>{fmt_vol(r['volume'])}</td>
+    <td data-sort="{vol_sort}">{vol_display}</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:{pos:.1f}%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -476,8 +480,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const asc = th.classList.toggle('asc');
         th.classList.toggle('desc', !asc);
         rows.sort((a, b) => {
-            let av = a.children[index].querySelector('[data-sort]')?.dataset.sort || a.children[index].innerText.trim();
-            let bv = b.children[index].querySelector('[data-sort]')?.dataset.sort || b.children[index].innerText.trim();
+            let av = a.cells[index].dataset.sort !== undefined ? a.cells[index].dataset.sort : a.cells[index].innerText.trim();
+            let bv = b.cells[index].dataset.sort !== undefined ? b.cells[index].dataset.sort : b.cells[index].innerText.trim();
             av = isNaN(av) ? av : parseFloat(av);
             bv = isNaN(bv) ? bv : parseFloat(bv);
             return (av > bv ? 1 : av < bv ? -1 : 0) * (asc ? 1 : -1);
