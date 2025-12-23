@@ -16,12 +16,12 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
 .bullish{color:#00aa00;font-weight:bold}.bearish{color:#cc0000;font-weight:bold}
 .high-risk{color:#cc6600;font-weight:bold}.neutral{color:#666;font-style:italic}
 .ticker{font-weight:bold;font-size:1.1em}.link-group{display:flex;gap:8px;flex-wrap:wrap;font-size:0.8em}
-.risk-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-.risk-item{font-size:0.85em;position:relative;cursor:help}
+.item, .risk-item{font-size:0.85em;margin:4px 0;position:relative;cursor:help}
 .tooltip{visibility:hidden;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#333;color:white;padding:8px;border-radius:4px;white-space:nowrap;font-size:0.8em;z-index:10;opacity:0;transition:opacity 0.3s}
-.risk-item:hover .tooltip{visibility:visible;opacity:1}
+.item:hover .tooltip, .risk-item:hover .tooltip{visibility:visible;opacity:1}
+.risk-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 </style></head><body>
-<div class="alert-banner"><strong>🚨 ALERTS 🚨</strong><div class="alert-list"><div class='alert-item'>2025-12-22 07:24:00 PM PST — AAPL RSI OVERSOLD → 17.7</div><div class='alert-item'>2025-12-22 07:24:00 PM PST — 🚨 TPL SURGED > +15% → +203.19%</div><div class='alert-item'>2025-12-22 07:24:00 PM PST — 🚨 RKLX SURGED > +15% → +19.88%</div></div></div>
+<div class="alert-banner"><strong>🚨 ALERTS 🚨</strong><div class="alert-list"><div class='alert-item'>2025-12-22 07:33:44 PM PST — AAPL RSI OVERSOLD → 17.7</div><div class='alert-item'>2025-12-22 07:33:44 PM PST — 🚨 TPL SURGED > +15% → +203.19%</div><div class='alert-item'>2025-12-22 07:33:44 PM PST — 🚨 RKLX SURGED > +15% → +19.88%</div></div></div>
 <div class="header-container">
     <div><h1>Live Dashboard</h1>
         <span class="mode-badge regular-hours">Regular Hours</span>
@@ -32,7 +32,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     </div>
     <button class="refresh-btn" onclick="location.reload()">Refresh</button>
 </div>
-<div><strong>Last updated:</strong> 07:24:01 PM PST on December 22, 2025</div>
+<div><strong>Last updated:</strong> 07:33:45 PM PST on December 22, 2025</div>
 <table id="stockTable">
 <tr>
     <th>TICKER</th><th>PRICE</th><th>DAY %</th><th>1M %</th><th>6M %</th><th>YTD %</th><th>VOLUME</th><th>52W RANGE</th><th>TECHNICAL</th><th>RISK / SENTIMENT</th>
@@ -42,8 +42,8 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="203.19404828789072">▲ +203.19% (+608.81)</span></td>
     <td><span class="positive" data-sort="186.22408845346342">▲ +186.22% (+591.05)</span></td>
     <td><span class="positive" data-sort="152.02875661473766">▲ +152.03% (+547.98)</span></td>
-    <td><span class="positive" data-sort="135.23202301410748">▲ +135.23% (+522.25)</span></td>
-    <td>115.2K</td>
+    <td><span class="positive" data-sort="135.23204160291462">▲ +135.23% (+522.25)</span></td>
+    <td data-sort="115233">115.2K</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:302.8%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -63,7 +63,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="182.1035463708593">▲ +182.10% (+36.94)</span></td>
     <td><span class="positive" data-sort="420.1818292791193">▲ +420.18% (+46.22)</span></td>
     <td><span class="positive" data-sort="845.2644197499142">▲ +845.26% (+51.17)</span></td>
-    <td>4.1M</td>
+    <td data-sort="4067985">4.1M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:88.4%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -81,9 +81,9 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td>95.39</td>
     <td><span class="positive" data-sort="7.846243844945857">▲ +7.85% (+6.94)</span></td>
     <td><span class="positive" data-sort="22.450227189369524">▲ +22.45% (+17.49)</span></td>
-    <td><span class="positive" data-sort="331.31384198502315">▲ +331.31% (+73.27)</span></td>
-    <td><span class="positive" data-sort="513.206696055206">▲ +513.21% (+79.83)</span></td>
-    <td>832.2K</td>
+    <td><span class="positive" data-sort="331.31380478750276">▲ +331.31% (+73.27)</span></td>
+    <td><span class="positive" data-sort="513.2066584618592">▲ +513.21% (+79.83)</span></td>
+    <td data-sort="832210">832.2K</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:99.5%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -103,7 +103,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="negative" data-sort="-22.858370945241933">▼ -22.86% (-5.31)</span></td>
     <td><span class="negative" data-sort="-31.966590840990122">▼ -31.97% (-8.42)</span></td>
     <td><span class="negative" data-sort="-12.840464290972351">▼ -12.84% (-2.64)</span></td>
-    <td>10.0M</td>
+    <td data-sort="9990922">10.0M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:17.2%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -123,7 +123,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="13.674030420104089">▲ +13.67% (+0.49)</span></td>
     <td><span class="negative" data-sort="-76.14907720831734">▼ -76.15% (-13.14)</span></td>
     <td><span class="negative" data-sort="-76.14907720831734">▼ -76.15% (-13.14)</span></td>
-    <td>48.5M</td>
+    <td data-sort="48538015">48.5M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:9.8%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -143,7 +143,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="8.339146184002923">▲ +8.34% (+7.17)</span></td>
     <td><span class="positive" data-sort="84.6016710581801">▲ +84.60% (+42.69)</span></td>
     <td><span class="positive" data-sort="205.30973722412446">▲ +205.31% (+62.64)</span></td>
-    <td>10.3M</td>
+    <td data-sort="10307706">10.3M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:60.9%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -163,7 +163,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="14.310814505278142">▲ +14.31% (+34.63)</span></td>
     <td><span class="positive" data-sort="131.14878739349348">▲ +131.15% (+156.92)</span></td>
     <td><span class="positive" data-sort="217.61064037226726">▲ +217.61% (+189.50)</span></td>
-    <td>20.6M</td>
+    <td data-sort="20611539">20.6M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:98.4%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -183,7 +183,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="17.453855262061108">▲ +17.45% (+6.43)</span></td>
     <td><span class="positive" data-sort="98.26204338371932">▲ +98.26% (+21.45)</span></td>
     <td><span class="positive" data-sort="57.40585113306691">▲ +57.41% (+15.78)</span></td>
-    <td>60.1M</td>
+    <td data-sort="60069442">60.1M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:82.8%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -202,8 +202,8 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="3.331257468771262">▲ +3.33% (+1.61)</span></td>
     <td><span class="positive" data-sort="28.018458793786998">▲ +28.02% (+10.93)</span></td>
     <td><span class="positive" data-sort="59.28061189975964">▲ +59.28% (+18.59)</span></td>
-    <td><span class="positive" data-sort="20.2734337569502">▲ +20.27% (+8.42)</span></td>
-    <td>6.3M</td>
+    <td><span class="positive" data-sort="20.273422707238876">▲ +20.27% (+8.42)</span></td>
+    <td data-sort="6318061">6.3M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:92.8%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -222,8 +222,8 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="3.331251878833277">▲ +3.33% (+6.40)</span></td>
     <td><span class="negative" data-sort="-9.776673818573373">▼ -9.78% (-21.49)</span></td>
     <td><span class="negative" data-sort="-5.669605410190546">▼ -5.67% (-11.92)</span></td>
-    <td><span class="positive" data-sort="20.663735291494177">▲ +20.66% (+33.97)</span></td>
-    <td>25.1M</td>
+    <td><span class="positive" data-sort="20.663746491250702">▲ +20.66% (+33.97)</span></td>
+    <td data-sort="25076470">25.1M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:35.4%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -243,7 +243,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="38.927786333112">▲ +38.93% (+6.39)</span></td>
     <td><span class="positive" data-sort="83.60458132274589">▲ +83.60% (+10.39)</span></td>
     <td><span class="negative" data-sort="-1.039219527627638">▼ -1.04% (-0.24)</span></td>
-    <td>130.9M</td>
+    <td data-sort="130949360">130.9M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:57.7%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -263,7 +263,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="34.16105616196776">▲ +34.16% (+18.13)</span></td>
     <td><span class="positive" data-sort="93.76399856093393">▲ +93.76% (+34.46)</span></td>
     <td><span class="positive" data-sort="74.07188512226163">▲ +74.07% (+30.30)</span></td>
-    <td>97.5K</td>
+    <td data-sort="97463">97.5K</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:96.4%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -281,9 +281,9 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td>115.44</td>
     <td><span class="positive" data-sort="3.0023178165555406">▲ +3.00% (+3.36)</span></td>
     <td><span class="negative" data-sort="-5.3567459087871026">▼ -5.36% (-6.53)</span></td>
-    <td><span class="positive" data-sort="43.822815042591934">▲ +43.82% (+35.18)</span></td>
-    <td><span class="positive" data-sort="22.8097526721676">▲ +22.81% (+21.44)</span></td>
-    <td>306.3K</td>
+    <td><span class="positive" data-sort="43.822801372530215">▲ +43.82% (+35.18)</span></td>
+    <td><span class="positive" data-sort="22.809762639540253">▲ +22.81% (+21.44)</span></td>
+    <td data-sort="306304">306.3K</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:65.6%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -301,9 +301,9 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td>54.33</td>
     <td><span class="positive" data-sort="2.5481357125005646">▲ +2.55% (+1.35)</span></td>
     <td><span class="positive" data-sort="22.282245009855707">▲ +22.28% (+9.90)</span></td>
-    <td><span class="positive" data-sort="28.04105143323195">▲ +28.04% (+11.90)</span></td>
+    <td><span class="positive" data-sort="28.04106294438587">▲ +28.04% (+11.90)</span></td>
     <td><span class="positive" data-sort="4.46236547309682">▲ +4.46% (+2.32)</span></td>
-    <td>80.3K</td>
+    <td data-sort="80328">80.3K</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:81.2%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -323,7 +323,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="8.489994777576479">▲ +8.49% (+21.09)</span></td>
     <td><span class="positive" data-sort="71.44856276750689">▲ +71.45% (+112.31)</span></td>
     <td><span class="positive" data-sort="67.19399213233788">▲ +67.19% (+108.31)</span></td>
-    <td>101.7K</td>
+    <td data-sort="101674">101.7K</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:76.3%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -343,7 +343,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="9.457094119620713">▲ +9.46% (+4.86)</span></td>
     <td><span class="positive" data-sort="43.4217191464727">▲ +43.42% (+17.03)</span></td>
     <td><span class="positive" data-sort="21.674238712914693">▲ +21.67% (+10.02)</span></td>
-    <td>290.1K</td>
+    <td data-sort="290069">290.1K</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:90.1%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -363,7 +363,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="12.597899420012086">▲ +12.60% (+9.49)</span></td>
     <td><span class="negative" data-sort="-46.48580460894371">▼ -46.49% (-73.68)</span></td>
     <td><span class="positive" data-sort="112.04999923706053">▲ +112.05% (+44.82)</span></td>
-    <td>26.1M</td>
+    <td data-sort="26115822">26.1M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:33.4%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -383,7 +383,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="8.282064401586767">▲ +8.28% (+9.02)</span></td>
     <td><span class="positive" data-sort="39.708214106594156">▲ +39.71% (+33.52)</span></td>
     <td><span class="positive" data-sort="35.094642944853476">▲ +35.09% (+30.64)</span></td>
-    <td>2.1M</td>
+    <td data-sort="2107319">2.1M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:94.4%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -402,8 +402,8 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="1.8289179915695848">▲ +1.83% (+0.96)</span></td>
     <td><span class="negative" data-sort="-13.480135642250943">▼ -13.48% (-8.33)</span></td>
     <td><span class="negative" data-sort="-24.055701530973124">▼ -24.06% (-16.93)</span></td>
-    <td><span class="negative" data-sort="-16.98169539487561">▼ -16.98% (-10.93)</span></td>
-    <td>263.9K</td>
+    <td><span class="negative" data-sort="-16.98170523249524">▼ -16.98% (-10.93)</span></td>
+    <td data-sort="263864">263.9K</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:13.1%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -423,7 +423,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="15.99822093446121">▲ +16.00% (+13.18)</span></td>
     <td><span class="positive" data-sort="180.4697966896109">▲ +180.47% (+61.51)</span></td>
     <td><span class="positive" data-sort="119.30624631766955">▲ +119.31% (+52.00)</span></td>
-    <td>2.4M</td>
+    <td data-sort="2428780">2.4M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:84.9%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -442,8 +442,8 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="1.6465042139622514">▲ +1.65% (+20.51)</span></td>
     <td><span class="positive" data-sort="11.685640667278975">▲ +11.69% (+132.48)</span></td>
     <td><span class="positive" data-sort="42.43536385256081">▲ +42.44% (+377.23)</span></td>
-    <td><span class="positive" data-sort="100.59100834211148">▲ +100.59% (+634.96)</span></td>
-    <td>310.4K</td>
+    <td><span class="positive" data-sort="100.59104713370277">▲ +100.59% (+634.96)</span></td>
+    <td data-sort="310369">310.4K</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:97.8%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -461,9 +461,9 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td>120.82</td>
     <td><span class="positive" data-sort="1.5806265468542573">▲ +1.58% (+1.88)</span></td>
     <td><span class="positive" data-sort="5.144066406251816">▲ +5.14% (+5.91)</span></td>
-    <td><span class="positive" data-sort="55.00511231130305">▲ +55.01% (+42.87)</span></td>
+    <td><span class="positive" data-sort="55.005097139288694">▲ +55.01% (+42.87)</span></td>
     <td><span class="positive" data-sort="43.416359213440174">▲ +43.42% (+36.58)</span></td>
-    <td>713.7K</td>
+    <td data-sort="713706">713.7K</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:77.9%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -483,7 +483,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="19.527040243543578">▲ +19.53% (+79.85)</span></td>
     <td><span class="positive" data-sort="48.50362524307061">▲ +48.50% (+159.64)</span></td>
     <td><span class="positive" data-sort="28.867852401066703">▲ +28.87% (+109.49)</span></td>
-    <td>111.8M</td>
+    <td data-sort="111829194">111.8M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:96.5%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -502,8 +502,8 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="1.4475910479412946">▲ +1.45% (+2.62)</span></td>
     <td><span class="negative" data-sort="-1.596881080395478">▼ -1.60% (-2.98)</span></td>
     <td><span class="positive" data-sort="26.913112818112968">▲ +26.91% (+38.94)</span></td>
-    <td><span class="positive" data-sort="32.78883180558398">▲ +32.79% (+45.34)</span></td>
-    <td>124.4M</td>
+    <td><span class="positive" data-sort="32.788817151901064">▲ +32.79% (+45.34)</span></td>
+    <td data-sort="124419880">124.4M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:77.2%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -521,9 +521,9 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td>112.62</td>
     <td><span class="positive" data-sort="1.3316567977878189">▲ +1.33% (+1.48)</span></td>
     <td><span class="positive" data-sort="7.1041380050428735">▲ +7.10% (+7.47)</span></td>
-    <td><span class="positive" data-sort="26.90028315300243">▲ +26.90% (+23.87)</span></td>
+    <td><span class="positive" data-sort="26.90029406237465">▲ +26.90% (+23.87)</span></td>
     <td><span class="positive" data-sort="37.64385565033104">▲ +37.64% (+30.80)</span></td>
-    <td>683.1K</td>
+    <td data-sort="683101">683.1K</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:93.9%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -543,7 +543,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="5.745463118412233">▲ +5.75% (+3.18)</span></td>
     <td><span class="positive" data-sort="26.715310374103733">▲ +26.72% (+12.36)</span></td>
     <td><span class="positive" data-sort="28.14143448304617">▲ +28.14% (+12.87)</span></td>
-    <td>5.6M</td>
+    <td data-sort="5600845">5.6M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:96.2%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -563,7 +563,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="negative" data-sort="-6.046601998771203">▼ -6.05% (-15.96)</span></td>
     <td><span class="negative" data-sort="-5.191727434645109">▼ -5.19% (-13.58)</span></td>
     <td><span class="negative" data-sort="-3.5846142328123123">▼ -3.58% (-9.22)</span></td>
-    <td>6.3M</td>
+    <td data-sort="6295195">6.3M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:34.9%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -581,9 +581,9 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td>43.21</td>
     <td><span class="positive" data-sort="1.1706860471036078">▲ +1.17% (+0.50)</span></td>
     <td><span class="negative" data-sort="-4.93568545974242">▼ -4.94% (-2.24)</span></td>
-    <td><span class="positive" data-sort="58.99895263941115">▲ +59.00% (+16.03)</span></td>
-    <td><span class="positive" data-sort="50.31016816544567">▲ +50.31% (+14.46)</span></td>
-    <td>1.3M</td>
+    <td><span class="positive" data-sort="58.99894148017876">▲ +59.00% (+16.03)</span></td>
+    <td><span class="positive" data-sort="50.3101482195986">▲ +50.31% (+14.46)</span></td>
+    <td data-sort="1291708">1.3M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:60.8%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -601,9 +601,9 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td>57.79</td>
     <td><span class="positive" data-sort="0.9785101830688098">▲ +0.98% (+0.56)</span></td>
     <td><span class="positive" data-sort="7.576320927661639">▲ +7.58% (+4.07)</span></td>
-    <td><span class="positive" data-sort="26.71149532810338">▲ +26.71% (+12.18)</span></td>
+    <td><span class="positive" data-sort="26.71148472972617">▲ +26.71% (+12.18)</span></td>
     <td><span class="positive" data-sort="23.247572663486487">▲ +23.25% (+10.90)</span></td>
-    <td>1.0M</td>
+    <td data-sort="1008254">1.0M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:94.7%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -623,7 +623,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="8.754691469266925">▲ +8.75% (+24.94)</span></td>
     <td><span class="positive" data-sort="75.51045956122483">▲ +75.51% (+133.27)</span></td>
     <td><span class="positive" data-sort="64.16787151082079">▲ +64.17% (+121.08)</span></td>
-    <td>14.8M</td>
+    <td data-sort="14770570">14.8M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:90.0%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -641,9 +641,9 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td>34.58</td>
     <td><span class="positive" data-sort="0.8457302647548903">▲ +0.85% (+0.29)</span></td>
     <td><span class="negative" data-sort="-5.31065049663404">▼ -5.31% (-1.94)</span></td>
-    <td><span class="positive" data-sort="0.5873385168612237">▲ +0.59% (+0.20)</span></td>
-    <td><span class="negative" data-sort="-13.725534983741937">▼ -13.73% (-5.50)</span></td>
-    <td>1.3M</td>
+    <td><span class="positive" data-sort="0.5873273553846479">▲ +0.59% (+0.20)</span></td>
+    <td><span class="negative" data-sort="-13.725526772673776">▼ -13.73% (-5.50)</span></td>
+    <td data-sort="1318406">1.3M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:51.7%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -661,9 +661,9 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td>32.91</td>
     <td><span class="positive" data-sort="0.7068728751790091">▲ +0.71% (+0.23)</span></td>
     <td><span class="positive" data-sort="46.30207421382315">▲ +46.30% (+10.42)</span></td>
-    <td><span class="positive" data-sort="9.517779014789769">▲ +9.52% (+2.86)</span></td>
-    <td><span class="positive" data-sort="9.517779014789769">▲ +9.52% (+2.86)</span></td>
-    <td>8.5K</td>
+    <td><span class="positive" data-sort="9.517785966177057">▲ +9.52% (+2.86)</span></td>
+    <td><span class="positive" data-sort="9.517785966177057">▲ +9.52% (+2.86)</span></td>
+    <td data-sort="8513">8.5K</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:65.9%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -683,7 +683,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="negative" data-sort="-8.803813781933115">▼ -8.80% (-2.50)</span></td>
     <td><span class="positive" data-sort="19.15628712305793">▲ +19.16% (+4.15)</span></td>
     <td><span class="positive" data-sort="6.6520840379404405">▲ +6.65% (+1.61)</span></td>
-    <td>2.1M</td>
+    <td data-sort="2074976">2.1M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:68.3%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -701,9 +701,9 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td>209.18</td>
     <td><span class="positive" data-sort="0.6192694673971372">▲ +0.62% (+1.29)</span></td>
     <td><span class="negative" data-sort="-4.633607421029059">▼ -4.63% (-10.16)</span></td>
-    <td><span class="positive" data-sort="18.15711565505826">▲ +18.16% (+32.14)</span></td>
+    <td><span class="positive" data-sort="18.157125839215844">▲ +18.16% (+32.14)</span></td>
     <td><span class="positive" data-sort="27.56020206185874">▲ +27.56% (+45.19)</span></td>
-    <td>9.5K</td>
+    <td data-sort="9484">9.5K</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:75.6%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -721,9 +721,9 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td>88.57</td>
     <td><span class="positive" data-sort="0.619184070808273">▲ +0.62% (+0.55)</span></td>
     <td><span class="positive" data-sort="26.14133241736897">▲ +26.14% (+18.35)</span></td>
-    <td><span class="positive" data-sort="59.09459483813857">▲ +59.09% (+32.90)</span></td>
+    <td><span class="positive" data-sort="59.09458393607376">▲ +59.09% (+32.90)</span></td>
     <td><span class="positive" data-sort="292.51195788821633">▲ +292.51% (+66.00)</span></td>
-    <td>1.6M</td>
+    <td data-sort="1570284">1.6M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:80.7%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -743,7 +743,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="18.89006561116307">▲ +18.89% (+5.31)</span></td>
     <td><span class="negative" data-sort="-19.93292567070902">▼ -19.93% (-8.32)</span></td>
     <td><span class="negative" data-sort="-3.186565104957769">▼ -3.19% (-1.10)</span></td>
-    <td>1.2M</td>
+    <td data-sort="1190026">1.2M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:42.0%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -763,7 +763,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="negative" data-sort="-1.9023458447499597">▼ -1.90% (-4.43)</span></td>
     <td><span class="positive" data-sort="5.710317440703613">▲ +5.71% (+12.34)</span></td>
     <td><span class="positive" data-sort="3.7326315389786466">▲ +3.73% (+8.22)</span></td>
-    <td>17.9M</td>
+    <td data-sort="17893196">17.9M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:69.0%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -783,7 +783,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="9.938262623114035">▲ +9.94% (+59.78)</span></td>
     <td><span class="negative" data-sort="-5.673384200995142">▼ -5.67% (-39.77)</span></td>
     <td><span class="positive" data-sort="10.704442568503026">▲ +10.70% (+63.94)</span></td>
-    <td>8.7M</td>
+    <td data-sort="8659386">8.7M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:57.7%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -803,7 +803,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="negative" data-sort="-0.3677161157129682">▼ -0.37% (-1.26)</span></td>
     <td><span class="positive" data-sort="35.96978554010122">▲ +35.97% (+90.31)</span></td>
     <td><span class="positive" data-sort="48.20979721404478">▲ +48.21% (+111.05)</span></td>
-    <td>32.3M</td>
+    <td data-sort="32285205">32.3M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:73.6%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -823,7 +823,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="21.260631427981956">▲ +21.26% (+29.75)</span></td>
     <td><span class="positive" data-sort="56.574687067757715">▲ +56.57% (+61.31)</span></td>
     <td><span class="positive" data-sort="57.797818843136014">▲ +57.80% (+62.15)</span></td>
-    <td>3.5M</td>
+    <td data-sort="3504533">3.5M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:88.9%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -843,7 +843,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="3.1116902887210633">▲ +3.11% (+4.53)</span></td>
     <td><span class="positive" data-sort="89.6046533814784">▲ +89.60% (+70.94)</span></td>
     <td><span class="positive" data-sort="111.63118562597552">▲ +111.63% (+79.18)</span></td>
-    <td>4.3M</td>
+    <td data-sort="4334780">4.3M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:65.5%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -863,7 +863,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="negative" data-sort="-4.282355263162651">▼ -4.28% (-21.69)</span></td>
     <td><span class="positive" data-sort="1.5477702406009175">▲ +1.55% (+7.39)</span></td>
     <td><span class="positive" data-sort="16.686570321227357">▲ +16.69% (+69.34)</span></td>
-    <td>11.4M</td>
+    <td data-sort="11443450">11.4M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:67.4%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -882,8 +882,8 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="negative" data-sort="-0.41430645076661055">▼ -0.41% (-0.18)</span></td>
     <td><span class="negative" data-sort="-9.887090485738828">▼ -9.89% (-4.62)</span></td>
     <td><span class="negative" data-sort="-3.9348588175029358">▼ -3.93% (-1.72)</span></td>
-    <td><span class="positive" data-sort="15.897764411038107">▲ +15.90% (+5.77)</span></td>
-    <td>658.3K</td>
+    <td><span class="positive" data-sort="15.897776592218147">▲ +15.90% (+5.77)</span></td>
+    <td data-sort="658330">658.3K</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:53.9%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -903,7 +903,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="negative" data-sort="-19.242833966070137">▼ -19.24% (-26.99)</span></td>
     <td><span class="negative" data-sort="-20.25485638056221">▼ -20.25% (-28.77)</span></td>
     <td><span class="negative" data-sort="-11.645866349905942">▼ -11.65% (-14.93)</span></td>
-    <td>5.4M</td>
+    <td data-sort="5433860">5.4M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:32.3%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -923,7 +923,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="negative" data-sort="-6.897950925887221">▼ -6.90% (-62.95)</span></td>
     <td><span class="negative" data-sort="-13.4441883443745">▼ -13.44% (-131.97)</span></td>
     <td><span class="negative" data-sort="-6.126159868263067">▼ -6.13% (-55.45)</span></td>
-    <td>1.4M</td>
+    <td data-sort="1437337">1.4M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:2.4%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -943,7 +943,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="positive" data-sort="1.2562685921213619">▲ +1.26% (+3.36)</span></td>
     <td><span class="positive" data-sort="36.775620662632505">▲ +36.78% (+72.82)</span></td>
     <td><span class="positive" data-sort="11.56237204571349">▲ +11.56% (+28.07)</span></td>
-    <td>19.5M</td>
+    <td data-sort="19453988">19.5M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:85.2%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -962,8 +962,8 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="negative" data-sort="-1.1529023097916307">▼ -1.15% (-0.61)</span></td>
     <td><span class="positive" data-sort="9.505864897571461">▲ +9.51% (+4.54)</span></td>
     <td><span class="positive" data-sort="7.789200930358936">▲ +7.79% (+3.78)</span></td>
-    <td><span class="negative" data-sort="-34.712374805865224">▼ -34.71% (-27.81)</span></td>
-    <td>675.6K</td>
+    <td><span class="negative" data-sort="-34.71236858787298">▼ -34.71% (-27.81)</span></td>
+    <td data-sort="675644">675.6K</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:19.6%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -983,7 +983,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="negative" data-sort="-36.587775043096386">▼ -36.59% (-3.71)</span></td>
     <td><span class="negative" data-sort="-47.51020548295002">▼ -47.51% (-5.82)</span></td>
     <td><span class="negative" data-sort="-58.85853255093271">▼ -58.86% (-9.20)</span></td>
-    <td>777.3K</td>
+    <td data-sort="777339">777.3K</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:10.0%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -1003,7 +1003,7 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td><span class="negative" data-sort="-15.477377416923199">▼ -15.48% (-17.07)</span></td>
     <td><span class="negative" data-sort="-23.92377815749894">▼ -23.92% (-29.32)</span></td>
     <td><span class="positive" data-sort="5.127834716435219">▲ +5.13% (+4.55)</span></td>
-    <td>40.1M</td>
+    <td data-sort="40125267">40.1M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:21.4%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -1021,9 +1021,9 @@ td{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}
     <td>33.61</td>
     <td><span class="negative" data-sort="-2.097294443054229">▼ -2.10% (-0.72)</span></td>
     <td><span class="positive" data-sort="1.3838141646167996">▲ +1.38% (+0.46)</span></td>
-    <td><span class="positive" data-sort="74.11597310396277">▲ +74.12% (+14.31)</span></td>
-    <td><span class="positive" data-sort="1.9767304449961245">▲ +1.98% (+0.65)</span></td>
-    <td>3.0M</td>
+    <td><span class="positive" data-sort="74.1159558995938">▲ +74.12% (+14.31)</span></td>
+    <td><span class="positive" data-sort="1.9767186419616767">▲ +1.98% (+0.65)</span></td>
+    <td data-sort="2976444">3.0M</td>
     <td><div style="width:180px;position:relative;margin:8px 0">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:79.9%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
@@ -1047,8 +1047,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const asc = th.classList.toggle('asc');
         th.classList.toggle('desc', !asc);
         rows.sort((a, b) => {
-            let av = a.children[index].querySelector('[data-sort]')?.dataset.sort || a.children[index].innerText.trim();
-            let bv = b.children[index].querySelector('[data-sort]')?.dataset.sort || b.children[index].innerText.trim();
+            let av = a.cells[index].dataset.sort !== undefined ? a.cells[index].dataset.sort : a.cells[index].innerText.trim();
+            let bv = b.cells[index].dataset.sort !== undefined ? b.cells[index].dataset.sort : b.cells[index].innerText.trim();
             av = isNaN(av) ? av : parseFloat(av);
             bv = isNaN(bv) ? bv : parseFloat(bv);
             return (av > bv ? 1 : av < bv ? -1 : 0) * (asc ? 1 : -1);
