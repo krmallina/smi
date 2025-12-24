@@ -7,7 +7,7 @@
   {
     "ticker": "TSLA",
     "condition": "day_change_above",
-    "value": 5
+    "value": 20
   },
   {
     "ticker": "AAPL",
