@@ -1,1 +1,1 @@
-View [Regular Hours](https://krmallina.github.io/smi/data/reg_dashboard.html), [Extended Hours](https://krmallina.github.io/smi/data/extnd_dashboard.html).
+View [Stocks](https://krmallina.github.io/smi/data/reg_dashboard.html), [Market Movers](https://www.slickcharts.com/market-movers)
