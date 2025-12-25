@@ -1,4 +1,4 @@
-name: Update Stock Dashboard
+name: Update Dashboard
 on:
   schedule:
     # 4 AM - 4 PM PST on Weekdays (Monday-Friday) - every 30 minutes
