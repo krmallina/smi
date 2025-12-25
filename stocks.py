@@ -127,10 +127,14 @@ def fetch(ticker, ext=False):
         t = yf.Ticker(ticker)
         info = t.info
 
-        h = t.history(period="2d", interval="1m", prepost=ext)
-        if h.empty: h = t.history(period="5d", prepost=ext)
-        if h.empty: return None
-        price = h['Close'].iloc[-1]
+        # Current day history for price and day range
+        h_day = t.history(period="1d", interval="1m", prepost=ext)
+        if h_day.empty:
+            h_day = t.history(period="5d", prepost=ext)
+        if h_day.empty: return None
+        price = h_day['Close'].iloc[-1]
+        day_low = h_day['Low'].min()
+        day_high = h_day['High'].max()
 
         reg = t.history(period="5d", prepost=False)
         change_pct = 0.0
@@ -141,30 +145,30 @@ def fetch(ticker, ext=False):
                 change_pct = ((price - prev) / prev) * 100
                 change_abs_day = price - prev
 
-        change_1m = change_6m = None
-        change_abs_1m = change_abs_6m = None
-        for d in [35, 190]:
-            hist = t.history(start=(datetime.now() - timedelta(days=d)).strftime('%Y-%m-%d'))
-            if len(hist) >= 2:
-                start = hist['Close'].iloc[0]
-                if start and start > 0:
-                    pct = ((price - start) / start) * 100
-                    abs_change = price - start
-                    if d == 35:
-                        change_1m = pct
-                        change_abs_1m = abs_change
-                    else:
-                        change_6m = pct
-                        change_abs_6m = abs_change
+        change_1m = change_6m = change_ytd = None
+        change_abs_1m = change_abs_6m = change_abs_ytd = None
+
+        hist_1m = t.history(period="2mo")
+        if len(hist_1m) >= 2:
+            start_1m = hist_1m['Close'].iloc[0]
+            if start_1m > 0:
+                change_1m = ((price - start_1m) / start_1m) * 100
+                change_abs_1m = price - start_1m
+
+        hist_6m = t.history(period="7mo")
+        if len(hist_6m) >= 2:
+            start_6m = hist_6m['Close'].iloc[0]
+            if start_6m > 0:
+                change_6m = ((price - start_6m) / start_6m) * 100
+                change_abs_6m = price - start_6m
 
         ytd_start = datetime(datetime.now().year, 1, 1)
         ytd_hist = t.history(start=ytd_start.strftime('%Y-%m-%d'))
-        ytd_pct = ytd_abs = None
         if len(ytd_hist) >= 2:
             ytd_start_price = ytd_hist['Close'].iloc[0]
-            if ytd_start_price and ytd_start_price > 0:
-                ytd_pct = ((price - ytd_start_price) / ytd_start_price) * 100
-                ytd_abs = price - ytd_start_price
+            if ytd_start_price > 0:
+                change_ytd = ((price - ytd_start_price) / ytd_start_price) * 100
+                change_abs_ytd = price - ytd_start_price
 
         y = t.history(period="1y")
         high52 = y['High'].max() if not y.empty else price
@@ -277,16 +281,18 @@ def fetch(ticker, ext=False):
             'price': price,
             'change_pct': change_pct,
             'change_abs_day': change_abs_day,
-            'change_1m_pct': change_1m,
+            'change_1m': change_1m,
             'change_abs_1m': change_abs_1m,
-            'change_6m_pct': change_6m,
+            'change_6m': change_6m,
             'change_abs_6m': change_abs_6m,
-            'ytd_pct': ytd_pct,
-            'ytd_abs': ytd_abs,
+            'change_ytd': change_ytd,
+            'change_abs_ytd': change_abs_ytd,
             'volume': vol,
             'volume_raw': vol,
             '52w_high': high52,
             '52w_low': low52,
+            'day_low': day_low,
+            'day_high': day_high,
             'beta': beta,
             'pe': pe,
             'short_percent': short_pct,
@@ -310,7 +316,7 @@ def fetch(ticker, ext=False):
             'implied_move_pct': implied_move_pct,
             'implied_high': implied_high,
             'implied_low': implied_low,
-            'exp_date_used': exp_date_used
+            'exp_date_used': exp_date_used,
         }
     except Exception as e:
         print(f"Error {ticker}: {e}")
@@ -408,7 +414,6 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
             banner += f"<div class='alert-item'>{g}</div>"
         banner += "</div></div>"
 
-    # Compact meme stock banner
     meme_tickers = sorted(MEME_STOCKS)
     meme_banner = f'<div class="meme-banner">🚀 <strong>Meme Stocks:</strong> {", ".join(meme_tickers)}</div>'
 
@@ -477,13 +482,38 @@ td{{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}}
     <button class="refresh-btn" onclick="location.reload()">Refresh</button>
 </div>
 <div style="margin-bottom:30px"><strong>Last updated:</strong> {update}</div>
+<div style="margin-bottom:20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <label>Filter by:</label>
+    <select id="filterColumn">
+        <option value="0">TICKER</option>
+        <option value="1">PRICE</option>
+        <option value="2">DAY %</option>
+        <option value="3">1M %</option>
+        <option value="4">6M %</option>
+        <option value="5">YTD %</option>
+        <option value="6">VOLUME</option>
+        <option value="7">RANGES</option>
+        <option value="8">TECHNICAL</option>
+        <option value="9">RISK / SENTIMENT</option>
+    </select>
+    <label>Operator:</label>
+    <select id="filterOp">
+        <option value="contains">contains</option>
+        <option value="=">=</option>
+        <option value=">">></option>
+        <option value="<"><</option>
+        <option value=">=">>=</option>
+        <option value="<="><=</option>
+    </select>
+    <input type="text" id="filterValue" placeholder="Value..." onkeyup="filterTable()" style="padding:8px;width:200px;border:1px solid #ddd;border-radius:4px;">
+    <button onclick="clearFilter()" style="padding:8px 16px;background:#cc0000;color:white;border:none;border-radius:4px;cursor:pointer;">Clear</button>
+    <small style="color:#666;">Text: contains | Numbers: use operator (e.g. > 5 for DAY %)</small>
+</div>
 <table id="stockTable">
 <tr>
-    <th>TICKER</th><th>PRICE</th><th>DAY %</th><th>1M %</th><th>6M %</th><th>YTD %</th><th>VOLUME</th><th>52W RANGE</th><th>TECHNICAL</th><th>RISK / SENTIMENT</th>
+    <th>TICKER</th><th>PRICE</th><th>DAY %</th><th>1M %</th><th>6M %</th><th>YTD %</th><th>VOLUME</th><th>RANGES</th><th>TECHNICAL</th><th>RISK / SENTIMENT</th>
 </tr>"""
     for _, r in df.iterrows():
-        pos = ((r['price'] - r['52w_low']) / (r['52w_high'] - r['52w_low'])) * 100 if r['52w_high'] > r['52w_low'] else 50
-
         tech = []
         if r['rsi'] is not None:
             rc = "oversold" if r['rsi'] < 30 else "overbought" if r['rsi'] > 70 else ""
@@ -546,24 +576,45 @@ td{{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}}
         vol_display = fmt_vol(r['volume'])
         vol_sort = r['volume_raw'] if r['volume_raw'] is not None else 0
 
-        html += f"""<tr>
-    <td><div class="ticker"><a href="{link_urls[0]}" target="_blank">{r['ticker']}</a></div><div class="link-group">{links}</div></td>
-    <td>{r['price']:.2f}</td>
-    <td>{fmt_change(r['change_pct'], r['change_abs_day'])}</td>
-    <td>{fmt_change(r['change_1m_pct'], r['change_abs_1m'])}</td>
-    <td>{fmt_change(r['change_6m_pct'], r['change_abs_6m'])}</td>
-    <td>{fmt_change(r['ytd_pct'], r['ytd_abs'])}</td>
-    <td data-sort="{vol_sort}">{vol_display}</td>
-    <td><div style="width:180px;position:relative;margin:8px 0">
+        # Day Range Bar (now on top)
+        pos_day = ((r['price'] - r['day_low']) / (r['day_high'] - r['day_low'])) * 100 if r['day_high'] > r['day_low'] else 50
+        bar_day = f"""<div style="width:180px;position:relative;margin:8px 0;margin-bottom:20px;">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
-            <div style="width:{pos:.1f}%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
-            <div style="width:{100-pos:.1f}%;height:100%;background:#cc0000;position:absolute;right:0;top:0"></div>
-            <div style="position:absolute;left:{pos:.1f}%;top:-4px;width:3px;height:16px;background:#000;z-index:1"></div>
+            <div style="width:{pos_day:.1f}%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
+            <div style="width:{100-pos_day:.1f}%;height:100%;background:#cc0000;position:absolute;right:0;top:0"></div>
+            <div style="position:absolute;left:{pos_day:.1f}%;top:-4px;width:3px;height:16px;background:#000;z-index:1"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:0.8em">
+            <span>{r['day_low']:.2f}</span><span>{r['day_high']:.2f}</span>
+        </div>
+        <div style="text-align:center;margin-top:4px;font-weight:bold;">Day Range</div>
+    </div>"""
+
+        # 52W Range Bar (now below Day Range)
+        pos_52w = ((r['price'] - r['52w_low']) / (r['52w_high'] - r['52w_low'])) * 100 if r['52w_high'] > r['52w_low'] else 50
+        bar_52w = f"""<div style="width:180px;position:relative;margin:8px 0;">
+        <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
+            <div style="width:{pos_52w:.1f}%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
+            <div style="width:{100-pos_52w:.1f}%;height:100%;background:#cc0000;position:absolute;right:0;top:0"></div>
+            <div style="position:absolute;left:{pos_52w:.1f}%;top:-4px;width:3px;height:16px;background:#000;z-index:1"></div>
         </div>
         <div style="display:flex;justify-content:space-between;font-size:0.8em">
             <span>{r['52w_low']:.2f}</span><span>{r['52w_high']:.2f}</span>
         </div>
-    </div></td>
+        <div style="text-align:center;margin-top:4px;font-weight:bold;">52W Range</div>
+    </div>"""
+
+        ranges_column = f"{bar_day}{bar_52w}"
+
+        html += f"""<tr>
+    <td><div class="ticker"><a href="{link_urls[0]}" target="_blank">{r['ticker']}</a></div><div class="link-group">{links}</div></td>
+    <td>{r['price']:.2f}</td>
+    <td>{fmt_change(r['change_pct'], r['change_abs_day'])}</td>
+    <td>{fmt_change(r['change_1m'], r['change_abs_1m'])}</td>
+    <td>{fmt_change(r['change_6m'], r['change_abs_6m'])}</td>
+    <td>{fmt_change(r['change_ytd'], r['change_abs_ytd'])}</td>
+    <td data-sort="{vol_sort}">{vol_display}</td>
+    <td>{ranges_column}</td>
     <td>{tech_h}</td>
     <td>{risk_h}</td>
 </tr>"""
@@ -587,6 +638,64 @@ document.addEventListener('DOMContentLoaded', () => {
         rows.forEach(row => table.appendChild(row));
     }));
 });
+function extractNumber(text) {
+    const match = text.match(/([+-]?\\d+(\\.\\d+)?)/);
+    return match ? parseFloat(match[1]) : NaN;
+}
+function filterTable() {
+    const col = parseInt(document.getElementById('filterColumn').value);
+    const op = document.getElementById('filterOp').value;
+    const val = document.getElementById('filterValue').value.trim().toLowerCase();
+    const rows = document.querySelectorAll('#stockTable tr');
+    rows.forEach((row, i) => {
+        if (i === 0) return;
+        const cell = row.cells[col];
+        const text = cell ? cell.innerText.trim().toLowerCase() : '';
+        let match = true;
+        if (op === 'contains') {
+            match = text.includes(val);
+        } else {
+            let cellNum = NaN;
+            if ([2,3,4,5].includes(col)) { // % columns
+                cellNum = extractNumber(cell.innerText);
+            } else if (col === 1) { // Price
+                cellNum = parseFloat(cell.innerText.replace(/[^0-9.-]/g, ''));
+            } else if (col === 6) { // Volume
+                const m = text.match(/([\\d.]+)([kmb]?)/i);
+                if (m) {
+                    let n = parseFloat(m[1]);
+                    switch (m[2].toLowerCase()) {
+                        case 'k': n *= 1000; break;
+                        case 'm': n *= 1000000; break;
+                        case 'b': n *= 1000000000; break;
+                    }
+                    cellNum = n;
+                }
+            } else {
+                match = text.includes(val);
+            }
+            if (!isNaN(cellNum)) {
+                const target = parseFloat(document.getElementById('filterValue').value);
+                if (!isNaN(target)) {
+                    switch (op) {
+                        case '=': match = cellNum === target; break;
+                        case '>': match = cellNum > target; break;
+                        case '<': match = cellNum < target; break;
+                        case '>=': match = cellNum >= target; break;
+                        case '<=': match = cellNum <= target; break;
+                    }
+                }
+            } else {
+                match = false;
+            }
+        }
+        row.style.display = match ? '' : 'none';
+    });
+}
+function clearFilter() {
+    document.getElementById('filterValue').value = '';
+    filterTable();
+}
 </script>
 </body></html>"""
 
