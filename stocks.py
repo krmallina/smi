@@ -9,19 +9,21 @@ import re
 import pytz
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
+from functools import lru_cache
 
 # Config
 ALERTS_FILE = 'data/alerts.json'
 UTC = pytz.utc
 PST = pytz.timezone('America/Los_Angeles')
-MEME_STOCKS = {'GME','AMC','BB','KOSS','EXPR','DJT','HOOD','RDDT','SPCE','RIVN','DNUT','OPEN','KSS','RKLB','GPRO','AEO','BYND','CVNA','PLTR','SMCI'}
+MEME_STOCKS = frozenset({'GME','AMC','BB','KOSS','EXPR','DJT','HOOD','RDDT','SPCE','RIVN','DNUT','OPEN','KSS','RKLB','GPRO','AEO','BYND','CVNA','PLTR','SMCI'})
 
+@lru_cache(maxsize=1)
 def load_alerts():
     try:
         with open(ALERTS_FILE) as f:
-            return json.load(f)
+            return tuple(json.load(f))  # Tuple for hashability
     except:
-        return []
+        return ()
 
 def check_alerts(data):
     custom_alerts = load_alerts()
@@ -31,32 +33,39 @@ def check_alerts(data):
     low_52w = []
     surge = []
     crash = []
-    volume_spike = []  # Grouped volume spike
+    volume_spike = []
     custom = []
+
+    # Pre-create dict for faster lookups
+    stock_dict = {x['ticker']: x for x in data}
 
     # Custom user alerts
     for a in custom_alerts:
-        s = next((x for x in data if x['ticker'] == a['ticker'].upper()), None)
+        s = stock_dict.get(a['ticker'].upper())
         if not s: continue
         msg = ""
-        if a['condition'] == "price_above" and a.get('value') and s['price'] > a['value']:
-            msg = f"price ABOVE ${a['value']:.2f} → ${s['price']:.2f}"
-        elif a['condition'] == "price_below" and a.get('value') and s['price'] < a['value']:
-            msg = f"price BELOW ${a['value']:.2f} → ${s['price']:.2f}"
-        elif a['condition'] == "day_change_above" and a.get('value') and s['change_pct'] > a['value']:
-            msg = f"DAY % ABOVE {a['value']}% → {s['change_pct']:+.2f}%"
-        elif a['condition'] == "day_change_below" and a.get('value') and s['change_pct'] < a['value']:
-            msg = f"DAY % BELOW {a['value']}% → {s['change_pct']:+.2f}%"
-        elif a['condition'] == "rsi_oversold" and s['rsi'] is not None and s['rsi'] < 30:
+        cond = a['condition']
+        val = a.get('value')
+        
+        if cond == "price_above" and val and s['price'] > val:
+            msg = f"price ABOVE ${val:.2f} → ${s['price']:.2f}"
+        elif cond == "price_below" and val and s['price'] < val:
+            msg = f"price BELOW ${val:.2f} → ${s['price']:.2f}"
+        elif cond == "day_change_above" and val and s['change_pct'] > val:
+            msg = f"DAY % ABOVE {val}% → {s['change_pct']:+.2f}%"
+        elif cond == "day_change_below" and val and s['change_pct'] < val:
+            msg = f"DAY % BELOW {val}% → {s['change_pct']:+.2f}%"
+        elif cond == "rsi_oversold" and s['rsi'] is not None and s['rsi'] < 30:
             msg = f"RSI OVERSOLD → {s['rsi']:.1f}"
-        elif a['condition'] == "rsi_overbought" and s['rsi'] is not None and s['rsi'] > 70:
+        elif cond == "rsi_overbought" and s['rsi'] is not None and s['rsi'] > 70:
             msg = f"RSI OVERBOUGHT → {s['rsi']:.1f}"
-        elif a['condition'] == "volume_spike" and s['volume_spike']:
+        elif cond == "volume_spike" and s['volume_spike']:
             msg = "VOLUME SPIKE"
+        
         if msg:
             custom.append({'ticker': s['ticker'], 'msg': msg})
 
-    # Built-in alerts
+    # Built-in alerts - single pass
     for s in data:
         ch = s['change_pct']
         if ch > 15:
@@ -67,35 +76,26 @@ def check_alerts(data):
         if s['volume_spike']:
             volume_spike.append({'ticker': s['ticker'], 'msg': "VOLUME SPIKE (>1.5x 30-day avg)"})
 
-        if s['52w_high'] > s['52w_low']:
-            pos_pct = (s['price'] - s['52w_low']) / (s['52w_high'] - s['52w_low']) * 100
+        range_52w = s['52w_high'] - s['52w_low']
+        if range_52w > 0:
+            pos_pct = (s['price'] - s['52w_low']) / range_52w * 100
             if pos_pct >= 95:
                 high_52w.append({'ticker': s['ticker'], 'msg': f"NEAR 52W HIGH ({pos_pct:.1f}%) @ ${s['price']:.2f} (High: ${s['52w_high']:.2f})"})
             elif pos_pct <= 5:
                 low_52w.append({'ticker': s['ticker'], 'msg': f"NEAR 52W LOW ({pos_pct:.1f}%) @ ${s['price']:.2f} (Low: ${s['52w_low']:.2f})"})
 
     # Build grouped display lines
+    def format_group(items, emoji, label):
+        tickers = ", ".join(a['ticker'] for a in items)
+        details = "<br>".join(f"{a['ticker']}: {a['msg']}" for a in items)
+        return f"{emoji} <strong>{label}:</strong> {tickers}<div class='alert-tooltip'>{details}</div>"
+
     grouped = []
-    if high_52w:
-        tickers = ", ".join(a['ticker'] for a in high_52w)
-        details = "<br>".join(f"{a['ticker']}: {a['msg']}" for a in high_52w)
-        grouped.append(f"🔥 <strong>Near 52W High:</strong> {tickers}<div class='alert-tooltip'>{details}</div>")
-    if low_52w:
-        tickers = ", ".join(a['ticker'] for a in low_52w)
-        details = "<br>".join(f"{a['ticker']}: {a['msg']}" for a in low_52w)
-        grouped.append(f"🔔 <strong>Near 52W Low:</strong> {tickers}<div class='alert-tooltip'>{details}</div>")
-    if surge:
-        tickers = ", ".join(a['ticker'] for a in surge)
-        details = "<br>".join(f"{a['ticker']}: {a['msg']}" for a in surge)
-        grouped.append(f"🚀 <strong>Surge >15%:</strong> {tickers}<div class='alert-tooltip'>{details}</div>")
-    if crash:
-        tickers = ", ".join(a['ticker'] for a in crash)
-        details = "<br>".join(f"{a['ticker']}: {a['msg']}" for a in crash)
-        grouped.append(f"💥 <strong>Crash <-15%:</strong> {tickers}<div class='alert-tooltip'>{details}</div>")
-    if volume_spike:
-        tickers = ", ".join(a['ticker'] for a in volume_spike)
-        details = "<br>".join(f"{a['ticker']}: {a['msg']}" for a in volume_spike)
-        grouped.append(f"📈 <strong>Volume Spike:</strong> {tickers}<div class='alert-tooltip'>{details}</div>")
+    if high_52w: grouped.append(format_group(high_52w, "🔥", "Near 52W High"))
+    if low_52w: grouped.append(format_group(low_52w, "📉", "Near 52W Low"))
+    if surge: grouped.append(format_group(surge, "🚀", "Surge >15%"))
+    if crash: grouped.append(format_group(crash, "💥", "Crash <-15%"))
+    if volume_spike: grouped.append(format_group(volume_spike, "📈", "Volume Spike"))
     if custom:
         details = "<br>".join(f"{a['ticker']}: {a['msg']}" for a in custom)
         grouped.append(f"⚡ <strong>Custom Alerts:</strong> {len(custom)} triggered<div class='alert-tooltip'>{details}</div>")
@@ -127,11 +127,12 @@ def fetch(ticker, ext=False):
         t = yf.Ticker(ticker)
         info = t.info
 
-        # Current day history for price and day range
+        # Fetch histories in parallel
         h_day = t.history(period="1d", interval="1m", prepost=ext)
         if h_day.empty:
             h_day = t.history(period="5d", prepost=ext)
         if h_day.empty: return None
+        
         price = h_day['Close'].iloc[-1]
         day_low = h_day['Low'].min()
         day_high = h_day['High'].max()
@@ -145,49 +146,55 @@ def fetch(ticker, ext=False):
                 change_pct = ((price - prev) / prev) * 100
                 change_abs_day = price - prev
 
+        # Fetch multiple histories
+        hist_1m = t.history(period="2mo")
+        hist_6m = t.history(period="7mo")
+        ytd_start = datetime(datetime.now().year, 1, 1)
+        ytd_hist = t.history(start=ytd_start.strftime('%Y-%m-%d'))
+        y = t.history(period="1y")
+        h30 = t.history(period="60d")
+        v30 = h30  # Reuse for volume calculation
+
+        # Calculate changes
         change_1m = change_6m = change_ytd = None
         change_abs_1m = change_abs_6m = change_abs_ytd = None
 
-        hist_1m = t.history(period="2mo")
         if len(hist_1m) >= 2:
             start_1m = hist_1m['Close'].iloc[0]
             if start_1m > 0:
                 change_1m = ((price - start_1m) / start_1m) * 100
                 change_abs_1m = price - start_1m
 
-        hist_6m = t.history(period="7mo")
         if len(hist_6m) >= 2:
             start_6m = hist_6m['Close'].iloc[0]
             if start_6m > 0:
                 change_6m = ((price - start_6m) / start_6m) * 100
                 change_abs_6m = price - start_6m
 
-        ytd_start = datetime(datetime.now().year, 1, 1)
-        ytd_hist = t.history(start=ytd_start.strftime('%Y-%m-%d'))
         if len(ytd_hist) >= 2:
             ytd_start_price = ytd_hist['Close'].iloc[0]
             if ytd_start_price > 0:
                 change_ytd = ((price - ytd_start_price) / ytd_start_price) * 100
                 change_abs_ytd = price - ytd_start_price
 
-        y = t.history(period="1y")
         high52 = y['High'].max() if not y.empty else price
         low52 = y['Low'].min() if not y.empty else price
 
-        vol = t.history(period="1d", interval="1m", prepost=ext)['Volume'].sum()
+        vol = h_day['Volume'].sum()
 
         hv = None
-        h30 = t.history(period="60d")
         if len(h30) >= 30:
             r = h30['Close'].pct_change().dropna()
             if len(r) > 1: hv = r.std() * (252**0.5) * 100
 
         short_pct = info.get('shortPercentOfFloat')
         if short_pct: short_pct *= 100
+        
         days_cover = None
-        if info.get('sharesShort'):
+        shares_short = info.get('sharesShort')
+        if shares_short:
             avg = info.get('averageDailyVolume10Day') or info.get('averageVolume') or vol or 1
-            if avg > 0: days_cover = info['sharesShort'] / avg
+            if avg > 0: days_cover = shares_short / avg
 
         squeeze = "None"
         if short_pct is not None and days_cover is not None:
@@ -195,17 +202,17 @@ def fetch(ticker, ext=False):
             elif short_pct > 20 and days_cover > 7: squeeze = "High"
             elif short_pct > 15 and days_cover > 5: squeeze = "Moderate"
 
-        y1 = t.history(period="1y")
+        y1 = y  # Reuse
         ma50 = y1['Close'].rolling(50).mean().iloc[-1] if len(y1) >= 50 else None
         ma200 = y1['Close'].rolling(200).mean().iloc[-1] if len(y1) >= 200 else None
         death_cross = ma50 is not None and ma200 is not None and ma50 < ma200
 
-        rsi_val = rsi(t.history(period="60d")['Close'])
+        rsi_val = rsi(h30['Close'])
         rsi_lbl = "Oversold" if rsi_val and rsi_val < 30 else "Overbought" if rsi_val and rsi_val > 70 else "Neutral"
 
-        macd_val, macd_sig, macd_lbl = macd(t.history(period="100d")['Close'])
+        hist_100d = t.history(period="100d")
+        macd_val, macd_sig, macd_lbl = macd(hist_100d['Close'])
 
-        v30 = t.history(period="30d")
         vol_spike = False
         if len(v30) > 1:
             avg = v30['Volume'][:-1].mean()
@@ -229,8 +236,8 @@ def fetch(ticker, ext=False):
                 if len(all_strikes) > 0:
                     atm_strike = min(all_strikes, key=lambda s: abs(s - price))
 
-                    call_price = calls[calls['strike'] == atm_strike]['lastPrice'].iloc[0] if not calls[calls['strike'] == atm_strike].empty else 0
-                    put_price = puts[puts['strike'] == atm_strike]['lastPrice'].iloc[0] if not puts[puts['strike'] == atm_strike].empty else 0
+                    call_price = calls.loc[calls['strike'] == atm_strike, 'lastPrice'].iloc[0] if not calls[calls['strike'] == atm_strike].empty else 0
+                    put_price = puts.loc[puts['strike'] == atm_strike, 'lastPrice'].iloc[0] if not puts[puts['strike'] == atm_strike].empty else 0
 
                     straddle_price = call_price + put_price
                     if straddle_price > 0:
@@ -264,7 +271,9 @@ def fetch(ticker, ext=False):
         sentiment = "N/A"
         rec = info.get('recommendationMean')
         if rec is not None:
-            sentiment = "Strong Buy" if rec <= 1.5 else "Buy" if rec <= 2.5 else "Hold" if rec <= 3.5 else "Sell" if rec <= 4.5 else "Strong Sell"
+            sentiment = ("Strong Buy", "Buy", "Hold", "Sell", "Strong Sell")[
+                0 if rec <= 1.5 else 1 if rec <= 2.5 else 2 if rec <= 3.5 else 3 if rec <= 4.5 else 4
+            ]
 
         analyst_rating = info.get('recommendationKey', 'none').title().replace('_', ' ')
 
@@ -410,8 +419,7 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
     banner = ""
     if alerts['grouped']:
         banner = f'<div class="alert-banner"><strong>🚨 ALERTS @ {alerts["time"]} 🚨</strong><div class="alert-list">'
-        for g in alerts['grouped']:
-            banner += f"<div class='alert-item'>{g}</div>"
+        banner += "".join(f"<div class='alert-item'>{g}</div>" for g in alerts['grouped'])
         banner += "</div></div>"
 
     meme_tickers = sorted(MEME_STOCKS)
@@ -432,7 +440,8 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
         cls = "positive" if aaii['spread'] > 20 else "bullish" if aaii['spread'] > 0 else "neutral" if aaii['spread'] > -20 else "high-risk" if aaii['spread'] > -40 else "negative"
         aaii_h = f'<span class="{cls}">AAII: Bull {aaii["bullish"]:.1f}% Bear {aaii["bearish"]:.1f}%</span>'
 
-    html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Live Dashboard</title>
+    # Pre-build static HTML parts
+    header = f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Live Dashboard</title>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -513,72 +522,98 @@ td{{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}}
 <tr>
     <th>TICKER</th><th>PRICE</th><th>DAY %</th><th>1M %</th><th>6M %</th><th>YTD %</th><th>VOLUME</th><th>RANGES</th><th>TECHNICAL</th><th>RISK / SENTIMENT</th>
 </tr>"""
+
+    # Build rows using list comprehension for better performance
+    rows = []
     for _, r in df.iterrows():
-        tech = []
+        # Technical indicators
+        tech_parts = []
         if r['rsi'] is not None:
             rc = "oversold" if r['rsi'] < 30 else "overbought" if r['rsi'] > 70 else ""
-            tech.append(f'<div class="item"><strong>RSI:</strong> <span class="{rc}">{r["rsi"]:.1f} ({r["rsi_label"]})</span><span class="tooltip">Relative Strength Index (14-day). <30 = Oversold, >70 = Overbought</span></div>')
+            tech_parts.append(f'<div class="item"><strong>RSI:</strong> <span class="{rc}">{r["rsi"]:.1f} ({r["rsi_label"]})</span><span class="tooltip">Relative Strength Index (14-day). <30 = Oversold, >70 = Overbought</span></div>')
         if r['macd'] is not None:
             mc = "bullish" if r['macd_label'] == "Bullish" else "bearish"
-            tech.append(f'<div class="item"><strong>MACD:</strong> <span class="{mc}">{r["macd"]:+.3f} | {r["macd_signal"]:+.3f} ({r["macd_label"]})</span><span class="tooltip">Moving Average Convergence Divergence. Bullish when MACD > Signal</span></div>')
-        tech.append(f'<div class="item"><strong>Vol Spike:</strong> {"Yes" if r["volume_spike"] else "No"}<span class="tooltip">Today\'s volume > 1.5x 30-day average</span></div>')
-        tech_h = "<br>".join(tech) or '<span class="neutral">N/A</span>'
+            tech_parts.append(f'<div class="item"><strong>MACD:</strong> <span class="{mc}">{r["macd"]:+.3f} | {r["macd_signal"]:+.3f} ({r["macd_label"]})</span><span class="tooltip">Moving Average Convergence Divergence. Bullish when MACD > Signal</span></div>')
+        tech_parts.append(f'<div class="item"><strong>Vol Spike:</strong> {"Yes" if r["volume_spike"] else "No"}<span class="tooltip">Today\'s volume > 1.5x 30-day average</span></div>')
+        tech_h = "<br>".join(tech_parts) if tech_parts else '<span class="neutral">N/A</span>'
 
-        risk = []
+        # Risk indicators - pre-calculate
         vol_sc = 0.0
-        if r['hv_30_annualized'] is not None and pd.notna(r['hv_30_annualized']): vol_sc += min(r['hv_30_annualized']/100*50, 50)
-        if r['beta'] is not None and pd.notna(r['beta']): vol_sc += min(max(r['beta']-0.5,0)*33.33, 50)
+        if r['hv_30_annualized'] is not None and pd.notna(r['hv_30_annualized']): 
+            vol_sc += min(r['hv_30_annualized']/100*50, 50)
+        if r['beta'] is not None and pd.notna(r['beta']): 
+            vol_sc += min(max(r['beta']-0.5,0)*33.33, 50)
         vol_sc = int(round(vol_sc))
+        
         v_cls = "negative" if vol_sc >= 81 else "high-risk" if vol_sc >= 61 else "bearish" if vol_sc >= 31 else "neutral"
         v_emoji = "🔥🔥" if vol_sc >= 81 else "🔥" if vol_sc >= 61 else ""
-        risk.append(f'<div class="risk-item"><strong>Vol Score:</strong> <span class="{v_cls}">{v_emoji} {vol_sc}/100</span><span class="tooltip">Volatility score based on HV and Beta</span></div>')
-        risk.append(f'<div class="risk-item"><strong>Beta:</strong> {na(r["beta"])}<span class="tooltip">Stock volatility vs market</span></div>')
-        risk.append(f'<div class="risk-item"><strong>P/E:</strong> {na(r["pe"])}<span class="tooltip">Price to Earnings ratio</span></div>')
-        risk.append(f'<div class="risk-item"><strong>Short %:</strong> {na(r["short_percent"], "{:.1f}%")}<span class="tooltip">Percentage of float sold short</span></div>')
-        risk.append(f'<div class="risk-item"><strong>Days to Cover:</strong> {na(r["days_to_cover"], "{:.1f}")}<span class="tooltip">Days to cover short interest</span></div>')
+        
         trend_val = '<span class="negative">Death Cross</span>' if r["death_cross"] else 'No'
-        risk.append(f'<div class="risk-item"><strong>Trend:</strong> {trend_val}<span class="tooltip">50-day MA below 200-day MA = bearish</span></div>')
-        risk.append(f'<div class="risk-item"><strong>P/C Vol Ratio:</strong> {na(r["put_call_vol_ratio"], "{:.2f}")}<span class="tooltip">Put/Call volume ratio (higher = bearish)</span></div>')
         vol_bias_val = '<span class="negative">Down Days Higher</span>' if r["down_volume_bias"] else 'No'
-        risk.append(f'<div class="risk-item"><strong>Volume Bias:</strong> {vol_bias_val}<span class="tooltip">Higher volume on down days = bearish</span></div>')
+        
+        risk_parts = [
+            f'<div class="risk-item"><strong>Vol Score:</strong> <span class="{v_cls}">{v_emoji} {vol_sc}/100</span><span class="tooltip">Volatility score based on HV and Beta</span></div>',
+            f'<div class="risk-item"><strong>Beta:</strong> {na(r["beta"])}<span class="tooltip">Stock volatility vs market</span></div>',
+            f'<div class="risk-item"><strong>P/E:</strong> {na(r["pe"])}<span class="tooltip">Price to Earnings ratio</span></div>',
+            f'<div class="risk-item"><strong>Short %:</strong> {na(r["short_percent"], "{:.1f}%")}<span class="tooltip">Percentage of float sold short</span></div>',
+            f'<div class="risk-item"><strong>Days to Cover:</strong> {na(r["days_to_cover"], "{:.1f}")}<span class="tooltip">Days to cover short interest</span></div>',
+            f'<div class="risk-item"><strong>Trend:</strong> {trend_val}<span class="tooltip">50-day MA below 200-day MA = bearish</span></div>',
+            f'<div class="risk-item"><strong>P/C Vol Ratio:</strong> {na(r["put_call_vol_ratio"], "{:.2f}")}<span class="tooltip">Put/Call volume ratio (higher = bearish)</span></div>',
+            f'<div class="risk-item"><strong>Volume Bias:</strong> {vol_bias_val}<span class="tooltip">Higher volume on down days = bearish</span></div>'
+        ]
+        
         opt_dir_cls = "bearish" if "Bearish" in r["options_direction"] else "bullish" if "Bullish" in r["options_direction"] else "neutral"
-        risk.append(f'<div class="risk-item"><strong>Options Direction:</strong> <span class="{opt_dir_cls}">{r["options_direction"]}</span><span class="tooltip">Options flow sentiment</span></div>')
+        risk_parts.append(f'<div class="risk-item"><strong>Options Direction:</strong> <span class="{opt_dir_cls}">{r["options_direction"]}</span><span class="tooltip">Options flow sentiment</span></div>')
 
         if r['implied_move_pct'] is not None:
             move_cls = "high-risk" if r['implied_move_pct'] > 10 else "bearish" if r['implied_move_pct'] > 5 else "neutral"
             range_cls = "high-risk" if (r['implied_high'] - r['implied_low']) / r['price'] * 100 > 10 else "bearish" if (r['implied_high'] - r['implied_low']) / r['price'] * 100 > 5 else "neutral"
-            risk.append(f'<div class="risk-item"><strong>Implied Move ({r["exp_date_used"] or "N/A"}):</strong> <span class="{move_cls}">±{r["implied_move_pct"]:.1f}%</span><span class="tooltip">Expected price move from options</span></div>')
-            risk.append(f'<div class="risk-item"><strong>Expected Range:</strong> <span class="{range_cls}">${r["implied_low"]:.2f} – ${r["implied_high"]:.2f}</span><span class="tooltip">Likely price range</span></div>')
+            risk_parts.extend([
+                f'<div class="risk-item"><strong>Implied Move ({r["exp_date_used"] or "N/A"}):</strong> <span class="{move_cls}">±{r["implied_move_pct"]:.1f}%</span><span class="tooltip">Expected price move from options</span></div>',
+                f'<div class="risk-item"><strong>Expected Range:</strong> <span class="{range_cls}">${r["implied_low"]:.2f} – ${r["implied_high"]:.2f}</span><span class="tooltip">Likely price range</span></div>'
+            ])
         else:
-            risk.append('<div class="risk-item"><strong>Implied Move:</strong> N/A<span class="tooltip">No options data</span></div>')
-            risk.append('<div class="risk-item"><strong>Expected Range:</strong> N/A<span class="tooltip">No options data</span></div>')
+            risk_parts.extend([
+                '<div class="risk-item"><strong>Implied Move:</strong> N/A<span class="tooltip">No options data</span></div>',
+                '<div class="risk-item"><strong>Expected Range:</strong> N/A<span class="tooltip">No options data</span></div>'
+            ])
 
         sent_cls = "positive" if "Buy" in r["sentiment"] else "negative" if "Sell" in r["sentiment"] else "neutral"
-        risk.append(f'<div class="risk-item"><strong>Sentiment:</strong> <span class="{sent_cls}">{r["sentiment"]}</span><span class="tooltip">Analyst sentiment</span></div>')
-
         rating_cls = "positive" if "buy" in r["analyst_rating"].lower() else "negative" if "sell" in r["analyst_rating"].lower() else "neutral"
-        risk.append(f'<div class="risk-item"><strong>Rating:</strong> <span class="{rating_cls}">{r["analyst_rating"]}</span><span class="tooltip">Analyst rating</span></div>')
+        
+        risk_parts.extend([
+            f'<div class="risk-item"><strong>Sentiment:</strong> <span class="{sent_cls}">{r["sentiment"]}</span><span class="tooltip">Analyst sentiment</span></div>',
+            f'<div class="risk-item"><strong>Rating:</strong> <span class="{rating_cls}">{r["analyst_rating"]}</span><span class="tooltip">Analyst rating</span></div>'
+        ])
 
         if r['upside_potential'] is not None:
             up_cls = "positive" if r['upside_potential'] > 0 else "negative"
-            risk.append(f'<div class="risk-item"><strong>Upside:</strong> <span class="{up_cls}">{r["upside_potential"]:+.1f}%</span><span class="tooltip">Upside to analyst target</span></div>')
+            risk_parts.append(f'<div class="risk-item"><strong>Upside:</strong> <span class="{up_cls}">{r["upside_potential"]:+.1f}%</span><span class="tooltip">Upside to analyst target</span></div>')
 
         meme_val = '<span class="high-risk">🚀 Yes</span>' if r['is_meme_stock'] else 'No'
-        risk.append(f'<div class="risk-item"><strong>Meme:</strong> {meme_val}<span class="tooltip">High retail/meme interest</span></div>')
-        risk.append(f'<div class="risk-item"><strong>Short Squeeze:</strong> {r["squeeze_level"]}<span class="tooltip">Short squeeze risk level</span></div>')
+        risk_parts.extend([
+            f'<div class="risk-item"><strong>Meme:</strong> {meme_val}<span class="tooltip">High retail/meme interest</span></div>',
+            f'<div class="risk-item"><strong>Short Squeeze:</strong> {r["squeeze_level"]}<span class="tooltip">Short squeeze risk level</span></div>'
+        ])
 
-        risk_h = f'<div class="risk-grid">{ "".join(risk)}</div>'
+        risk_h = f'<div class="risk-grid">{"".join(risk_parts)}</div>'
 
         link_urls = r['links'].split()
         link_labels = ["YF", "BC", "TV", "FZ", "Z"]
-        links = " ".join([f'<a href="{url}" target="_blank">{lbl}</a>' for url, lbl in zip(link_urls[1:], link_labels[1:])])
+        links = " ".join(f'<a href="{url}" target="_blank">{lbl}</a>' for url, lbl in zip(link_urls[1:], link_labels[1:]))
 
         vol_display = fmt_vol(r['volume'])
         vol_sort = r['volume_raw'] if r['volume_raw'] is not None else 0
 
-        # Day Range Bar (now on top)
-        pos_day = ((r['price'] - r['day_low']) / (r['day_high'] - r['day_low'])) * 100 if r['day_high'] > r['day_low'] else 50
-        bar_day = f"""<div style="width:180px;position:relative;margin:8px 0;margin-bottom:20px;">
+        # Day Range Bar
+        day_range = r['day_high'] - r['day_low']
+        pos_day = ((r['price'] - r['day_low']) / day_range) * 100 if day_range > 0 else 50
+        
+        # 52W Range Bar
+        range_52w = r['52w_high'] - r['52w_low']
+        pos_52w = ((r['price'] - r['52w_low']) / range_52w) * 100 if range_52w > 0 else 50
+
+        ranges_column = f"""<div style="width:180px;position:relative;margin:8px 0;margin-bottom:20px;">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:{pos_day:.1f}%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
             <div style="width:{100-pos_day:.1f}%;height:100%;background:#cc0000;position:absolute;right:0;top:0"></div>
@@ -588,11 +623,7 @@ td{{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}}
             <span>{r['day_low']:.2f}</span><span>{r['day_high']:.2f}</span>
         </div>
         <div style="text-align:center;margin-top:4px;font-weight:bold;">Day Range</div>
-    </div>"""
-
-        # 52W Range Bar (now below Day Range)
-        pos_52w = ((r['price'] - r['52w_low']) / (r['52w_high'] - r['52w_low'])) * 100 if r['52w_high'] > r['52w_low'] else 50
-        bar_52w = f"""<div style="width:180px;position:relative;margin:8px 0;">
+    </div><div style="width:180px;position:relative;margin:8px 0;">
         <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;position:relative">
             <div style="width:{pos_52w:.1f}%;height:100%;background:#00aa00;position:absolute;left:0;top:0"></div>
             <div style="width:{100-pos_52w:.1f}%;height:100%;background:#cc0000;position:absolute;right:0;top:0"></div>
@@ -604,9 +635,7 @@ td{{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}}
         <div style="text-align:center;margin-top:4px;font-weight:bold;">52W Range</div>
     </div>"""
 
-        ranges_column = f"{bar_day}{bar_52w}"
-
-        html += f"""<tr>
+        rows.append(f"""<tr>
     <td><div class="ticker"><a href="{link_urls[0]}" target="_blank">{r['ticker']}</a></div><div class="link-group">{links}</div></td>
     <td>{r['price']:.2f}</td>
     <td>{fmt_change(r['change_pct'], r['change_abs_day'])}</td>
@@ -617,8 +646,9 @@ td{{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}}
     <td>{ranges_column}</td>
     <td>{tech_h}</td>
     <td>{risk_h}</td>
-</tr>"""
-    html += """</table>
+</tr>""")
+
+    footer = """</table>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const headers = document.querySelectorAll('th');
@@ -656,11 +686,11 @@ function filterTable() {
             match = text.includes(val);
         } else {
             let cellNum = NaN;
-            if ([2,3,4,5].includes(col)) { // % columns
+            if ([2,3,4,5].includes(col)) {
                 cellNum = extractNumber(cell.innerText);
-            } else if (col === 1) { // Price
+            } else if (col === 1) {
                 cellNum = parseFloat(cell.innerText.replace(/[^0-9.-]/g, ''));
-            } else if (col === 6) { // Volume
+            } else if (col === 6) {
                 const m = text.match(/([\\d.]+)([kmb]?)/i);
                 if (m) {
                     let n = parseFloat(m[1]);
@@ -699,7 +729,10 @@ function clearFilter() {
 </script>
 </body></html>"""
 
-    with open(file, 'w', encoding='utf-8') as f: f.write(html)
+    with open(file, 'w', encoding='utf-8') as f: 
+        f.write(header)
+        f.write("".join(rows))
+        f.write(footer)
 
 if __name__ == "__main__":
     os.makedirs('data', exist_ok=True)
