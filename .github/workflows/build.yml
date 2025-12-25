@@ -31,6 +31,7 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; else pip install yfinance pandas requests; fi
       - name: Run stocks.py
         run: python stocks.py
+        run: python stocksED.py
       - name: Sync and Push Changes
         if: success()
         run: |
