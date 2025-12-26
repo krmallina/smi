@@ -243,18 +243,21 @@ def dashboard(csv='data/tickers.csv', ext=False):
 
 def get_vix_data():
     try:
-        info = yf.Ticker("^VIX").info
-        p, pc = info.get('regularMarketPrice') or info.get('previousClose'), info.get('previousClose')
-        ch = ((p - pc) / pc) * 100 if p and pc and pc > 0 else 0.0
-        return {'price': p, 'change_pct': ch}
+        t = yf.Ticker("^VIX")
+        info = t.info
+        p = info.get('regularMarketPrice') or info.get('previousClose')
+        pc = info.get('regularMarketPreviousClose') or info.get('previousClose')
+        ch_pct = info.get('regularMarketChangePercent')
+        if ch_pct is None and p and pc and pc > 0:
+            ch_pct = ((p - pc) / pc) * 100
+        return {'price': p, 'change_pct': ch_pct}
     except Exception as e:
         print(f"VIX error: {e}")
         return {'price': None, 'change_pct': None}
 
 def get_fear_greed_data():
     try:
-        # Try multiple date formats as CNN API can be finicky
-        for days_back in range(0, 3):
+        for days_back in range(0, 5):
             date_str = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
             r = requests.get(f"https://production.dataviz.cnn.io/index/fearandgreed/graphdata/{date_str}", 
                             headers={'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.cnn.com/markets/fear-and-greed'}, timeout=10)
@@ -262,10 +265,10 @@ def get_fear_greed_data():
                 score = float(r.json()['fear_and_greed']['score'])
                 s = int(round(score))
                 rating = ("Extreme Fear", "Fear", "Neutral", "Greed", "Extreme Greed")[0 if s <= 24 else 1 if s <= 44 else 2 if s <= 55 else 3 if s <= 74 else 4]
-                return {'score': score, 'rating': rating}
+                return {'score': score, 'rating': rating, 'raw_score': s}
     except Exception as e:
         print(f"F&G error: {e}")
-    return {'score': None, 'rating': "N/A"}
+    return {'score': None, 'rating': "N/A", 'raw_score': None}
 
 def get_aaii_sentiment():
     try:
@@ -286,11 +289,33 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
     if alerts['grouped']:
         banner = '<div class="alert-banner">🚨 <strong>ALERTS</strong> ' + " | ".join(alerts['grouped']) + '</div>'
     
-    vix_h = f'VIX: {vix["price"]:.2f} ({vix["change_pct"]:+.2f}%)' if vix['price'] else 'VIX: N/A'
-    fg_h = f'F&G: {fg["score"]:.1f} ({fg["rating"]})' if fg['score'] else 'F&G: N/A'
-    aaii_h = f'AAII: Bull {aaii["bullish"]:.1f}% Bear {aaii["bearish"]:.1f}%' if aaii['bullish'] else 'AAII: N/A'
+    # VIX color
+    vix_cls = "positive" if vix['change_pct'] and vix['change_pct'] >= 0 else "negative" if vix['change_pct'] and vix['change_pct'] < 0 else "neutral"
+    vix_h = f'<span class="{vix_cls}">VIX: {na(vix["price"])} ({na(vix["change_pct"], "{:+.2f}%")})</span>' if vix['price'] is not None else '<span class="neutral">VIX: N/A</span>'
     
-    # Comprehensive Enhanced HTML with all features
+    # F&G color
+    if fg['raw_score'] is not None:
+        if fg['raw_score'] <= 24: fg_cls = "extreme-fear"
+        elif fg['raw_score'] <= 44: fg_cls = "fear"
+        elif fg['raw_score'] <= 55: fg_cls = "neutral"
+        elif fg['raw_score'] <= 74: fg_cls = "greed"
+        else: fg_cls = "extreme-greed"
+        fg_h = f'<span class="{fg_cls}">F&G: {fg["score"]:.1f} ({fg["rating"]})</span>'
+    else:
+        fg_h = '<span class="neutral">F&G: N/A</span>'
+    
+    # AAII color
+    if aaii['spread'] is not None:
+        spread = aaii['spread']
+        if spread > 20: aaii_cls = "strong-bull"
+        elif spread > 0: aaii_cls = "bull"
+        elif spread > -20: aaii_cls = "neutral"
+        elif spread > -40: aaii_cls = "bear"
+        else: aaii_cls = "strong-bear"
+        aaii_h = f'<span class="{aaii_cls}">AAII: Bull {na(aaii["bullish"], "{:.1f}%")} Bear {na(aaii["bearish"], "{:.1f}%")} (Spread {spread:+.1f})</span>'
+    else:
+        aaii_h = '<span class="neutral">AAII: N/A</span>'
+    
     html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Enhanced Dashboard</title>
 <meta name="viewport" content="width=device-width,initial-scale=1"><style>
 :root{{--bg:#f5f5f5;--card:#fff;--text:#333;--border:#ddd;--accent:#0066cc;--pos:#00aa00;--neg:#cc0000}}
@@ -313,28 +338,31 @@ body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
 .card-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px}}
 .stock-card{{background:var(--card);border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.1);transition:all .3s}}
 .stock-card:hover{{transform:translateY(-4px);box-shadow:0 8px 16px rgba(0,0,0,.2)}}
-.stock-card h2 a{{color:var(--text);text-decoration:none}}
-.stock-card h2 a:hover{{color:var(--accent)}}
 .heat-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}}
 .heat-tile{{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:8px;padding:10px;cursor:pointer;transition:all .3s}}
 .heat-tile:hover{{transform:scale(1.05);box-shadow:0 4px 12px rgba(0,0,0,.3)}}
-.heat-tile strong{{font-size:1.2em;margin-bottom:5px}}
 table{{width:100%;border-collapse:collapse;background:var(--card);box-shadow:0 2px 8px rgba(0,0,0,.1);margin-top:20px}}
 th{{background:var(--accent);color:#fff;padding:14px;cursor:pointer;position:sticky;top:0;z-index:10}}
 td{{padding:12px;border-bottom:1px solid var(--border)}}
-td a{{color:var(--text);text-decoration:none;font-weight:bold}}
-td a:hover{{color:var(--accent)}}
 .positive{{color:var(--pos);font-weight:bold}}
 .negative{{color:var(--neg);font-weight:bold}}
-.sparkline{{margin-left:10px;vertical-align:middle}}
-.favorite{{cursor:pointer;font-size:1.2em;margin-right:8px}}
-.favorite.active{{color:gold}}
+.neutral{{color:#888}}
+.strong-bull{{color:#008800;font-weight:bold}}
+.bull{{color:#00bb00}}
+.strong-bear{{color:#ff0000;font-weight:bold}}
+.bear{{color:#ff8800}}
+.extreme-fear{{color:#ff0000;font-weight:bold}}
+.fear{{color:#ff8800}}
+.greed{{color:#88ff88}}
+.extreme-greed{{color:#00bb00;font-weight:bold}}
+.bullish{{color:var(--pos);font-weight:bold}}
+.bearish{{color:var(--neg);font-weight:bold}}
 .range-bar{{width:100%;height:8px;background:#e0e0e0;border-radius:4px;position:relative;margin:4px 0}}
 .range-bar-fill{{height:100%;border-radius:4px;position:absolute;left:0}}
 .range-bar-marker{{position:absolute;width:3px;height:12px;background:#000;top:-2px;border-radius:2px}}
-.range-labels{{display:flex;justify-content:space-between;font-size:0.75em;color:var(--text-secondary);margin-top:2px}}
+.range-labels{{display:flex;justify-content:space-between;font-size:0.75em;color:var(--text);margin-top:2px}}
 .range-container{{margin:8px 0}}
-.range-title{{font-size:0.8em;font-weight:600;margin-bottom:4px;color:var(--text-secondary)}}
+.range-title{{font-size:0.8em;font-weight:600;margin-bottom:4px}}
 .toggle-switch{{position:relative;display:inline-block;width:60px;height:30px;margin:0 10px}}
 .toggle-switch input{{opacity:0;width:0;height:0}}
 .toggle-slider{{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background-color:#ccc;transition:.4s;border-radius:30px}}
@@ -372,14 +400,14 @@ td,th{{padding:8px}}
 </div>
 
 <div class="quick-filters">
-<div class="chip" onclick="quickFilter('all')">All</div>
-<div class="chip" onclick="quickFilter('oversold')">📉 Oversold (RSI<30)</div>
-<div class="chip" onclick="quickFilter('overbought')">📈 Overbought (RSI>70)</div>
-<div class="chip" onclick="quickFilter('surge')">🚀 Surge >10%</div>
-<div class="chip" onclick="quickFilter('crash')">💥 Crash <-10%</div>
-<div class="chip" onclick="quickFilter('meme')">🎮 Meme Stocks</div>
-<div class="chip" onclick="quickFilter('volume')">📊 High Volume</div>
-<div class="chip" onclick="quickFilter('squeeze')">🔥 Short Squeeze</div>
+<div class="chip active" data-filter="all">All</div>
+<div class="chip" data-filter="oversold">📉 Oversold (RSI<30)</div>
+<div class="chip" data-filter="overbought">📈 Overbought (RSI>70)</div>
+<div class="chip" data-filter="surge">🚀 Surge >10%</div>
+<div class="chip" data-filter="crash">💥 Crash <-10%</div>
+<div class="chip" data-filter="meme">🎮 Meme Stocks</div>
+<div class="chip" data-filter="volume">📊 High Volume</div>
+<div class="chip" data-filter="squeeze">🔥 Short Squeeze</div>
 </div>
 
 <div class="views">
@@ -392,23 +420,52 @@ td,th{{padding:8px}}
 <table id="stockTable">
 <tr><th onclick="sortTable(0)">⭐ TICKER</th><th onclick="sortTable(1)">PRICE</th><th onclick="sortTable(2)">DAY %</th>
 <th onclick="sortTable(3)">1M %</th><th onclick="sortTable(4)">6M %</th><th onclick="sortTable(5)">YTD %</th>
-<th onclick="sortTable(6)">VOLUME</th><th onclick="sortTable(7)">RANGES</th><th onclick="sortTable(8)">RSI</th><th onclick="sortTable(9)">SENTIMENT</th></tr>
+<th onclick="sortTable(6)">VOLUME</th><th onclick="sortTable(7)">RANGES</th><th onclick="sortTable(8)">INDICATORS</th><th onclick="sortTable(9)">SENTIMENT</th></tr>
 """
     
-    # Build table rows
     for _, r in df.iterrows():
         fav_id = f"fav-{r['ticker']}"
-        rsi_cls = "negative" if r['rsi'] and r['rsi'] < 30 else "positive" if r['rsi'] and r['rsi'] > 70 else ""
-        sent_cls = "positive" if "Buy" in r['sentiment'] else "negative" if "Sell" in r['sentiment'] else ""
         
-        # Build range bars
+        # Color classes
+        macd_cls = "bullish" if r['macd_label'] == "Bullish" else "bearish" if r['macd_label'] == "Bearish" else "neutral"
+        opt_dir_cls = "bullish" if "Bullish" in r['options_direction'] else "bearish" if "Bearish" in r['options_direction'] else "neutral"
+        vol_bias_cls = "bearish" if r['down_volume_bias'] else "bullish"
+        rating_cls = "bullish" if "buy" in r['analyst_rating'].lower() else "bearish" if "sell" in r['analyst_rating'].lower() else "neutral"
+        sent_cls = "bullish" if "Buy" in r['sentiment'] else "bearish" if "Sell" in r['sentiment'] else "neutral"
+        upside_cls = "bullish" if r['upside_potential'] and r['upside_potential'] > 0 else "bearish" if r['upside_potential'] and r['upside_potential'] < 0 else "neutral"
+        
+        # Short + Days
+        short_str = f"{na(r['short_percent'], '{:.1f}%')} ({na(r['days_to_cover'], '{:.1f}d')})" if r['short_percent'] or r['days_to_cover'] else "N/A"
+        
+        # Vol Score (simple proxy: spike + high vol, scaled 0-100)
+        vol_score = 0
+        if r['volume_spike']: vol_score += 50
+        if r['volume_raw'] > 10e6: vol_score += 30
+        if r['volume_raw'] > 50e6: vol_score += 20
+        vol_score = min(vol_score, 100)
+        vol_score_cls = "negative" if vol_score > 80 else "bearish" if vol_score > 60 else "neutral" if vol_score > 30 else "bullish"
+        
+        # Implied Move bar
+        impl_bar = ""
+        if r['implied_move_pct']:
+            pos_impl = 50 + (r['implied_move_pct'] / 2)
+            impl_color = "linear-gradient(to right, var(--neg) 0%, var(--neg) {50 - (r['implied_move_pct']/2)}%, var(--pos) {50 + (r['implied_move_pct']/2)}%, var(--pos) 100%)"
+            impl_bar = f"""<div class="range-container">
+<div class="range-title">Implied Move ±{r['implied_move_pct']:.1f}%</div>
+<div class="range-bar" style="background:{impl_color}">
+<div class="range-bar-marker" style="left:50%"></div>
+</div>
+<div class="range-labels"><span>${r['implied_low']:.2f}</span><span>${r['implied_high']:.2f}</span></div>
+</div>"""
+        
+        # Day & 52W bars
         day_range = r['day_high'] - r['day_low']
         pos_day = ((r['price'] - r['day_low']) / day_range * 100) if day_range > 0 else 50
-        day_color = f"linear-gradient(to right, var(--pos) 0%, var(--pos) {pos_day}%, var(--neg) {pos_day}%, var(--neg) 100%)"
+        day_color = f"linear-gradient(to right, var(--neg) 0%, var(--neg) {pos_day}%, var(--pos) {pos_day}%, var(--pos) 100%)"
         
         range_52w = r['52w_high'] - r['52w_low']
         pos_52w = ((r['price'] - r['52w_low']) / range_52w * 100) if range_52w > 0 else 50
-        w52_color = f"linear-gradient(to right, var(--pos) 0%, var(--pos) {pos_52w}%, var(--neg) {pos_52w}%, var(--neg) 100%)"
+        w52_color = f"linear-gradient(to right, var(--neg) 0%, var(--neg) {pos_52w}%, var(--pos) {pos_52w}%, var(--pos) 100%)"
         
         ranges_html = f"""<div class="range-container">
 <div class="range-title">Day Range</div>
@@ -423,11 +480,19 @@ td,th{{padding:8px}}
 <div class="range-bar-marker" style="left:{pos_52w}%"></div>
 </div>
 <div class="range-labels"><span>${r['52w_low']:.2f}</span><span>${r['52w_high']:.2f}</span></div>
-</div>"""
+</div>
+{impl_bar}"""
+        
+        indicators_html = f"""MACD: <span class="{macd_cls}">{r['macd_label']}</span><br>
+Short: {short_str}<br>
+Vol Score: <span class="{vol_score_cls}">{vol_score}</span><br>
+Opt Dir: <span class="{opt_dir_cls}">{r['options_direction']}</span><br>
+Vol Bias: <span class="{vol_bias_cls}">{'Down' if r['down_volume_bias'] else 'Up'}</span><br>
+Rating: <span class="{rating_cls}">{r['analyst_rating']}</span>"""
         
         barchart_url = f"https://www.barchart.com/stocks/quotes/{r['ticker']}"
         
-        html += f"""<tr data-ticker="{r['ticker']}" data-change="{r['change_pct']:.2f}" data-rsi="{r['rsi'] or 0}" data-vol="{r['volume_raw']}" data-meme="{r['is_meme_stock']}" data-squeeze="{r['squeeze_level']}">
+        html += f"""<tr class="stock-row" data-ticker="{r['ticker']}" data-change="{r['change_pct']:.2f}" data-rsi="{r['rsi'] or 0}" data-vol="{r['volume_raw']}" data-meme="{r['is_meme_stock']}" data-squeeze="{r['squeeze_level']}">
 <td><span class="favorite" id="{fav_id}" onclick="toggleFav('{r['ticker']}','{fav_id}')">☆</span><a href="{barchart_url}" target="_blank">{r['ticker']}</a></td>
 <td>${r['price']:.2f} {r['sparkline']}</td>
 <td>{fmt_change(r['change_pct'], r['change_abs_day'])}</td>
@@ -436,42 +501,44 @@ td,th{{padding:8px}}
 <td>{fmt_change(r['change_ytd'], r['change_abs_ytd'])}</td>
 <td>{fmt_vol(r['volume'])}</td>
 <td>{ranges_html}</td>
-<td><span class="{rsi_cls}">{na(r['rsi'], '{:.1f}')}</span></td>
-<td><span class="{sent_cls}">{r['sentiment']}</span></td>
+<td>{indicators_html}</td>
+<td><span class="{sent_cls}">{r['sentiment']}</span><br><span class="{upside_cls}">Upside {na(r['upside_potential'], '{:+.1f}%')}</span></td>
 </tr>"""
     
     html += """</table></div>
 
 <div id="cardView">
-<div class="card-grid">
+<div class="card-grid" id="cardGrid">
 """
     
-    # Build card view
     for _, r in df.iterrows():
         bg_color = "rgba(0,170,0,0.1)" if r['change_pct'] > 0 else "rgba(204,0,0,0.1)"
+        macd_cls = "bullish" if r['macd_label'] == "Bullish" else "bearish"
+        opt_dir_cls = "bullish" if "Bullish" in r['options_direction'] else "bearish" if "Bearish" in r['options_direction'] else "neutral"
         barchart_url = f"https://www.barchart.com/stocks/quotes/{r['ticker']}"
-        html += f"""<div class="stock-card" style="background:{bg_color}">
+        impl_move_str = f" ±{r['implied_move_pct']:.1f}%" if r['implied_move_pct'] else ""
+        html += f"""<div class="stock-card stock-row" style="background:{bg_color}" data-ticker="{r['ticker']}" data-change="{r['change_pct']:.2f}" data-rsi="{r['rsi'] or 0}" data-vol="{r['volume_raw']}" data-meme="{r['is_meme_stock']}" data-squeeze="{r['squeeze_level']}">
 <h2><a href="{barchart_url}" target="_blank">{r['ticker']}</a> ${r['price']:.2f}</h2>
 <div style="font-size:1.5em;margin:10px 0">{fmt_change(r['change_pct'], r['change_abs_day'])}</div>
 <div>Volume: {fmt_vol(r['volume'])}</div>
-<div>RSI: {na(r['rsi'], '{:.1f}')}</div>
-<div>Sentiment: {r['sentiment']}</div>
+<div>MACD: <span class="{macd_cls}">{r['macd_label']}</span></div>
+<div>Opt Dir: <span class="{opt_dir_cls}">{r['options_direction']}</span>{impl_move_str}</div>
+<div>Sentiment: {r['sentiment']} ({na(r['upside_potential'], '{:+.1f}%')})</div>
 {r['sparkline']}
 </div>"""
     
     html += """</div></div>
 
 <div id="heatView">
-<div class="heat-grid">
+<div class="heat-grid" id="heatGrid">
 """
     
-    # Build heatmap
     for _, r in df.iterrows():
         ch = r['change_pct']
         intensity = min(abs(ch) / 15, 1)
         bg = f"rgba(0,170,0,{intensity})" if ch >= 0 else f"rgba(204,0,0,{intensity})"
         barchart_url = f"https://www.barchart.com/stocks/quotes/{r['ticker']}"
-        html += f"""<div class="heat-tile" style="background:{bg}" onclick="window.open('{barchart_url}', '_blank')">
+        html += f"""<div class="heat-tile stock-row" style="background:{bg}" onclick="window.open('{barchart_url}', '_blank')" data-ticker="{r['ticker']}" data-change="{r['change_pct']:.2f}" data-rsi="{r['rsi'] or 0}" data-vol="{r['volume_raw']}" data-meme="{r['is_meme_stock']}" data-squeeze="{r['squeeze_level']}">
 <strong>{r['ticker']}</strong>
 <div style="font-size:1.2em">{ch:+.1f}%</div>
 </div>"""
@@ -481,39 +548,28 @@ td,th{{padding:8px}}
 </div>
 
 <script>
-// LocalStorage for user preferences
+// Preferences
 const STORAGE_KEY = 'dashboard_prefs';
-
 function loadPrefs() {
     const prefs = localStorage.getItem(STORAGE_KEY);
     return prefs ? JSON.parse(prefs) : {theme: 'light', favorites: [], view: 'table'};
 }
-
 function savePrefs(prefs) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
 }
-
-// Initialize
 let prefs = loadPrefs();
 document.documentElement.setAttribute('data-theme', prefs.theme);
-
-// Load favorites
-prefs.favorites.forEach(ticker => {
-    const elem = document.getElementById('fav-' + ticker);
-    if (elem) {
-        elem.textContent = '★';
-        elem.classList.add('active');
-    }
+prefs.favorites.forEach(t => {
+    const e = document.getElementById('fav-' + t);
+    if (e) { e.textContent = '★'; e.classList.add('active'); }
 });
 
-// Theme toggle
 function toggleTheme() {
     prefs.theme = prefs.theme === 'light' ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', prefs.theme);
     savePrefs(prefs);
 }
 
-// Favorite toggle
 function toggleFav(ticker, elemId) {
     const elem = document.getElementById(elemId);
     const idx = prefs.favorites.indexOf(ticker);
@@ -529,118 +585,80 @@ function toggleFav(ticker, elemId) {
     savePrefs(prefs);
 }
 
-// View switching
 function setView(view) {
     document.getElementById('tableView').style.display = view === 'table' ? 'block' : 'none';
     document.getElementById('cardView').style.display = view === 'card' ? 'block' : 'none';
     document.getElementById('heatView').style.display = view === 'heat' ? 'block' : 'none';
-    
-    document.querySelectorAll('.view-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
     event.target.classList.add('active');
-    
     prefs.view = view;
     savePrefs(prefs);
+    applyCurrentFilter(); // Re-apply filter on view change
 }
 
-// Hours toggle
 function toggleHours(extended) {
-    const currentFile = window.location.pathname.split('/').pop();
     const newFile = extended ? 'extndED_dashboard.html' : 'regED_dashboard.html';
-    if (currentFile !== newFile) {
+    if (window.location.pathname.split('/').pop() !== newFile) {
         window.location.href = newFile;
     }
 }
 
-// Quick filters
-function quickFilter(type) {
-    const rows = document.querySelectorAll('#stockTable tr:not(:first-child)');
-    
+let currentFilter = 'all';
+function applyCurrentFilter() {
+    const rows = document.querySelectorAll('.stock-row');
     rows.forEach(row => {
         let show = true;
-        const change = parseFloat(row.dataset.change);
-        const rsi = parseFloat(row.dataset.rsi);
-        const vol = parseFloat(row.dataset.vol);
+        const change = parseFloat(row.dataset.change || 0);
+        const rsi = parseFloat(row.dataset.rsi || 50);
+        const vol = parseFloat(row.dataset.vol || 0);
         const meme = row.dataset.meme === 'True';
-        const squeeze = row.dataset.squeeze;
+        const squeeze = row.dataset.squeeze || 'None';
         
-        if (type === 'oversold') show = rsi < 30;
-        else if (type === 'overbought') show = rsi > 70;
-        else if (type === 'surge') show = change > 10;
-        else if (type === 'crash') show = change < -10;
-        else if (type === 'meme') show = meme;
-        else if (type === 'volume') show = vol > 1000000;
-        else if (type === 'squeeze') show = squeeze !== 'None';
-        else show = true;
+        if (currentFilter === 'oversold') show = rsi < 30;
+        else if (currentFilter === 'overbought') show = rsi > 70;
+        else if (currentFilter === 'surge') show = change > 10;
+        else if (currentFilter === 'crash') show = change < -10;
+        else if (currentFilter === 'meme') show = meme;
+        else if (currentFilter === 'volume') show = vol > 50000000; // adjusted threshold
+        else if (currentFilter === 'squeeze') show = squeeze !== 'None';
+        // 'all' => show = true
         
         row.style.display = show ? '' : 'none';
     });
-    
-    // Update chip active state
-    document.querySelectorAll('.chip').forEach(chip => chip.classList.remove('active'));
-    event.target.classList.add('active');
 }
 
-// Table sorting
+// Quick filter click
+document.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', function() {
+        document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+        this.classList.add('active');
+        currentFilter = this.dataset.filter;
+        applyCurrentFilter();
+    });
+});
+
+// Initial apply
+applyCurrentFilter();
+
+// Table sorting (unchanged)
 let sortDir = {};
 function sortTable(col) {
     const table = document.getElementById('stockTable');
     const rows = Array.from(table.querySelectorAll('tr:not(:first-child)'));
-    
-    sortDir[col] = !sortDir[col];
+    sortDir[col] = !sortDir[col] ?? true;
     const dir = sortDir[col] ? 1 : -1;
-    
     rows.sort((a, b) => {
         let aVal = a.cells[col].textContent.trim();
         let bVal = b.cells[col].textContent.trim();
-        
-        // Extract numbers from formatted text
         const aNum = parseFloat(aVal.replace(/[^0-9.-]/g, ''));
         const bNum = parseFloat(bVal.replace(/[^0-9.-]/g, ''));
-        
-        if (!isNaN(aNum) && !isNaN(bNum)) {
-            return (aNum - bNum) * dir;
-        }
+        if (!isNaN(aNum) && !isNaN(bNum)) return (aNum - bNum) * dir;
         return aVal.localeCompare(bVal) * dir;
     });
-    
     rows.forEach(row => table.appendChild(row));
 }
 
-// Keyboard shortcuts
-document.addEventListener('keydown', (e) => {
-    if (e.ctrlKey || e.metaKey) {
-        if (e.key === 'r') {
-            e.preventDefault();
-            location.reload();
-        } else if (e.key === 'd') {
-            e.preventDefault();
-            toggleTheme();
-        }
-    }
-});
-
-// Auto-refresh countdown (optional)
-let countdown = 300; // 5 minutes
-setInterval(() => {
-    countdown--;
-    if (countdown <= 0) {
-        location.reload();
-    }
-}, 1000);
-
-// Restore view on load
-if (prefs.view !== 'table') {
-    setTimeout(() => {
-        const viewBtns = document.querySelectorAll('.view-btn');
-        viewBtns.forEach((btn, idx) => {
-            if ((prefs.view === 'card' && idx === 1) || (prefs.view === 'heat' && idx === 2)) {
-                btn.click();
-            }
-        });
-    }, 100);
-}
-
-// Search functionality
+// Search
 function initSearch() {
     const searchBar = document.createElement('input');
     searchBar.type = 'text';
@@ -648,21 +666,22 @@ function initSearch() {
     searchBar.style.cssText = 'padding:10px;border-radius:8px;border:2px solid var(--border);width:250px;margin-right:15px';
     searchBar.addEventListener('input', (e) => {
         const term = e.target.value.toLowerCase();
-        document.querySelectorAll('#stockTable tr:not(:first-child)').forEach(row => {
+        document.querySelectorAll('.stock-row').forEach(row => {
             const ticker = row.dataset.ticker.toLowerCase();
-            row.style.display = ticker.includes(term) ? '' : 'none';
+            const showBySearch = ticker.includes(term);
+            row.style.display = (showBySearch && row.style.display !== 'none') ? '' : 'none';
         });
     });
     document.querySelector('.top-bar > div:last-child').prepend(searchBar);
 }
 initSearch();
 
-// Add tooltips
-document.querySelectorAll('td').forEach(td => {
-    td.title = td.textContent.trim();
-});
+// Restore view
+if (prefs.view !== 'table') {
+    setTimeout(() => document.querySelectorAll('.view-btn')[prefs.view === 'card' ? 1 : 2].click(), 100);
+}
 
-console.log('Enhanced Dashboard loaded. Keyboard shortcuts: Ctrl+R (refresh), Ctrl+D (theme)');
+console.log('Enhanced Dashboard loaded.');
 </script>
 </body></html>"""
     
