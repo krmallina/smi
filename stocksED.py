@@ -241,6 +241,20 @@ def fmt_change(p, a=None):
     abs_str = f' ({a:+.2f})' if a is not None else ''
     return f'<span class="{cls}" data-sort="{p:.10f}">{sign} {p:+.2f}%{abs_str}</span>'
 
+def get_index_data(symbol):
+    try:
+        t = yf.Ticker(symbol)
+        info = t.info
+        price = info.get('regularMarketPrice') or info.get('previousClose')
+        ch_pct = info.get('regularMarketChangePercent')
+        if ch_pct is None:
+            prev = info.get('regularMarketPreviousClose') or info.get('previousClose')
+            if price and prev and prev > 0:
+                ch_pct = ((price - prev) / prev) * 100
+        return {'price': price, 'change_pct': ch_pct}
+    except:
+        return {'price': None, 'change_pct': None}
+
 def dashboard(csv='data/tickers.csv', ext=False):
     os.makedirs('data', exist_ok=True)
     try:
@@ -257,17 +271,7 @@ def dashboard(csv='data/tickers.csv', ext=False):
     return pd.DataFrame(data).sort_values('change_pct', ascending=False)
 
 def get_vix_data():
-    try:
-        info = yf.Ticker("^VIX").info
-        p = info.get('regularMarketPrice') or info.get('previousClose')
-        ch_pct = info.get('regularMarketChangePercent')
-        if ch_pct is None:
-            pc = info.get('regularMarketPreviousClose') or info.get('previousClose')
-            if p and pc and pc > 0:
-                ch_pct = ((p - pc) / pc) * 100
-        return {'price': p, 'change_pct': ch_pct}
-    except:
-        return {'price': None, 'change_pct': None}
+    return get_index_data("^VIX")
 
 def get_fear_greed_data():
     try:
@@ -299,8 +303,18 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
     
     banner = '<div class="alert-banner">🚨 <strong>ALERTS</strong> ' + " | ".join(alerts['grouped']) + '</div>' if alerts['grouped'] else ""
     
-    vix_cls = "positive" if vix['change_pct'] is not None and vix['change_pct'] >= 0 else "negative" if vix['change_pct'] is not None and vix['change_pct'] < 0 else "neutral"
-    vix_h = f'<span class="{vix_cls}">VIX: {na(vix["price"])} ({na(vix["change_pct"], "{:+.2f}%")})</span>' if vix['price'] is not None else '<span class="neutral">VIX: N/A</span>'
+    # Major indices
+    dow = get_index_data("^DJI")
+    sp = get_index_data("^GSPC")
+    nas = get_index_data("^IXIC")
+    
+    def index_str(data, name):
+        if data['price'] is None:
+            return f'<span class="neutral">{name}: N/A</span>'
+        cls = "positive" if data['change_pct'] >= 0 else "negative"
+        return f'<span class="{cls}">{name}: {na(data["price"])} ({na(data["change_pct"], "{:+.2f}%")})</span>'
+    
+    indices_h = f"{index_str(dow, 'Dow')} {index_str(sp, 'S&P')} {index_str(nas, 'Nasdaq')} {index_str(vix, 'VIX')}"
     
     if fg['raw_score'] is not None:
         if fg['raw_score'] <= 24: fg_cls = "extreme-fear"
@@ -376,7 +390,7 @@ input:checked + .toggle-slider:before{{transform:translateX(26px)}}
 <div class="top-bar">
 <div><h1>📊 Enhanced Dashboard</h1><small>{update}</small></div>
 <div style="display:flex;gap:15px;flex-wrap:wrap;align-items:center">
-<span>{vix_h}</span><span>{fg_h}</span><span>{aaii_h}</span>
+<span>{indices_h}</span><span>{fg_h}</span><span>{aaii_h}</span>
 <div class="hours-toggle">
 <span>Regular</span>
 <label class="toggle-switch">
@@ -439,7 +453,7 @@ input:checked + .toggle-slider:before{{transform:translateX(26px)}}
         bb_bar = ""
         if r['bb_position_pct'] is not None:
             pos = r['bb_position_pct']
-            bb_color = f"linear-gradient(to right, var(--neg) 0%, var(--neg) {pos}%, var(--pos) {pos}%, var(--pos) 100%)"
+            bb_color = f"linear-gradient(to right, var(--pos) 0%, var(--pos) {pos}%, var(--neg) {pos}%, var(--neg) 100%)"
             bb_bar = f'<div class="range-container"><div class="range-title">Bollinger Bands</div><div class="range-bar" style="background:{bb_color}"><div class="range-bar-marker" style="left:{pos}%"></div></div><div class="range-labels"><span>${na(r["bb_lower"])}</span><span>${na(r["bb_middle"])}</span><span>${na(r["bb_upper"])}</span></div><div style="font-size:0.75em;text-align:center">Width: {na(r["bb_width_pct"],"{:.1f}")}% – {r["bb_status"]}</div></div>'
         
         impl_bar = ""
