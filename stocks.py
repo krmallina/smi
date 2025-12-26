@@ -95,7 +95,7 @@ def check_alerts(data):
     if low_52w: grouped.append(format_group(low_52w, "📉", "Near 52W Low"))
     if surge: grouped.append(format_group(surge, "🚀", "Surge >15%"))
     if crash: grouped.append(format_group(crash, "💥", "Crash <-15%"))
-    if volume_spike: grouped.append(format_group(volume_spike, "📈", "Volume Spike"))
+    if volume_spike: grouped.append(format_group(volume_spike, "📈", "Volume Spike"))  # FIXED: Now displayed in banner
     if custom:
         details = "<br>".join(f"{a['ticker']}: {a['msg']}" for a in custom)
         grouped.append(f"⚡ <strong>Custom Alerts:</strong> {len(custom)} triggered<div class='alert-tooltip'>{details}</div>")
