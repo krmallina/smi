@@ -247,13 +247,18 @@ def get_index_data(symbol):
         info = t.info
         price = info.get('regularMarketPrice') or info.get('previousClose')
         ch_pct = info.get('regularMarketChangePercent')
-        if ch_pct is None:
-            prev = info.get('regularMarketPreviousClose') or info.get('previousClose')
-            if price and prev and prev > 0:
-                ch_pct = ((price - prev) / prev) * 100
-        return {'price': price, 'change_pct': ch_pct}
+        prev = info.get('regularMarketPreviousClose') or info.get('previousClose')
+        ch_abs = None
+        if price is not None and prev is not None:
+            try:
+                ch_abs = price - prev
+            except Exception:
+                ch_abs = None
+        if ch_pct is None and price is not None and prev is not None and prev > 0:
+            ch_pct = ((price - prev) / prev) * 100
+        return {'price': price, 'change_pct': ch_pct, 'change_abs': ch_abs}
     except:
-        return {'price': None, 'change_pct': None}
+        return {'price': None, 'change_pct': None, 'change_abs': None}
 
 def dashboard(csv='data/tickers.csv', ext=False):
     os.makedirs('data', exist_ok=True)
@@ -284,26 +289,52 @@ def get_vix_data():
 
 def get_fear_greed_data():
     try:
-        r = requests.get("https://production.dataviz.cnn.io/index/fearandgreed/graphdata",
-                         headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
-        if r.status_code == 200:
+        # Try date-specific endpoint first (more reliable)
+        today = datetime.now().strftime('%Y-%m-%d')
+        url = f"https://production.dataviz.cnn.io/index/fearandgreed/graphdata/{today}"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'Referer': 'https://www.cnn.com/markets/fear-and-greed'
+        }
+        r = requests.get(url, headers=headers, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        fg = data.get('fear_and_greed') or data
+        score = float(fg['score'])
+        s = int(round(score))
+        rating = ("Extreme Fear", "Fear", "Neutral", "Greed", "Extreme Greed")[
+            0 if s <= 24 else 1 if s <= 44 else 2 if s <= 55 else 3 if s <= 74 else 4
+        ]
+        return {'score': score, 'rating': rating, 'raw_score': s}
+    except Exception:
+        try:
+            # Fallback to generic endpoint
+            r = requests.get("https://production.dataviz.cnn.io/index/fearandgreed/graphdata",
+                             headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+            r.raise_for_status()
             data = r.json()
             score = float(data['fear_and_greed']['score'])
             s = int(round(score))
-            rating = ("Extreme Fear", "Fear", "Neutral", "Greed", "Extreme Greed")[0 if s <= 24 else 1 if s <= 44 else 2 if s <= 55 else 3 if s <= 74 else 4]
+            rating = ("Extreme Fear", "Fear", "Neutral", "Greed", "Extreme Greed")[
+                0 if s <= 24 else 1 if s <= 44 else 2 if s <= 55 else 3 if s <= 74 else 4
+            ]
             return {'score': score, 'rating': rating, 'raw_score': s}
-    except Exception as e:
-        print(f"F&G error: {e}")
+        except Exception as e:
+            print(f"F&G error: {e}")
     return {'score': None, 'rating': "N/A", 'raw_score': None}
 
 def get_aaii_sentiment():
     try:
         r = requests.get("https://www.aaii.com/sentimentsurvey/sent_results", headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
-        m = re.search(r'Bullish.*?([\d\.]+)%.*?Bearish.*?([\d\.]+)%', r.text, re.DOTALL)
+        # Try a couple of regex patterns to extract Bullish / Bearish percentages
+        m = re.search(r'\w+\s*\d{1,2}.*?([\d\.]+)%.*?([\d\.]+)%', r.text)
+        if not m:
+            m = re.search(r'Bullish.*?([\d\.]+)%.*?Bearish.*?([\d\.]+)%', r.text, re.DOTALL)
         if m:
             b, be = float(m.group(1)), float(m.group(2))
             return {'bullish': b, 'bearish': be, 'spread': b - be}
-    except: pass
+    except Exception as e:
+        print(f"AAII fetch error: {e}")
     return {'bullish': None, 'bearish': None, 'spread': None}
 
 def html(df, vix, fg, aaii, file, ext=False, alerts=None):
@@ -320,27 +351,22 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
     def index_str(data, name):
         if data['price'] is None:
             return f'<span class="neutral">{name}: N/A</span>'
-        cls = "positive" if data['change_pct'] >= 0 else "negative"
-        return f'<span class="{cls}">{name}: {na(data["price"])} ({na(data["change_pct"], "{:+.2f}%")})</span>'
+        ch_abs = data.get('change_abs')
+        cls = "positive" if ch_abs is not None and ch_abs >= 0 else "negative"
+        return f'<span class="{cls}">{name}: {na(data["price"])} ({na(ch_abs, "{:+.2f}")})</span>'
     
     indices_h = f"{index_str(dow, 'Dow')} {index_str(sp, 'S&P')} {index_str(nas, 'Nasdaq')} {index_str(vix, 'VIX')}"
     
-    if fg['raw_score'] is not None:
-        if fg['raw_score'] <= 24: fg_cls = "extreme-fear"
-        elif fg['raw_score'] <= 44: fg_cls = "fear"
-        elif fg['raw_score'] <= 55: fg_cls = "neutral"
-        elif fg['raw_score'] <= 74: fg_cls = "greed"
-        else: fg_cls = "extreme-greed"
-        fg_h = f'<span class="{fg_cls}">F&G: {fg["score"]:.1f} ({fg["rating"]})</span>'
-    else:
-        fg_h = '<span class="neutral">F&G: N/A</span>'
+    fg_h = '<span class="neutral">F&G: N/A</span>'
+    if fg.get('score') is not None:
+        cls = "negative" if fg['score'] <= 24 else "high-risk" if fg['score'] <= 44 else "neutral" if fg['score'] <= 55 else "bullish" if fg['score'] <= 74 else "positive"
+        fg_h = f'<span class="{cls}">F&G: {fg["score"]:.1f} ({fg["rating"]})</span>'
     
-    if aaii['spread'] is not None:
+    aaii_h = '<span class="neutral">AAII: N/A</span>'
+    if aaii.get('bullish') is not None:
         spread = aaii['spread']
-        aaii_cls = "strong-bull" if spread > 20 else "bull" if spread > 0 else "neutral" if spread > -20 else "bear" if spread > -40 else "strong-bear"
-        aaii_h = f'<span class="{aaii_cls}">AAII: Bull {na(aaii["bullish"], "{:.1f}%")} / Bear {na(aaii["bearish"], "{:.1f}%")}</span>'
-    else:
-        aaii_h = '<span class="neutral">AAII: N/A</span>'
+        cls = "positive" if spread > 20 else "bullish" if spread > 0 else "neutral" if spread > -20 else "high-risk" if spread > -40 else "negative"
+        aaii_h = f'<span class="{cls}">AAII: Bull {aaii["bullish"]:.1f}% Bear {aaii["bearish"]:.1f}%</span>'
     
     html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Enhanced Dashboard</title>
 <meta name="viewport" content="width=device-width,initial-scale=1"><style>
@@ -461,10 +487,15 @@ input:checked + .toggle-slider:before{{transform:translateX(26px)}}
         upside_cls = "bullish" if r['upside_potential'] and r['upside_potential'] > 0 else "bearish" if r['upside_potential'] and r['upside_potential'] < 0 else "neutral"
         
         bb_bar = ""
-        if r['bb_position_pct'] is not None:
-            pos = r['bb_position_pct']
-            bb_color = f"linear-gradient(to right, var(--pos) 0%, var(--pos) {pos}%, var(--neg) {pos}%, var(--neg) 100%)"
-            bb_bar = f'<div class="range-container"><div class="range-title">Bollinger Bands</div><div class="range-bar" style="background:{bb_color}"><div class="range-bar-marker" style="left:{pos}%"></div></div><div class="range-labels"><span>${na(r["bb_lower"])}</span><span>${na(r["bb_middle"])}</span><span>${na(r["bb_upper"])}</span></div><div style="font-size:0.75em;text-align:center">Width: {na(r["bb_width_pct"],"{:.1f}")}% – {r["bb_status"]}</div></div>'
+        # Only render Bollinger Bands bar when BB values are present and numeric
+        if pd.notna(r.get('bb_position_pct')) and pd.notna(r.get('bb_lower')) and pd.notna(r.get('bb_middle')) and pd.notna(r.get('bb_upper')):
+            try:
+                pos = float(r['bb_position_pct'])
+                pos = max(0.0, min(100.0, pos))
+                bb_color = f"linear-gradient(to right, var(--pos) 0%, var(--pos) {pos}%, var(--neg) {pos}%, var(--neg) 100%)"
+                bb_bar = f'<div class="range-container"><div class="range-title">Bollinger Bands</div><div class="range-bar" style="background:{bb_color}"><div class="range-bar-marker" style="left:{pos}%"></div></div><div class="range-labels"><span>${na(r["bb_lower"])}</span><span>${na(r["bb_middle"])}</span><span>${na(r["bb_upper"])}</span></div><div style="font-size:0.75em;text-align:center">Width: {na(r["bb_width_pct"],"{:.1f}")}% – {r["bb_status"]}</div></div>'
+            except Exception:
+                bb_bar = ""
         
         impl_bar = ""
         # Only render implied-move chart when values are present and numeric (avoid NaN%)
@@ -505,7 +536,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 <span class="{bias_cls}">Bias: {'Down' if r['down_volume_bias'] else 'Up'}</span>'''
         
         html += f'''<tr class="stock-row" data-ticker="{r['ticker']}" data-change="{r['change_pct']}" data-rsi="{r['rsi'] or 50}" data-vol="{r['volume_raw']}" data-meme="{r['is_meme_stock']}" data-squeeze="{r['squeeze_level']}" data-bb-width="{bb_width_val}">
-<td><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a></td>
+    <td><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a> <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.9em;margin-left:6px">(FZ)</a></td>
 <td data-sort="{r['price']:.2f}">${r['price']:.2f} {r['sparkline']}</td>
 <td>{fmt_change(r['change_pct'], r['change_abs_day'])}</td>
 <td>{fmt_change(r['change_1m'], r['change_abs_1m'])}</td>
@@ -526,14 +557,14 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         hv_str = na(hv, '{:.1f}%')
 
         html += f'''<div class="stock-card stock-row" style="background:{bg}" 
-        data-ticker="{r['ticker']}" 
-        data-change="{r['change_pct']}" 
-        data-rsi="{r['rsi'] or 50}" 
-        data-vol="{r['volume_raw']}" 
-        data-meme="{r['is_meme_stock']}" 
-        data-squeeze="{r['squeeze_level']}" 
-        data-bb-width="{bb_width_val}">
-<h2><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a> ${r['price']:.2f}</h2>
+            data-ticker="{r['ticker']}" 
+            data-change="{r['change_pct']}" 
+            data-rsi="{r['rsi'] or 50}" 
+            data-vol="{r['volume_raw']}" 
+            data-meme="{r['is_meme_stock']}" 
+            data-squeeze="{r['squeeze_level']}" 
+            data-bb-width="{bb_width_val}">
+    <h2><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a> <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.8em;margin-left:6px">(FZ)</a> ${r['price']:.2f}</h2>
 <div style="font-size:1.5em">{fmt_change(r['change_pct'], r['change_abs_day'])}</div>
 <div>1M: {fmt_change(r['change_1m'], r['change_abs_1m'])}</div>
 <div>6M: {fmt_change(r['change_6m'], r['change_abs_6m'])}</div>
@@ -557,7 +588,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         data-meme="{r['is_meme_stock']}" 
         data-squeeze="{r['squeeze_level']}" 
         data-bb-width="{bb_width_val}">
-<strong>{r['ticker']}</strong>
+    <strong><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a> <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.85em;margin-left:6px">(FZ)</a></strong>
 <div>{r['change_pct']:+.1f}%</div>
 </div>'''
     
