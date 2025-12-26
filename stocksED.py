@@ -258,8 +258,17 @@ def get_index_data(symbol):
 def dashboard(csv='data/tickers.csv', ext=False):
     os.makedirs('data', exist_ok=True)
     try:
-        tickers = pd.unique(pd.read_csv(csv).iloc[:,0]).tolist()
-    except:
+        # Support single-line CSV (comma-separated) or multi-line (one ticker per line).
+        with open(csv, 'r', encoding='utf-8') as f:
+            txt = f.read()
+        txt = txt.replace('\r\n', '\n').replace('\r', '\n')
+        parts = re.split(r'[\n,]+', txt.strip())
+        parts = [p.strip().upper() for p in parts if p and p.strip()]
+        # Drop header if present
+        if parts and parts[0].lower() in ('ticker', 'tickers'):
+            parts = parts[1:]
+        tickers = pd.Series(parts).unique().tolist()
+    except Exception:
         tickers = ['AAPL','MSFT','GOOGL','AMZN','NVDA','TSLA','META','SPY']
     
     data = []
@@ -399,8 +408,8 @@ input:checked + .toggle-slider:before{{transform:translateX(26px)}}
 </label>
 <span>Extended</span>
 </div>
-<button class="btn" onclick="toggleTheme()">🌓</button>
-<button class="btn" onclick="location.reload()">🔄</button>
+    <button class="btn" onclick="toggleTheme()">🌓</button>
+    <button class="btn" onclick="location.reload()">🔄</button>
 </div>
 </div>
 
@@ -420,6 +429,7 @@ input:checked + .toggle-slider:before{{transform:translateX(26px)}}
 <button class="view-btn active" onclick="setView(this,'table')">📋 Table</button>
 <button class="view-btn" onclick="setView(this,'card')">🗂️ Cards</button>
 <button class="view-btn" onclick="setView(this,'heat')">🔥 Heatmap</button>
+<input id="tickerFilter" placeholder="Filter tickers..." oninput="applyFilter()" style="padding:8px;border-radius:6px;border:1px solid var(--border);margin-left:12px;min-width:160px">
 </div>
 
 <div id="tableView">
@@ -432,7 +442,7 @@ input:checked + .toggle-slider:before{{transform:translateX(26px)}}
 <th data-sort="change_6m">6M %</th>
 <th data-sort="change_ytd">YTD %</th>
 <th data-sort="volume_raw">VOLUME</th>
-<th>RANGES & BB</th>
+<th>RANGES</th>
 <th>INDICATORS</th>
 <th>SENTIMENT</th>
 </tr>
@@ -457,20 +467,36 @@ input:checked + .toggle-slider:before{{transform:translateX(26px)}}
             bb_bar = f'<div class="range-container"><div class="range-title">Bollinger Bands</div><div class="range-bar" style="background:{bb_color}"><div class="range-bar-marker" style="left:{pos}%"></div></div><div class="range-labels"><span>${na(r["bb_lower"])}</span><span>${na(r["bb_middle"])}</span><span>${na(r["bb_upper"])}</span></div><div style="font-size:0.75em;text-align:center">Width: {na(r["bb_width_pct"],"{:.1f}")}% – {r["bb_status"]}</div></div>'
         
         impl_bar = ""
-        if r['implied_move_pct']:
-            pos_i = 50 + r['implied_move_pct']/2
-            i_color = f"linear-gradient(to right, var(--neg) 0%, var(--neg) {50-r['implied_move_pct']/2}%, var(--pos) {50+r['implied_move_pct']/2}%, var(--pos) 100%)"
-            impl_bar = f'<div class="range-container"><div class="range-title">Implied Move ±{r["implied_move_pct"]:.1f}%</div><div class="range-bar" style="background:{i_color}"><div class="range-bar-marker" style="left:50%"></div></div><div class="range-labels"><span>${na(r["implied_low"])}</span><span>${na(r["implied_high"])}</span></div></div>'
+        # Only render implied-move chart when values are present and numeric (avoid NaN%)
+        if pd.notna(r.get('implied_move_pct')) and pd.notna(r.get('implied_low')) and pd.notna(r.get('implied_high')):
+            try:
+                im_pct = float(r['implied_move_pct'])
+                if im_pct > 0:
+                    left_pct = 50 - im_pct/2
+                    right_pct = 50 + im_pct/2
+                    i_color = f"linear-gradient(to right, var(--neg) 0%, var(--neg) {left_pct}%, var(--pos) {right_pct}%, var(--pos) 100%)"
+                    impl_bar = f'<div class="range-container"><div class="range-title">Implied Move ±{im_pct:.1f}%</div><div class="range-bar" style="background:{i_color}"><div class="range-bar-marker" style="left:50%"></div></div><div class="range-labels"><span>${na(r["implied_low"])}</span><span>${na(r["implied_high"])}</span></div></div>'
+            except Exception:
+                impl_bar = ""
         
-        day_pos = ((r['price'] - r['day_low']) / (r['day_high'] - r['day_low']) * 100) if (r['day_high'] - r['day_low']) > 0 else 50
-        day_color = f"linear-gradient(to right, var(--pos) 0%, var(--pos) {day_pos}%, var(--neg) {day_pos}%, var(--neg) 100%)"
-        y52_pos = ((r['price'] - r['52w_low']) / (r['52w_high'] - r['52w_low']) * 100) if (r['52w_high'] - r['52w_low']) > 0 else 50
-        y52_color = f"linear-gradient(to right, var(--pos) 0%, var(--pos) {y52_pos}%, var(--neg) {y52_pos}%, var(--neg) 100%)"
-        
-        ranges_html = f'''
-<div class="range-container"><div class="range-title">Day</div><div class="range-bar" style="background:{day_color}"><div class="range-bar-marker" style="left:{day_pos}%"></div></div><div class="range-labels"><span>${r['day_low']:.2f}</span><span>${r['day_high']:.2f}</span></div></div>
-<div class="range-container"><div class="range-title">52W</div><div class="range-bar" style="background:{y52_color}"><div class="range-bar-marker" style="left:{y52_pos}%"></div></div><div class="range-labels"><span>${r['52w_low']:.2f}</span><span>${r['52w_high']:.2f}</span></div></div>
-{bb_bar}{impl_bar}'''
+        # Only render range charts when values are present and valid (avoid NaN% rendering)
+        day_block = ''
+        if pd.notna(r.get('day_low')) and pd.notna(r.get('day_high')) and r['day_high'] is not None and r['day_low'] is not None and (r['day_high'] - r['day_low']) > 0:
+            day_pos = ((r['price'] - r['day_low']) / (r['day_high'] - r['day_low']) * 100)
+            day_color = f"linear-gradient(to right, var(--pos) 0%, var(--pos) {day_pos}%, var(--neg) {day_pos}%, var(--neg) 100%)"
+            day_block = f"""
+    <div class="range-container"><div class="range-title">Day</div><div class="range-bar" style="background:{day_color}"><div class="range-bar-marker" style="left:{day_pos}%"></div></div><div class="range-labels"><span>${r['day_low']:.2f}</span><span>${r['day_high']:.2f}</span></div></div>
+    """
+
+        y52_block = ''
+        if pd.notna(r.get('52w_low')) and pd.notna(r.get('52w_high')) and r['52w_high'] is not None and r['52w_low'] is not None and (r['52w_high'] - r['52w_low']) > 0:
+            y52_pos = ((r['price'] - r['52w_low']) / (r['52w_high'] - r['52w_low']) * 100)
+            y52_color = f"linear-gradient(to right, var(--pos) 0%, var(--pos) {y52_pos}%, var(--neg) {y52_pos}%, var(--neg) 100%)"
+            y52_block = f"""
+    <div class="range-container"><div class="range-title">52W</div><div class="range-bar" style="background:{y52_color}"><div class="range-bar-marker" style="left:{y52_pos}%"></div></div><div class="range-labels"><span>${r['52w_low']:.2f}</span><span>${r['52w_high']:.2f}</span></div></div>
+    """
+
+        ranges_html = f"{day_block}{y52_block}{bb_bar}{impl_bar}"
         
         indicators_html = f'''<span class="{macd_cls}">MACD: {r['macd_label']}</span><br>
 Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<br>
@@ -563,6 +589,7 @@ function toggleHours(extended) {
 let currentFilter = 'all';
 function applyFilter() {
     const rows = document.querySelectorAll('.stock-row');
+    const tickerVal = (document.getElementById('tickerFilter') && document.getElementById('tickerFilter').value) ? document.getElementById('tickerFilter').value.trim().toLowerCase() : '';
     rows.forEach(r => {
         let show = true;
         const ch = parseFloat(r.dataset.change || 0);
@@ -579,6 +606,10 @@ function applyFilter() {
         else if (currentFilter === 'volume') show = vol > 5e7;
         else if (currentFilter === 'squeeze') show = sq !== 'None';
         else if (currentFilter === 'bb-squeeze') show = bbw < 6;
+        if (tickerVal) {
+            const tk = (r.dataset.ticker || '').toString().toLowerCase();
+            show = show && tk.includes(tickerVal);
+        }
         r.style.display = show ? '' : 'none';
     });
 }
