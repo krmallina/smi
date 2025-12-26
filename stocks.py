@@ -204,6 +204,24 @@ def fetch(ticker, ext=False):
                 bb_position_pct = max(0, min(100, bb_position_pct))
             bb_status = "Above Upper" if price > bb_upper else "Below Lower" if price < bb_lower else "Inside"
         
+        # Normalize dividend yield to percent if provided as fraction (e.g., 0.017 -> 1.7)
+        div_rate = info.get('dividendRate')
+        div_yield = info.get('dividendYield')
+        try:
+            if div_yield is not None:
+                dy = float(div_yield)
+                if dy < 1.0:
+                    dy = dy * 100.0
+                div_yield = dy
+        except Exception:
+            div_yield = div_yield
+
+        # Price/Earnings (prefer trailing PE)
+        pe = info.get('trailingPE') or info.get('forwardPE')
+
+        # Market Cap
+        market_cap = info.get('marketCap')
+
         time.sleep(1.5)
         tu = ticker.upper()
         return {
@@ -222,6 +240,11 @@ def fetch(ticker, ext=False):
             'bb_upper': bb_upper, 'bb_lower': bb_lower, 'bb_middle': bb_middle,
             'bb_width_pct': bb_width_pct, 'bb_position_pct': bb_position_pct, 'bb_status': bb_status,
             'hv_30_annualized': hv,
+            'macd_line': macd_val, 'macd_signal': macd_sig, 'macd_label': macd_lbl,
+            'pc_ratio': pc_ratio,
+            'pe': pe,
+            'dividend_rate': div_rate, 'dividend_yield': div_yield,
+            'market_cap': market_cap,
         }
     except Exception as e:
         print(f"Error {ticker}: {e}")
@@ -233,6 +256,21 @@ def fmt_vol(v):
     if v >= 1e9: return f"{v/1e9:.1f}B"
     if v >= 1e6: return f"{v/1e6:.1f}M"
     if v >= 1e3: return f"{v/1e3:.1f}K"
+    return str(int(v))
+
+def fmt_mcap(v):
+    if v is None or pd.isna(v):
+        return "N/A"
+    try:
+        v = float(v)
+    except Exception:
+        return str(v)
+    if v >= 1e12:
+        return f"{v/1e12:.2f}T"
+    if v >= 1e9:
+        return f"{v/1e9:.2f}B"
+    if v >= 1e6:
+        return f"{v/1e6:.2f}M"
     return str(int(v))
 
 def fmt_change(p, a=None):
@@ -555,6 +593,42 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         hv = r['hv_30_annualized']
         hv_cls = "vol-hot" if hv and hv > 50 else "neutral"
         hv_str = na(hv, '{:.1f}%')
+        # Color coding for card attributes
+        macd_num_cls = "neutral"
+        try:
+            ml = r.get('macd_line')
+            macd_num_cls = "positive" if ml is not None and float(ml) >= 0 else "negative" if ml is not None else "neutral"
+        except Exception:
+            macd_num_cls = "neutral"
+
+        pc_val = r.get('pc_ratio')
+        if pc_val is None:
+            pc_cls = 'neutral'
+        else:
+            try:
+                pv = float(pc_val)
+                pc_cls = 'negative' if pv > 1.2 else 'positive' if pv < 0.8 else 'neutral'
+            except Exception:
+                pc_cls = 'neutral'
+
+        pe_val = r.get('pe')
+        if pe_val is None:
+            pe_cls = 'neutral'
+        else:
+            try:
+                pv = float(pe_val)
+                pe_cls = 'negative' if pv > 30 else 'positive' if pv < 15 else 'neutral'
+            except Exception:
+                pe_cls = 'neutral'
+
+        div_val = r.get('dividend_yield')
+        div_cls = 'positive' if div_val is not None and div_val > 0 else 'neutral'
+
+        mcap_val = r.get('market_cap')
+        try:
+            mcap_cls = 'strong-bull' if mcap_val is not None and float(mcap_val) >= 200e9 else 'bull' if mcap_val is not None and float(mcap_val) >= 10e9 else 'neutral'
+        except Exception:
+            mcap_cls = 'neutral'
 
         html += f'''<div class="stock-card stock-row" style="background:{bg}" 
             data-ticker="{r['ticker']}" 
@@ -571,6 +645,11 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 <div>YTD: {fmt_change(r['change_ytd'], r['change_abs_ytd'])}</div>
 <div><span class="{hv_cls}">Volatility: {hv_str}</span></div>
 <div>BB: {r['bb_status']} ({na(r['bb_width_pct'], '{:.1f}%')})</div>
+<div>MACD: <span class="{macd_num_cls}">{na(r.get('macd_line'), '{:+.3f}')}</span> | <span class="{macd_num_cls}">{na(r.get('macd_signal'), '{:+.3f}')}</span> (<span class="{ 'bullish' if r.get('macd_label')=='Bullish' else 'bearish' if r.get('macd_label')=='Bearish' else 'neutral' }">{r.get('macd_label','N/A')}</span>)</div>
+<div>P/C Vol Ratio: <span class="{pc_cls}">{na(r.get('pc_ratio'), '{:.2f}')}</span></div>
+<div>P/E: <span class="{pe_cls}">{na(r.get('pe'), '{:.2f}')}</span></div>
+<div>Div: <span class="{div_cls}">{na(r.get('dividend_rate'), '${:.2f}')}</span> (<span class="{div_cls}">{na(r.get('dividend_yield'), '{:.1f}%')}</span>)</div>
+<div>Market Cap: <span class="{mcap_cls}">{fmt_mcap(r.get('market_cap'))}</span></div>
 {r['sparkline']}
 </div>'''
     
