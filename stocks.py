@@ -21,7 +21,7 @@ MEME_STOCKS = frozenset({'GME','AMC','BB','KOSS','EXPR','DJT','HOOD','RDDT','SPC
 def load_alerts():
     try:
         with open(ALERTS_FILE) as f:
-            return tuple(json.load(f))  # Tuple for hashability
+            return tuple(json.load(f))
     except:
         return ()
 
@@ -34,12 +34,14 @@ def check_alerts(data):
     surge = []
     crash = []
     volume_spike = []
+    bb_squeeze = []
+    bb_breakout_up = []
+    bb_breakout_down = []
     custom = []
 
-    # Pre-create dict for faster lookups
     stock_dict = {x['ticker']: x for x in data}
 
-    # Custom user alerts
+    # Custom alerts
     for a in custom_alerts:
         s = stock_dict.get(a['ticker'].upper())
         if not s: continue
@@ -65,7 +67,7 @@ def check_alerts(data):
         if msg:
             custom.append({'ticker': s['ticker'], 'msg': msg})
 
-    # Built-in alerts - single pass
+    # Built-in alerts
     for s in data:
         ch = s['change_pct']
         if ch > 15:
@@ -76,6 +78,15 @@ def check_alerts(data):
         if s['volume_spike']:
             volume_spike.append({'ticker': s['ticker'], 'msg': "VOLUME SPIKE (>1.5x 30-day avg)"})
 
+        if s['bb_squeeze']:
+            bb_squeeze.append({'ticker': s['ticker'], 'msg': f"BB SQUEEZE → Bandwidth {s['bb_width']:.2f}%"})
+
+        if s['bb_percent_b'] is not None:
+            if s['bb_percent_b'] > 1.0:
+                bb_breakout_up.append({'ticker': s['ticker'], 'msg': f"BB BREAKOUT UP → %b {s['bb_percent_b']:.2f}"})
+            elif s['bb_percent_b'] < 0.0:
+                bb_breakout_down.append({'ticker': s['ticker'], 'msg': f"BB BREAKOUT DOWN → %b {s['bb_percent_b']:.2f}"})
+
         range_52w = s['52w_high'] - s['52w_low']
         if range_52w > 0:
             pos_pct = (s['price'] - s['52w_low']) / range_52w * 100
@@ -84,7 +95,6 @@ def check_alerts(data):
             elif pos_pct <= 5:
                 low_52w.append({'ticker': s['ticker'], 'msg': f"NEAR 52W LOW ({pos_pct:.1f}%) @ ${s['price']:.2f} (Low: ${s['52w_low']:.2f})"})
 
-    # Build grouped display lines
     def format_group(items, emoji, label):
         tickers = ", ".join(a['ticker'] for a in items)
         details = "<br>".join(f"{a['ticker']}: {a['msg']}" for a in items)
@@ -95,7 +105,10 @@ def check_alerts(data):
     if low_52w: grouped.append(format_group(low_52w, "📉", "Near 52W Low"))
     if surge: grouped.append(format_group(surge, "🚀", "Surge >15%"))
     if crash: grouped.append(format_group(crash, "💥", "Crash <-15%"))
-    if volume_spike: grouped.append(format_group(volume_spike, "📈", "Volume Spike"))  # FIXED: Now displayed in banner
+    if volume_spike: grouped.append(format_group(volume_spike, "📈", "Volume Spike"))
+    if bb_squeeze: grouped.append(format_group(bb_squeeze, "🗜️", "Bollinger Squeeze"))
+    if bb_breakout_up: grouped.append(format_group(bb_breakout_up, "🚀", "BB Breakout UP"))
+    if bb_breakout_down: grouped.append(format_group(bb_breakout_down, "💥", "BB Breakout DOWN"))
     if custom:
         details = "<br>".join(f"{a['ticker']}: {a['msg']}" for a in custom)
         grouped.append(f"⚡ <strong>Custom Alerts:</strong> {len(custom)} triggered<div class='alert-tooltip'>{details}</div>")
@@ -127,7 +140,6 @@ def fetch(ticker, ext=False):
         t = yf.Ticker(ticker)
         info = t.info
 
-        # Fetch histories in parallel
         h_day = t.history(period="1d", interval="1m", prepost=ext)
         if h_day.empty:
             h_day = t.history(period="5d", prepost=ext)
@@ -146,16 +158,14 @@ def fetch(ticker, ext=False):
                 change_pct = ((price - prev) / prev) * 100
                 change_abs_day = price - prev
 
-        # Fetch multiple histories
         hist_1m = t.history(period="2mo")
         hist_6m = t.history(period="7mo")
         ytd_start = datetime(datetime.now().year, 1, 1)
         ytd_hist = t.history(start=ytd_start.strftime('%Y-%m-%d'))
         y = t.history(period="1y")
         h30 = t.history(period="60d")
-        v30 = h30  # Reuse for volume calculation
+        v30 = h30
 
-        # Calculate changes
         change_1m = change_6m = change_ytd = None
         change_abs_1m = change_abs_6m = change_abs_ytd = None
 
@@ -202,7 +212,7 @@ def fetch(ticker, ext=False):
             elif short_pct > 20 and days_cover > 7: squeeze = "High"
             elif short_pct > 15 and days_cover > 5: squeeze = "Moderate"
 
-        y1 = y  # Reuse
+        y1 = y
         ma50 = y1['Close'].rolling(50).mean().iloc[-1] if len(y1) >= 50 else None
         ma200 = y1['Close'].rolling(200).mean().iloc[-1] if len(y1) >= 200 else None
         death_cross = ma50 is not None and ma200 is not None and ma50 < ma200
@@ -218,11 +228,29 @@ def fetch(ticker, ext=False):
             avg = v30['Volume'][:-1].mean()
             if avg and avg > 0: vol_spike = vol > 1.5 * avg
 
+        # Bollinger Bands
+        bb_ma = bb_upper = bb_lower = bb_width = bb_percent_b = None
+        bb_touch_upper = bb_touch_lower = bb_squeeze_alert = False
+
+        if len(h30['Close']) >= 20:
+            close_series = h30['Close']
+            bb_ma = close_series.rolling(20).mean().iloc[-1]
+            std20 = close_series.rolling(20).std().iloc[-1]
+            bb_upper = bb_ma + 2 * std20
+            bb_lower = bb_ma - 2 * std20
+            
+            if bb_ma > 0:
+                bb_width = ((bb_upper - bb_lower) / bb_ma) * 100
+                bb_percent_b = (price - bb_lower) / (bb_upper - bb_lower) if (bb_upper - bb_lower) != 0 else None
+            
+            touch_tol = price * 0.005
+            bb_touch_upper = price >= bb_upper - touch_tol
+            bb_touch_lower = price <= bb_lower + touch_tol
+            
+            bb_squeeze_alert = bb_width < 6 if bb_width is not None else False
+
         put_call_vol_ratio = None
-        implied_move_pct = None
-        implied_high = None
-        implied_low = None
-        exp_date_used = None
+        implied_move_pct = implied_high = implied_low = exp_date_used = None
 
         if t.options:
             nearest_exp = t.options[0]
@@ -231,21 +259,17 @@ def fetch(ticker, ext=False):
                 chain = t.option_chain(nearest_exp)
                 calls = chain.calls
                 puts = chain.puts
-
                 all_strikes = pd.concat([calls['strike'], puts['strike']]).unique()
                 if len(all_strikes) > 0:
                     atm_strike = min(all_strikes, key=lambda s: abs(s - price))
-
                     call_price = calls.loc[calls['strike'] == atm_strike, 'lastPrice'].iloc[0] if not calls[calls['strike'] == atm_strike].empty else 0
                     put_price = puts.loc[puts['strike'] == atm_strike, 'lastPrice'].iloc[0] if not puts[puts['strike'] == atm_strike].empty else 0
-
                     straddle_price = call_price + put_price
                     if straddle_price > 0:
                         implied_move_pct = (straddle_price / price) * 100
                         conservative_pct = implied_move_pct * 0.85
                         implied_high = price * (1 + conservative_pct / 100)
                         implied_low = price * (1 - conservative_pct / 100)
-
                         call_vol = calls['volume'].fillna(0).sum()
                         put_vol = puts['volume'].fillna(0).sum()
                         if call_vol > 0:
@@ -326,6 +350,14 @@ def fetch(ticker, ext=False):
             'implied_high': implied_high,
             'implied_low': implied_low,
             'exp_date_used': exp_date_used,
+            'bb_ma': bb_ma,
+            'bb_upper': bb_upper,
+            'bb_lower': bb_lower,
+            'bb_width': bb_width,
+            'bb_percent_b': bb_percent_b,
+            'bb_touch_upper': bb_touch_upper,
+            'bb_touch_lower': bb_touch_lower,
+            'bb_squeeze': bb_squeeze_alert,
         }
     except Exception as e:
         print(f"Error {ticker}: {e}")
@@ -389,7 +421,6 @@ def get_fear_greed_data():
         r = requests.get(url, headers=headers, timeout=10)
         r.raise_for_status()
         data = r.json()
-
         fg = data['fear_and_greed']
         score = float(fg['score'])
         s = int(round(score))
@@ -440,7 +471,6 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
         cls = "positive" if aaii['spread'] > 20 else "bullish" if aaii['spread'] > 0 else "neutral" if aaii['spread'] > -20 else "high-risk" if aaii['spread'] > -40 else "negative"
         aaii_h = f'<span class="{cls}">AAII: Bull {aaii["bullish"]:.1f}% Bear {aaii["bearish"]:.1f}%</span>'
 
-    # Pre-build static HTML parts
     header = f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Live Dashboard</title>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -523,10 +553,8 @@ td{{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}}
     <th>TICKER</th><th>PRICE</th><th>DAY %</th><th>1M %</th><th>6M %</th><th>YTD %</th><th>VOLUME</th><th>RANGES</th><th>TECHNICAL</th><th>RISK / SENTIMENT</th>
 </tr>"""
 
-    # Build rows using list comprehension for better performance
     rows = []
     for _, r in df.iterrows():
-        # Technical indicators
         tech_parts = []
         if r['rsi'] is not None:
             rc = "oversold" if r['rsi'] < 30 else "overbought" if r['rsi'] > 70 else ""
@@ -535,9 +563,35 @@ td{{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}}
             mc = "bullish" if r['macd_label'] == "Bullish" else "bearish"
             tech_parts.append(f'<div class="item"><strong>MACD:</strong> <span class="{mc}">{r["macd"]:+.3f} | {r["macd_signal"]:+.3f} ({r["macd_label"]})</span><span class="tooltip">Moving Average Convergence Divergence. Bullish when MACD > Signal</span></div>')
         tech_parts.append(f'<div class="item"><strong>Vol Spike:</strong> {"Yes" if r["volume_spike"] else "No"}<span class="tooltip">Today\'s volume > 1.5x 30-day average</span></div>')
+
+        if r['bb_ma'] is not None:
+            bb_cls = "high-risk" if r['bb_squeeze'] else "neutral"
+            touch_msg = []
+            if r['bb_touch_upper']: touch_msg.append('<span class="negative">Touch Upper</span>')
+            if r['bb_touch_lower']: touch_msg.append('<span class="positive">Touch Lower</span>')
+            touch_str = ", ".join(touch_msg) if touch_msg else "None"
+
+            breakout_msg = ""
+            if r['bb_percent_b'] is not None:
+                if r['bb_percent_b'] > 1.0:
+                    breakout_msg = f'<br><span class="positive"><strong>Breakout UP</strong> (%b {r["bb_percent_b"]:.2f})</span>'
+                elif r['bb_percent_b'] < 0.0:
+                    breakout_msg = f'<br><span class="negative"><strong>Breakout DOWN</strong> (%b {r["bb_percent_b"]:.2f})</span>'
+
+            tech_parts.append(f'''
+            <div class="item"><strong>Bollinger Bands:</strong><br>
+            MA20: {r['bb_ma']:.2f}<br>
+            Upper: {na(r['bb_upper'])} | Lower: {na(r['bb_lower'])}<br>
+            Bandwidth: {na(r['bb_width'], "{:.2f}%")}<br>
+            %b: {na(r['bb_percent_b'], "{:.2f}")}{breakout_msg}<br>
+            <span class="{bb_cls}">Squeeze: {"Yes" if r['bb_squeeze'] else "No"}</span><br>
+            Touch: {touch_str}
+            <span class="tooltip">20-period SMA ± 2σ. %b >1 = breakout above upper band, %b <0 = breakdown below lower band</span></div>
+            ''')
+
         tech_h = "<br>".join(tech_parts) if tech_parts else '<span class="neutral">N/A</span>'
 
-        # Risk indicators - pre-calculate
+        # Risk section (unchanged)
         vol_sc = 0.0
         if r['hv_30_annualized'] is not None and pd.notna(r['hv_30_annualized']): 
             vol_sc += min(r['hv_30_annualized']/100*50, 50)
@@ -599,17 +653,13 @@ td{{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}}
         risk_h = f'<div class="risk-grid">{"".join(risk_parts)}</div>'
 
         link_urls = r['links'].split()
-        link_labels = ["YF", "BC", "TV", "FZ", "Z"]
-        links = " ".join(f'<a href="{url}" target="_blank">{lbl}</a>' for url, lbl in zip(link_urls[1:], link_labels[1:]))
+        links = " ".join(f'<a href="{url}" target="_blank">{lbl}</a>' for url, lbl in zip(link_urls[1:], ["BC", "TV", "FZ", "Z"]))
 
         vol_display = fmt_vol(r['volume'])
         vol_sort = r['volume_raw'] if r['volume_raw'] is not None else 0
 
-        # Day Range Bar
         day_range = r['day_high'] - r['day_low']
         pos_day = ((r['price'] - r['day_low']) / day_range) * 100 if day_range > 0 else 50
-        
-        # 52W Range Bar
         range_52w = r['52w_high'] - r['52w_low']
         pos_52w = ((r['price'] - r['52w_low']) / range_52w) * 100 if range_52w > 0 else 50
 
