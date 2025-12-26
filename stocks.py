@@ -471,7 +471,7 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
         cls = "positive" if aaii['spread'] > 20 else "bullish" if aaii['spread'] > 0 else "neutral" if aaii['spread'] > -20 else "high-risk" if aaii['spread'] > -40 else "negative"
         aaii_h = f'<span class="{cls}">AAII: Bull {aaii["bullish"]:.1f}% Bear {aaii["bearish"]:.1f}%</span>'
 
-    header = f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Live Dashboard</title>
+    header = f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Classic Dashboard</title>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -509,9 +509,9 @@ td{{padding:12px 10px;border-bottom:1px solid #ddd;vertical-align:top}}
 {meme_banner}
 <div class="header-container">
     <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
-        <h1 style="margin:0">Live Dashboard</h1>
+        <h1 style="margin:0">Classic Dashboard</h1>
         <span class="mode-badge {'extended-hours' if ext else 'regular-hours'}">{hours}</span>
-        <a href="{os.path.basename("data/extnd_dashboard.html" if not ext else "data/reg_dashboard.html")}" class="switch-btn">Switch Hours</a>
+        <a href="{os.path.basename("data/extndC_dashboard.html" if not ext else "data/regC_dashboard.html")}" class="switch-btn">Switch Hours</a>
     </div>
     <div class="indicators">
         {vix_h}
@@ -790,7 +790,7 @@ if __name__ == "__main__":
     parser.add_argument('csv_file', nargs='?', default='data/tickers.csv')
     args = parser.parse_args()
 
-    for ext, file, name in [(False, 'data/reg_dashboard.html', 'Regular'), (True, 'data/extnd_dashboard.html', 'Extended')]:
+    for ext, file, name in [(False, 'data/regC_dashboard.html', 'Regular'), (True, 'data/extndC_dashboard.html', 'Extended')]:
         try:
             df = dashboard(args.csv_file, ext)
             alerts = check_alerts(df.to_dict('records'))

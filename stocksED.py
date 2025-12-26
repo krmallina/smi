@@ -555,7 +555,7 @@ function setView(btn, view) {
 }
 
 function toggleHours(extended) {
-    const newFile = extended ? 'extndED_dashboard.html' : 'regED_dashboard.html';
+    const newFile = extended ? 'extnd_dashboard.html' : 'reg_dashboard.html';
     if (window.location.pathname.endsWith(newFile)) return;
     window.location.href = newFile;
 }
@@ -630,7 +630,7 @@ if __name__ == "__main__":
     parser.add_argument('csv_file', nargs='?', default='data/tickers.csv')
     args = parser.parse_args()
 
-    for ext, file, name in [(False, 'data/regED_dashboard.html', 'Regular'), (True, 'data/extndED_dashboard.html', 'Extended')]:
+    for ext, file, name in [(False, 'data/reg_dashboard.html', 'Regular'), (True, 'data/extnd_dashboard.html', 'Extended')]:
         try:
             df = dashboard(args.csv_file, ext)
             alerts = check_alerts(df.to_dict('records'))
