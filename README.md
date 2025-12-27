@@ -1,7 +1,7 @@
-* [Tracker](https://krmallina.github.io/smi/data/reg_dashboard.html), [News](https://tradingeconomics.com/stream), [SA](https://stockanalysis.com/news)
+* [Tracker](https://krmallina.github.io/smi/data/reg_dashboard.html), [News](https://tradingeconomics.com/stream)
 * [US 100](https://tradingeconomics.com/us100:ind), [Calendar](https://tradingeconomics.com/calendar), [Sectors](https://www.ssga.com/us/en/intermediary/resources/sector-tracker#currentTab=dayFive)
-* [Market Movers](https://www.slickcharts.com/market-movers), [SA](https://stockanalysis.com/markets/gainers/), [Trending](https://stockanalysis.com/trending), [Heat Map](https://stockanalysis.com/markets/heatmap/?time=1W), [Markets](https://www.morningstar.com/markets)
-* [Flows](https://www.trackinsight.com/en), [MS](https://www.google.com/search?q=https://www.morningstar.com/topics/fund-flows), [SPDR](https://www.ssga.com/us/en/intermediary/insights/a-feast-of-etf-inflows-and-returns),[ETF.com](https://www.etf.com/sections/daily-etf-flows), [ETFdb](https://etfdb.com/etf-fund-flows/#issuer=blackrock-inc)
+* [Market Movers](https://www.slickcharts.com/market-movers), [SA](https://stockanalysis.com/markets/gainers/), [SA Trending](https://stockanalysis.com/trending), [Heat Map](https://stockanalysis.com/markets/heatmap/?time=1W), [MS: Markets](https://www.morningstar.com/markets)
+* [Flows](https://www.trackinsight.com/en), [MS: Flows](https://www.google.com/search?q=https://www.morningstar.com/topics/fund-flows), [SPDR: Flows](https://www.ssga.com/us/en/intermediary/insights/a-feast-of-etf-inflows-and-returns),[ETF.com](https://www.etf.com/sections/daily-etf-flows), [ETFdb](https://etfdb.com/etf-fund-flows/#issuer=blackrock-inc)
 * [Fear & Greed Index](https://www.cnn.com/markets/fear-and-greed), [AAII Sentiment](https://www.aaii.com/sentiment-survey)
 
 
