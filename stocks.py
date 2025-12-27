@@ -646,7 +646,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         # combine sentiment text with analyst rating (if any)
         sent_text = r['sentiment'] + (f" · {analyst_rating}" if analyst_rating else "")
         html += f'''<tr class="stock-row" data-ticker="{r['ticker']}" data-change="{r['change_pct']}" data-rsi="{r['rsi'] or 50}" data-vol="{r['volume_raw']}" data-meme="{r['is_meme_stock']}" data-squeeze="{r['squeeze_level']}" data-bb-width="{bb_width_val}" data-dividend="{div_ds}">
-    <td><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a> <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.9em;margin-left:6px">(FZ)</a></td>
+    <td><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a> <a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.9em;margin-left:6px">(Y)</a> <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.9em;margin-left:6px">(F)</a></td>
 <td data-sort="{r['price']:.2f}">${r['price']:.2f} {r['sparkline']}</td>
 <td>{fmt_change(r['change_pct'], r['change_abs_day'])}</td>
 <td>{fmt_change(r['change_1m'], r['change_abs_1m'])}</td>
@@ -763,7 +763,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
             data-meme="{r['is_meme_stock']}" 
             data-squeeze="{r['squeeze_level']}" 
             data-bb-width="{bb_width_val}" data-dividend="{card_div_ds}">
-    <h2><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a> <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.8em;margin-left:6px">(FZ)</a> ${r['price']:.2f}</h2>
+    <h2><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a> <a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.8em;margin-left:6px">(Y)</a> <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.8em;margin-left:6px">(F)</a> ${r['price']:.2f}</h2>
 <div style="font-size:1.5em">{fmt_change(r['change_pct'], r['change_abs_day'])}</div>
 {r['sparkline']}
 <div>1M: {fmt_change(r['change_1m'], r['change_abs_1m'])}</div>
@@ -826,7 +826,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         data-meme="{r['is_meme_stock']}" 
         data-squeeze="{r['squeeze_level']}" 
         data-bb-width="{bb_width_val}" data-dividend="{heat_div_ds}">
-    <strong><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a> <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.85em;margin-left:6px">(FZ)</a> {price_display}</strong>
+    <strong><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a> <a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.85em;margin-left:6px">(Y)</a> <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.85em;margin-left:6px">(F)</a> {price_display}</strong>
     <div style="margin-top:6px">{fmt_change(r['change_pct'], r.get('change_abs_day'))}</div>
     <div style="font-size:0.9em">{display_label}: <span class="{mcap_cls}">{fmt_mcap(display_val)}</span></div>
     <div style="font-size:0.9em;margin-top:6px">52W: {y52_display}</div>
