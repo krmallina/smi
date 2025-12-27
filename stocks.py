@@ -210,8 +210,12 @@ def fetch(ticker, ext=False):
         try:
             if div_yield is not None:
                 dy = float(div_yield)
+                # If value looks like a fraction (0.0074) -> convert to percent (0.74)
                 if dy < 1.0:
                     dy = dy * 100.0
+                # If value looks like a whole percent scaled by 100 (e.g. 74 for 74%) -> convert down
+                elif dy > 10:
+                    dy = dy / 100.0
                 div_yield = dy
         except Exception:
             div_yield = div_yield
