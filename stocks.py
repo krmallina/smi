@@ -221,6 +221,8 @@ def fetch(ticker, ext=False):
 
         # Market Cap
         market_cap = info.get('marketCap')
+        # AUM / total assets for funds/ETFs
+        aum = info.get('totalAssets') or info.get('fundTotalAssets') or info.get('total_assets')
 
         time.sleep(1.5)
         tu = ticker.upper()
@@ -244,7 +246,7 @@ def fetch(ticker, ext=False):
             'pc_ratio': pc_ratio,
             'pe': pe,
             'dividend_rate': div_rate, 'dividend_yield': div_yield,
-            'market_cap': market_cap,
+            'market_cap': market_cap, 'aum': aum,
         }
     except Exception as e:
         print(f"Error {ticker}: {e}")
@@ -256,6 +258,21 @@ def fmt_vol(v):
     if v >= 1e9: return f"{v/1e9:.1f}B"
     if v >= 1e6: return f"{v/1e6:.1f}M"
     if v >= 1e3: return f"{v/1e3:.1f}K"
+    return str(int(v))
+
+def fmt_mcap(v):
+    if v is None or pd.isna(v):
+        return "N/A"
+    try:
+        v = float(v)
+    except Exception:
+        return str(v)
+    if v >= 1e12:
+        return f"{v/1e12:.2f}T"
+    if v >= 1e9:
+        return f"{v/1e9:.2f}B"
+    if v >= 1e6:
+        return f"{v/1e6:.2f}M"
     return str(int(v))
 
 def fmt_mcap(v):
@@ -487,6 +504,7 @@ input:checked + .toggle-slider:before{{transform:translateX(26px)}}
 <div class="chip" data-filter="volume">📊 High Vol</div>
 <div class="chip" data-filter="squeeze">🔥 Squeeze</div>
 <div class="chip" data-filter="bb-squeeze">📏 BB Squeeze</div>
+<div class="chip" data-filter="dividend">💰 Dividend</div>
 </div>
 
 <div class="views">
@@ -573,7 +591,9 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 <span class="{opt_dir_cls}">Opt Dir: {r['options_direction']}</span><br>
 <span class="{bias_cls}">Bias: {'Down' if r['down_volume_bias'] else 'Up'}</span>'''
         
-        html += f'''<tr class="stock-row" data-ticker="{r['ticker']}" data-change="{r['change_pct']}" data-rsi="{r['rsi'] or 50}" data-vol="{r['volume_raw']}" data-meme="{r['is_meme_stock']}" data-squeeze="{r['squeeze_level']}" data-bb-width="{bb_width_val}">
+        # include dividend dataset (percent) for filtering
+        div_ds = r.get('dividend_yield') if r.get('dividend_yield') is not None else (r.get('dividend_rate') if r.get('dividend_rate') is not None else '')
+        html += f'''<tr class="stock-row" data-ticker="{r['ticker']}" data-change="{r['change_pct']}" data-rsi="{r['rsi'] or 50}" data-vol="{r['volume_raw']}" data-meme="{r['is_meme_stock']}" data-squeeze="{r['squeeze_level']}" data-bb-width="{bb_width_val}" data-dividend="{div_ds}">
     <td><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a> <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.9em;margin-left:6px">(FZ)</a></td>
 <td data-sort="{r['price']:.2f}">${r['price']:.2f} {r['sparkline']}</td>
 <td>{fmt_change(r['change_pct'], r['change_abs_day'])}</td>
@@ -625,11 +645,35 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         div_cls = 'positive' if div_val is not None and div_val > 0 else 'neutral'
 
         mcap_val = r.get('market_cap')
+        aum_val = r.get('aum')
+        # determine display value and label (Market Cap preferred, fallback to AUM)
+        display_val = None
+        display_label = 'Market Cap'
+        if mcap_val is not None and pd.notna(mcap_val):
+            display_val = mcap_val
+            display_label = 'Market Cap'
+        elif aum_val is not None and pd.notna(aum_val):
+            display_val = aum_val
+            display_label = 'AUM'
         try:
-            mcap_cls = 'strong-bull' if mcap_val is not None and float(mcap_val) >= 200e9 else 'bull' if mcap_val is not None and float(mcap_val) >= 10e9 else 'neutral'
+            base_val = float(display_val) if display_val is not None else None
+        except Exception:
+            base_val = None
+        try:
+            mcap_cls = 'strong-bull' if base_val is not None and base_val >= 200e9 else 'bull' if base_val is not None and base_val >= 10e9 else 'neutral'
         except Exception:
             mcap_cls = 'neutral'
 
+        # 52W display
+        y52_low = r.get('52w_low')
+        y52_high = r.get('52w_high')
+        if pd.notna(y52_low) and pd.notna(y52_high):
+            y52_display = f"${y52_low:.2f} - ${y52_high:.2f}"
+        else:
+            y52_display = 'N/A'
+
+        # include dividend dataset for card
+        card_div_ds = r.get('dividend_yield') if r.get('dividend_yield') is not None else (r.get('dividend_rate') if r.get('dividend_rate') is not None else '')
         html += f'''<div class="stock-card stock-row" style="background:{bg}" 
             data-ticker="{r['ticker']}" 
             data-change="{r['change_pct']}" 
@@ -637,7 +681,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
             data-vol="{r['volume_raw']}" 
             data-meme="{r['is_meme_stock']}" 
             data-squeeze="{r['squeeze_level']}" 
-            data-bb-width="{bb_width_val}">
+            data-bb-width="{bb_width_val}" data-dividend="{card_div_ds}">
     <h2><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a> <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.8em;margin-left:6px">(FZ)</a> ${r['price']:.2f}</h2>
 <div style="font-size:1.5em">{fmt_change(r['change_pct'], r['change_abs_day'])}</div>
 <div>1M: {fmt_change(r['change_1m'], r['change_abs_1m'])}</div>
@@ -645,11 +689,12 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 <div>YTD: {fmt_change(r['change_ytd'], r['change_abs_ytd'])}</div>
 <div><span class="{hv_cls}">Volatility: {hv_str}</span></div>
 <div>BB: {r['bb_status']} ({na(r['bb_width_pct'], '{:.1f}%')})</div>
+<div>52W: {y52_display}</div>
 <div>MACD: <span class="{macd_num_cls}">{na(r.get('macd_line'), '{:+.3f}')}</span> | <span class="{macd_num_cls}">{na(r.get('macd_signal'), '{:+.3f}')}</span> (<span class="{ 'bullish' if r.get('macd_label')=='Bullish' else 'bearish' if r.get('macd_label')=='Bearish' else 'neutral' }">{r.get('macd_label','N/A')}</span>)</div>
 <div>P/C Vol Ratio: <span class="{pc_cls}">{na(r.get('pc_ratio'), '{:.2f}')}</span></div>
 <div>P/E: <span class="{pe_cls}">{na(r.get('pe'), '{:.2f}')}</span></div>
 <div>Div: <span class="{div_cls}">{na(r.get('dividend_rate'), '${:.2f}')}</span> (<span class="{div_cls}">{na(r.get('dividend_yield'), '{:.1f}%')}</span>)</div>
-<div>Market Cap: <span class="{mcap_cls}">{fmt_mcap(r.get('market_cap'))}</span></div>
+<div>{display_label}: <span class="{mcap_cls}">{fmt_mcap(display_val)}</span></div>
 {r['sparkline']}
 </div>'''
     
@@ -659,6 +704,37 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         bg = f"rgba(0,170,0,{intensity})" if r['change_pct'] >= 0 else f"rgba(204,0,0,{intensity})"
         bb_width_val = r['bb_width_pct'] if r['bb_width_pct'] is not None else 100
         price_display = f"${r['price']:.2f}" if (r.get('price') is not None and pd.notna(r.get('price'))) else 'N/A'
+
+        # Prefer Market Cap, fallback to AUM when market cap missing
+        mcap_val = r.get('market_cap')
+        aum_val = r.get('aum')
+        display_val = None
+        display_label = 'Market Cap'
+        if mcap_val is not None and pd.notna(mcap_val):
+            display_val = mcap_val
+            display_label = 'Market Cap'
+        elif aum_val is not None and pd.notna(aum_val):
+            display_val = aum_val
+            display_label = 'AUM'
+        try:
+            base_val = float(display_val) if display_val is not None else None
+        except Exception:
+            base_val = None
+        try:
+            mcap_cls = 'strong-bull' if base_val is not None and base_val >= 200e9 else 'bull' if base_val is not None and base_val >= 10e9 else 'neutral'
+        except Exception:
+            mcap_cls = 'neutral'
+
+        # 52W range
+        y52_low = r.get('52w_low')
+        y52_high = r.get('52w_high')
+        if pd.notna(y52_low) and pd.notna(y52_high):
+            y52_display = f"${y52_low:.2f} - ${y52_high:.2f}"
+        else:
+            y52_display = 'N/A'
+
+        # include dividend dataset for heat tiles
+        heat_div_ds = r.get('dividend_yield') if r.get('dividend_yield') is not None else (r.get('dividend_rate') if r.get('dividend_rate') is not None else '')
         html += f'''<div class="heat-tile stock-row" style="background:{bg}" 
         onclick="window.open('https://www.barchart.com/stocks/quotes/{r['ticker']}', '_blank')"
         data-ticker="{r['ticker']}" 
@@ -667,9 +743,11 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         data-vol="{r['volume_raw']}" 
         data-meme="{r['is_meme_stock']}" 
         data-squeeze="{r['squeeze_level']}" 
-        data-bb-width="{bb_width_val}">
+        data-bb-width="{bb_width_val}" data-dividend="{heat_div_ds}">
     <strong><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a> <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.85em;margin-left:6px">(FZ)</a> {price_display}</strong>
     <div style="margin-top:6px">{fmt_change(r['change_pct'], r.get('change_abs_day'))}</div>
+    <div style="font-size:0.9em">{display_label}: <span class="{mcap_cls}">{fmt_mcap(display_val)}</span></div>
+    <div style="font-size:0.9em;margin-top:6px">52W: {y52_display}</div>
     </div>'''
     
     html += "</div></div></div>"
@@ -717,6 +795,7 @@ function applyFilter() {
         else if (currentFilter === 'volume') show = vol > 5e7;
         else if (currentFilter === 'squeeze') show = sq !== 'None';
         else if (currentFilter === 'bb-squeeze') show = bbw < 6;
+        else if (currentFilter === 'dividend') show = parseFloat(r.dataset.dividend || 0) > 0;
         if (tickerVal) {
             const tk = (r.dataset.ticker || '').toString().toLowerCase();
             show = show && tk.includes(tickerVal);
