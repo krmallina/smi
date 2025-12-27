@@ -134,6 +134,18 @@ def fetch(ticker, ext=False, retry=0):
             if prev and prev > 0:
                 change_pct = ((price - prev) / prev) * 100
                 change_abs_day = price - prev
+        # 5-day change: compare to oldest close in the 5-day window when available
+        change_5d = None
+        change_abs_5d = None
+        try:
+            if len(reg) >= 2:
+                ref5 = reg['Close'].iloc[0]
+                if ref5 and ref5 > 0:
+                    change_5d = ((price - ref5) / ref5) * 100
+                    change_abs_5d = price - ref5
+        except Exception:
+            change_5d = None
+            change_abs_5d = None
 
         h1m, h6m = t.history(period="2mo"), t.history(period="7mo")
         ytd = t.history(start=datetime(datetime.now().year, 1, 1).strftime('%Y-%m-%d'))
@@ -237,25 +249,63 @@ def fetch(ticker, ext=False, retry=0):
         
         div_rate = info.get('dividendRate')
         div_yield = info.get('dividendYield')
+
+        # Do not normalize dividend yield — render the raw value as provided
+        # by the data source. Keep `div_yield` unchanged.
+
+        # Extract earnings date (display string) and ISO date for JS filtering
+        earnings_date = None
+        earnings_date_iso = None
         try:
-            if div_yield is not None:
-                dy = float(div_yield)
-                if dy < 1.0:
-                    dy = dy * 100.0
-                elif dy > 10:
-                    dy = dy / 100.0
-                div_yield = dy
+            def _parse_earnings_display_and_iso(val):
+                if val is None:
+                    return None, None
+                if isinstance(val, (list, tuple)) and len(val) > 0:
+                    val = val[0]
+                # numeric epoch
+                if isinstance(val, (int, float)):
+                    dt = datetime.fromtimestamp(int(val), UTC).astimezone(PST)
+                    return dt.strftime('%b %d, %Y'), dt.date().isoformat()
+                if isinstance(val, str):
+                    s = val.strip()
+                    if s.isdigit():
+                        dt = datetime.fromtimestamp(int(s), UTC).astimezone(PST)
+                        return dt.strftime('%b %d, %Y'), dt.date().isoformat()
+                    try:
+                        d = datetime.fromisoformat(s.split('T')[0])
+                        d = d.replace(tzinfo=UTC)
+                        dt = d.astimezone(PST)
+                        return dt.strftime('%b %d, %Y'), dt.date().isoformat()
+                    except Exception:
+                        try:
+                            d = datetime.strptime(s.split('T')[0], '%Y-%m-%d')
+                            d = d.replace(tzinfo=UTC)
+                            dt = d.astimezone(PST)
+                            return dt.strftime('%b %d, %Y'), dt.date().isoformat()
+                        except Exception:
+                            return None, None
+                return None, None
+
+            for k in ('earningsTimestamp', 'earningsTimestampStart', 'earningsDate', 'nextEarningsDate'):
+                ed = info.get(k)
+                disp, iso = _parse_earnings_display_and_iso(ed)
+                if disp:
+                    earnings_date = disp
+                    earnings_date_iso = iso
+                    break
         except Exception:
-            pass
+            earnings_date = None
+            earnings_date_iso = None
 
         pe = info.get('trailingPE') or info.get('forwardPE')
+        eps = info.get('trailingEps') or info.get('epsTrailingTwelveMonths') or info.get('earningsPerShare') or info.get('forwardEps')
         market_cap = info.get('marketCap')
         aum = info.get('totalAssets') or info.get('fundTotalAssets') or info.get('total_assets')
 
         tu = ticker.upper()
         return {
             'ticker': tu, 'price': price, 'change_pct': change_pct, 'change_abs_day': change_abs_day,
-            'change_1m': ch1m, 'change_abs_1m': abs1m, 'change_6m': ch6m, 'change_abs_6m': abs6m,
+            'change_1m': ch1m, 'change_abs_1m': abs1m, 'change_5d': change_5d, 'change_abs_5d': change_abs_5d, 'change_6m': ch6m, 'change_abs_6m': abs6m,
             'change_ytd': chytd, 'change_abs_ytd': absytd, 'volume': vol, 'volume_raw': vol,
             '52w_high': high52, '52w_low': low52, 'day_low': day_low, 'day_high': day_high,
             'short_percent': short_pct, 'days_to_cover': days_cover,
@@ -270,8 +320,9 @@ def fetch(ticker, ext=False, retry=0):
             'bb_width_pct': bb_width_pct, 'bb_position_pct': bb_position_pct, 'bb_status': bb_status,
             'hv_30_annualized': hv,
             'macd_line': macd_val, 'macd_signal': macd_sig, 'macd_label': macd_lbl,
-            'pc_ratio': pc_ratio, 'pe': pe,
+            'pc_ratio': pc_ratio, 'pe': pe, 'eps': eps,
             'dividend_rate': div_rate, 'dividend_yield': div_yield,
+            'earnings_date': earnings_date, 'earnings_date_iso': earnings_date_iso,
             'market_cap': market_cap, 'aum': aum,
         }
     except Exception as e:
@@ -582,6 +633,7 @@ input:checked + .toggle-slider:before{{transform:translateX(26px)}}
 <div class="chip" data-filter="overbought">📈 Overbought</div>
 <div class="chip" data-filter="surge">🚀 Surge</div>
 <div class="chip" data-filter="crash">💥 Crash</div>
+<div class="chip" data-filter="earnings-week">📅 Earnings</div>
 <div class="chip" data-filter="meme">🎮 Meme</div>
 <div class="chip" data-filter="volume">📊 High Vol</div>
 <div class="chip" data-filter="squeeze">🔥 Squeeze</div>
@@ -602,6 +654,7 @@ input:checked + .toggle-slider:before{{transform:translateX(26px)}}
 <th data-sort="ticker">⭐ TICKER</th>
 <th data-sort="price">PRICE</th>
 <th data-sort="change_pct">DAY %</th>
+<th data-sort="change_5d">5D %</th>
 <th data-sort="change_1m">1M %</th>
 <th data-sort="change_6m">6M %</th>
 <th data-sort="change_ytd">YTD %</th>
@@ -683,12 +736,13 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         
         # include dividend dataset (percent) for filtering
         div_ds = r.get('dividend_yield') if r.get('dividend_yield') is not None else (r.get('dividend_rate') if r.get('dividend_rate') is not None else '')
-        # combine sentiment text with analyst rating (if any)
-        sent_text = r['sentiment'] + (f" · {analyst_rating}" if analyst_rating else "")
-        html += f'''<tr class="stock-row" data-ticker="{r['ticker']}" data-change="{r['change_pct']}" data-rsi="{r['rsi'] or 50}" data-vol="{r['volume_raw']}" data-meme="{r['is_meme_stock']}" data-squeeze="{r['squeeze_level']}" data-bb-width="{bb_width_val}" data-dividend="{div_ds}">
+        # sentiment text (exclude analyst rating)
+        sent_text = r['sentiment']
+        html += f'''<tr class="stock-row" data-ticker="{r['ticker']}" data-change="{r['change_pct']}" data-change-5d="{r.get('change_5d') or ''}" data-earnings="{r.get('earnings_date_iso') or ''}" data-rsi="{r['rsi'] or 50}" data-vol="{r['volume_raw']}" data-meme="{r['is_meme_stock']}" data-squeeze="{r['squeeze_level']}" data-bb-width="{bb_width_val}" data-dividend="{div_ds}">
     <td><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a> <a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.9em;margin-left:6px">(Y)</a> <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.9em;margin-left:6px">(F)</a></td>
 <td data-sort="{r['price']:.2f}">${r['price']:.2f} {r['sparkline']}</td>
 <td>{fmt_change(r['change_pct'], r['change_abs_day'])}</td>
+<td>{fmt_change(r.get('change_5d'), r.get('change_abs_5d'))}</td>
 <td>{fmt_change(r['change_1m'], r['change_abs_1m'])}</td>
 <td>{fmt_change(r['change_6m'], r['change_abs_6m'])}</td>
 <td>{fmt_change(r['change_ytd'], r['change_abs_ytd'])}</td>
@@ -735,6 +789,8 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 
         div_val = r.get('dividend_yield')
         div_cls = 'positive' if div_val is not None and div_val > 0 else 'neutral'
+        # Display dividend yield with a '%' suffix but keep the raw dataset unmodified
+        div_yield_display = na(div_val, '{}') + '%' if div_val is not None else 'N/A'
 
         mcap_val = r.get('market_cap')
         aum_val = r.get('aum')
@@ -798,6 +854,8 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         html += f'''<div class="stock-card stock-row" style="background:{bg}" 
             data-ticker="{r['ticker']}" 
             data-change="{r['change_pct']}" 
+            data-change-5d="{r.get('change_5d') or ''}" 
+            data-earnings="{r.get('earnings_date_iso') or ''}"
             data-rsi="{r['rsi'] or 50}" 
             data-vol="{r['volume_raw']}" 
             data-meme="{r['is_meme_stock']}" 
@@ -807,6 +865,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 <div style="font-size:1.5em">{fmt_change(r['change_pct'], r['change_abs_day'])}</div>
 {r['sparkline']}
 <div>1M: {fmt_change(r['change_1m'], r['change_abs_1m'])}</div>
+<div>5D: {fmt_change(r.get('change_5d'), r.get('change_abs_5d'))}</div>
 <div>6M: {fmt_change(r['change_6m'], r['change_abs_6m'])}</div>
 <div>YTD: {fmt_change(r['change_ytd'], r['change_abs_ytd'])}</div>
 <div><span class="{hv_cls}">Volatility: {hv_str}</span></div>
@@ -815,7 +874,9 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 <div>MACD: <span class="{macd_num_cls}">{na(r.get('macd_line'), '{:+.3f}')}</span> | <span class="{macd_num_cls}">{na(r.get('macd_signal'), '{:+.3f}')}</span> (<span class="{ 'bullish' if r.get('macd_label')=='Bullish' else 'bearish' if r.get('macd_label')=='Bearish' else 'neutral' }">{r.get('macd_label','N/A')}</span>)</div>
 <div>P/C Vol Ratio: <span class="{pc_cls}">{na(r.get('pc_ratio'), '{:.2f}')}</span></div>
 <div>P/E: <span class="{pe_cls}">{na(r.get('pe'), '{:.2f}')}</span></div>
-<div>Div: <span class="{div_cls}">{na(r.get('dividend_rate'), '${:.2f}')}</span> (<span class="{div_cls}">{na(r.get('dividend_yield'), '{:.1f}%')}</span>)</div>
+<div>EPS: <span class="{pe_cls}">{na(r.get('eps'), '{:.2f}')}</span></div>
+    <div>Div: <span class="{div_cls}">{na(r.get('dividend_rate'), '${:.2f}')}</span> (<span class="{div_cls}">{div_yield_display}</span>)</div>
+<div>Earnings: <strong>{r.get('earnings_date') or 'N/A'}</strong></div>
 <div>{display_label}: <span class="{mcap_cls}">{fmt_mcap(display_val)}</span></div>
 <div>Opt Dir: <span class="{opt_dir_cls}">{opt_dir_val}</span> &nbsp; Short: <span class="{short_cls}">{na(short_pct, '{:.1f}%')}</span> ({na(days_cover, '{:.1f}d')})</div>
 </div>'''
@@ -861,6 +922,8 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         onclick="window.open('https://www.barchart.com/stocks/quotes/{r['ticker']}', '_blank')"
         data-ticker="{r['ticker']}" 
         data-change="{r['change_pct']}" 
+        data-change-5d="{r.get('change_5d') or ''}"
+        data-earnings="{r.get('earnings_date_iso') or ''}"
         data-rsi="{r['rsi'] or 50}" 
         data-vol="{r['volume_raw']}" 
         data-meme="{r['is_meme_stock']}" 
@@ -904,6 +967,7 @@ function applyFilter() {
     rows.forEach(r => {
         let show = true;
         const ch = parseFloat(r.dataset.change || 0);
+        const ch5 = parseFloat(r.dataset.change5d || 0);
         const rsi = parseFloat(r.dataset.rsi || 50);
         const vol = parseFloat(r.dataset.vol || 0);
         const meme = r.dataset.meme === 'True';
@@ -911,11 +975,29 @@ function applyFilter() {
         const bbw = parseFloat(r.dataset.bbWidth || 100);
         if (currentFilter === 'oversold') show = rsi < 30;
         else if (currentFilter === 'overbought') show = rsi > 70;
-        else if (currentFilter === 'surge') show = ch > 10;
-        else if (currentFilter === 'crash') show = ch < -10;
+        else if (currentFilter === 'surge') show = (ch > 10) || (ch5 > 10);
+        else if (currentFilter === 'crash') show = (ch < -10) || (ch5 < -10);
         else if (currentFilter === 'meme') show = meme;
         else if (currentFilter === 'volume') show = vol > 5e7;
         else if (currentFilter === 'squeeze') show = sq !== 'None';
+        else if (currentFilter === 'earnings-week') show = (function(){
+            const ed = r.dataset.earnings;
+            if (!ed) return false;
+            try {
+                const edDate = new Date(ed + 'T00:00:00');
+                edDate.setHours(0,0,0,0);
+                const now = new Date();
+                const day = now.getDay();
+                const start = new Date(now);
+                start.setHours(0,0,0,0);
+                start.setDate(now.getDate() - day); // week starts Sunday
+                const end = new Date(start);
+                end.setDate(start.getDate() + 6);
+                return edDate >= start && edDate <= end;
+            } catch (e) {
+                return false;
+            }
+        })();
         else if (currentFilter === 'bb-squeeze') show = bbw < 6;
         else if (currentFilter === 'dividend') show = parseFloat(r.dataset.dividend || 0) > 0;
         if (tickerVal) {
