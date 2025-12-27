@@ -678,6 +678,35 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 
         # include dividend dataset for card
         card_div_ds = r.get('dividend_yield') if r.get('dividend_yield') is not None else (r.get('dividend_rate') if r.get('dividend_rate') is not None else '')
+        # Option direction and short percent/days color coding for card
+        opt_dir_val = r.get('options_direction') or 'Neutral'
+        if 'Strong Bear' in opt_dir_val or 'Strong Bearish' in opt_dir_val:
+            opt_dir_cls = 'strong-bear'
+        elif 'Bear' in opt_dir_val:
+            opt_dir_cls = 'bear'
+        elif 'Strong Bull' in opt_dir_val or 'Strong Bullish' in opt_dir_val:
+            opt_dir_cls = 'strong-bull'
+        elif 'Bull' in opt_dir_val:
+            opt_dir_cls = 'bull'
+        else:
+            opt_dir_cls = 'neutral'
+
+        short_pct = r.get('short_percent')
+        days_cover = r.get('days_to_cover')
+        try:
+            sp = float(short_pct) if short_pct is not None else None
+        except Exception:
+            sp = None
+        if sp is None:
+            short_cls = 'neutral'
+        elif sp >= 20:
+            short_cls = 'strong-bear'
+        elif sp >= 10:
+            short_cls = 'bear'
+        elif sp >= 5:
+            short_cls = 'vol-hot'
+        else:
+            short_cls = 'neutral'
         html += f'''<div class="stock-card stock-row" style="background:{bg}" 
             data-ticker="{r['ticker']}" 
             data-change="{r['change_pct']}" 
@@ -688,6 +717,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
             data-bb-width="{bb_width_val}" data-dividend="{card_div_ds}">
     <h2><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a> <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.8em;margin-left:6px">(FZ)</a> ${r['price']:.2f}</h2>
 <div style="font-size:1.5em">{fmt_change(r['change_pct'], r['change_abs_day'])}</div>
+{r['sparkline']}
 <div>1M: {fmt_change(r['change_1m'], r['change_abs_1m'])}</div>
 <div>6M: {fmt_change(r['change_6m'], r['change_abs_6m'])}</div>
 <div>YTD: {fmt_change(r['change_ytd'], r['change_abs_ytd'])}</div>
@@ -699,7 +729,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 <div>P/E: <span class="{pe_cls}">{na(r.get('pe'), '{:.2f}')}</span></div>
 <div>Div: <span class="{div_cls}">{na(r.get('dividend_rate'), '${:.2f}')}</span> (<span class="{div_cls}">{na(r.get('dividend_yield'), '{:.1f}%')}</span>)</div>
 <div>{display_label}: <span class="{mcap_cls}">{fmt_mcap(display_val)}</span></div>
-{r['sparkline']}
+<div>Opt Dir: <span class="{opt_dir_cls}">{opt_dir_val}</span> &nbsp; Short: <span class="{short_cls}">{na(short_pct, '{:.1f}%')}</span> ({na(days_cover, '{:.1f}d')})</div>
 </div>'''
     
     html += "</div></div><div id='heatView'><div class='heat-grid'>"
