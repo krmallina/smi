@@ -5,11 +5,13 @@ import os
 import argparse
 import json
 import requests
+import random
 import re
 import pytz
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 from functools import lru_cache
+import threading
 
 ALERTS_FILE = 'data/alerts.json'
 UTC = pytz.utc
@@ -109,12 +111,16 @@ def sparkline(prices):
 def fetch(ticker, ext=False, retry=0):
     max_retries = 3
     try:
+        # enforce global rate limit before starting network activity
+        RATE_LIMITER.wait()
+
         t = yf.Ticker(ticker)
-        
-        # Add delay between requests to avoid rate limiting
-        time.sleep(1.0 + (retry * 0.5))
-        
-        info = t.info
+        # Small base delay with jitter to spread requests a bit
+        base_sleep = 0.25
+        jitter = random.uniform(0, 0.25)
+        time.sleep(base_sleep + jitter + (retry * 0.15))
+
+        info = get_ticker_info_cached(ticker)
         h_day = t.history(period="1d", interval="1m", prepost=ext)
         if h_day.empty: h_day = t.history(period="5d", prepost=ext)
         if h_day.empty: return None
@@ -173,7 +179,7 @@ def fetch(ticker, ext=False, retry=0):
             if avg > 0: vol_spike = vol > 1.5 * avg
         
         pc_ratio = impl_move = impl_hi = impl_lo = exp_date = None
-        if t.options:
+        if getattr(t, 'options', None):
             exp_date = t.options[0]
             try:
                 chain = t.option_chain(exp_date)
@@ -272,8 +278,9 @@ def fetch(ticker, ext=False, retry=0):
         error_msg = str(e)
         if 'Too Many Requests' in error_msg or 'Rate limit' in error_msg:
             if retry < max_retries:
-                wait_time = 10 * (retry + 1)  # Exponential backoff: 10s, 20s, 30s
-                print(f"{ticker}: Rate limited, waiting {wait_time}s (retry {retry+1}/{max_retries})")
+                # exponential backoff with jitter
+                wait_time = (2 ** retry) * 5 + random.uniform(0, 3)
+                print(f"{ticker}: Rate limited, waiting {wait_time:.1f}s (retry {retry+1}/{max_retries})")
                 time.sleep(wait_time)
                 return fetch(ticker, ext, retry + 1)
             else:
@@ -343,9 +350,10 @@ def dashboard(csv='data/tickers.csv', ext=False):
         tickers = ['AAPL','MSFT','GOOGL','AMZN','NVDA','TSLA','META','SPY']
     
     data = []
-    # OPTIMIZED: Reduced to 3 workers to avoid rate limiting
-    # Process in smaller batches with delays
-    with ThreadPoolExecutor(max_workers=3) as ex:
+    # Adaptive worker count: scale with number of tickers but cap to avoid rate limits
+    # cap workers to 3 to avoid excessive parallel requests
+    worker_count = min(3, max(1, len(tickers) // 8 + 1))
+    with ThreadPoolExecutor(max_workers=worker_count) as ex:
         futures = [ex.submit(fetch, t, ext) for t in tickers]
         for r in as_completed(futures):
             res = r.result()
@@ -358,6 +366,38 @@ def get_vix_data():
 # OPTIMIZED: Cache F&G data with 1 hour TTL
 _fg_cache = {'data': None, 'time': 0}
 FG_CACHE_TTL = 3600
+
+# Shared requests session for fewer TCP handshakes
+SESSION = requests.Session()
+
+# Cache ticker info to avoid repeated yf.Ticker(...).info calls
+@lru_cache(maxsize=512)
+def get_ticker_info_cached(ticker):
+    try:
+        t = yf.Ticker(ticker)
+        return t.info
+    except Exception:
+        return {}
+
+
+# Simple global rate limiter (ensure at least `min_interval` seconds between network starts)
+class RateLimiter:
+    def __init__(self, min_interval=0.9):
+        self.min_interval = min_interval
+        self.lock = threading.Lock()
+        self.next_time = 0.0
+
+    def wait(self):
+        with self.lock:
+            now = time.time()
+            if now < self.next_time:
+                wait_for = self.next_time - now
+                time.sleep(wait_for)
+                now = time.time()
+            self.next_time = now + self.min_interval
+
+
+RATE_LIMITER = RateLimiter(min_interval=0.9)
 
 def get_fear_greed_data():
     global _fg_cache
@@ -465,7 +505,7 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
         cls = "positive" if spread > 20 else "bullish" if spread > 0 else "neutral" if spread > -20 else "high-risk" if spread > -40 else "negative"
         aaii_h = f'<span class="{cls}">AAII: Bull {aaii["bullish"]:.1f}% Bear {aaii["bearish"]:.1f}%</span>'
     
-    html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Enhanced Dashboard</title>
+    html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Dashboard</title>
 <meta name="viewport" content="width=device-width,initial-scale=1"><style>
 :root{{ --bg:#f5f5f5; --card:#fff; --text:#333; --border:#ddd; --accent:#0066cc; --pos:#00aa00; --neg:#cc0000; --bullish:#00aa00; --bearish:#cc0000 }}
 [data-theme="dark"]{{ --bg:#1a1a1a; --card:#2d2d2d; --text:#e0e0e0; --border:#444; --accent:#3d8bfd; --pos:#4caf50; --neg:#f44336; --bullish:#4caf50; --bearish:#f44336 }}
@@ -520,7 +560,7 @@ input:checked + .toggle-slider:before{{transform:translateX(26px)}}
 <div class="container">
 {banner}
 <div class="top-bar">
-<div><h1>📊 Enhanced Dashboard</h1><small>{update}</small></div>
+<div><h1>📊 Dashboard</h1><small>{update}</small></div>
 <div style="display:flex;gap:15px;flex-wrap:wrap;align-items:center">
 <span>{indices_h}</span><span>{fg_h}</span><span>{aaii_h}</span>
 <div class="hours-toggle">
