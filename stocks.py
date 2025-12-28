@@ -18,6 +18,56 @@ UTC = pytz.utc
 PST = pytz.timezone('America/Los_Angeles')
 MEME_STOCKS = frozenset({'GME','AMC','BB','KOSS','EXPR','DJT','HOOD','RDDT','SPCE','RIVN','DNUT','OPEN','KSS','RKLB','GPRO','AEO','BYND','CVNA','PLTR','SMCI'})
 
+# Category buckets for filtering chips
+CATEGORY_MAP = {
+    'major-tech': frozenset({'AAPL', 'AMZN', 'GOOGL', 'META', 'MSFT', 'NVDA', 'TSLA'}),
+    'leveraged-etf': frozenset({'TQQQ', 'SPXL', 'AAPU', 'PLTU'}),
+    'sector-etf': frozenset({'SPY', 'XLF', 'SMH', 'XBI'}),
+    'spec-meme': MEME_STOCKS,
+    'emerging-tech': frozenset({'OKLO', 'SMR', 'CRWV', 'RKLB'}),
+}
+
+def get_category(ticker):
+    tu = ticker.upper()
+    for slug, tickers in CATEGORY_MAP.items():
+        if tu in tickers:
+            return slug
+    return ''
+
+def infer_category_from_info(ticker, info):
+    tu = ticker.upper()
+    # Start with manual map if present
+    mapped = get_category(tu)
+    if mapped:
+        return mapped
+
+    qtype = (info.get('quoteType') or '').lower()
+    sector = (info.get('sector') or '').lower()
+    industry = (info.get('industry') or '').lower()
+    lname = (info.get('longName') or '').lower()
+    sname = (info.get('shortName') or '').lower()
+
+    # Detect leveraged/inverse ETFs via quoteType or naming
+    if qtype == 'etf' or 'etf' in lname or 'etf' in sname:
+        lever_markers = ('3x', '2x', 'ultra', 'ultrapro', 'leveraged', 'inverse', '-1x', '-2x', '-3x')
+        if any(m in tu.lower() for m in ('3x', '2x', 'ultra', 'pro', 'bull', 'bear')) or any(m in lname for m in lever_markers) or any(m in sname for m in lever_markers):
+            return 'leveraged-etf'
+        return 'sector-etf'
+
+    # Meme / speculative
+    if tu in MEME_STOCKS:
+        return 'spec-meme'
+
+    # Major tech/growth heuristics
+    if sector == 'technology' or any(k in industry for k in ('semiconductor', 'software', 'ai')):
+        return 'major-tech'
+
+    # Emerging tech / energy heuristics
+    if any(k in industry for k in ('nuclear', 'battery', 'clean energy', 'solar', 'space')) or any(k in lname for k in ('nuclear', 'battery', 'rocket', 'fusion', 'space')):
+        return 'emerging-tech'
+
+    return ''
+
 # PERFORMANCE OPTIMIZATION: Cache alerts with TTL to avoid constant file reads
 _alerts_cache = {'data': None, 'time': 0}
 CACHE_TTL = 300  # 5 minutes
@@ -96,7 +146,12 @@ def macd(s):
     return last_line, last_sig, "Bullish" if last_line > last_sig else "Bearish"
 
 def na(v, f="{:.2f}"):
-    return "N/A" if v is None or pd.isna(v) else f.format(v)
+    if v is None or pd.isna(v):
+        return "N/A"
+    try:
+        return f.format(v)
+    except (ValueError, TypeError):
+        return "N/A"
 
 def sparkline(prices):
     if len(prices) < 2: return ""
@@ -107,6 +162,13 @@ def sparkline(prices):
     pts = [f"{(i/(len(prices)-1))*w:.1f},{h-((p-mn)/rng*h):.1f}" for i,p in enumerate(prices)]
     c = "#00aa00" if prices[-1] >= prices[0] else "#cc0000"
     return f'<svg width="{w}" height="{h}"><polyline points="{" ".join(pts)}" fill="none" stroke="{c}" stroke-width="1.5"/></svg>'
+
+# Safe wrapper for yfinance history calls to avoid hard failures (e.g., 401 Unauthorized)
+def safe_history(ticker_obj, **kwargs):
+    try:
+        return ticker_obj.history(**kwargs)
+    except Exception:
+        return pd.DataFrame()
 
 def fetch(ticker, ext=False, retry=0):
     max_retries = 3
@@ -121,13 +183,13 @@ def fetch(ticker, ext=False, retry=0):
         time.sleep(base_sleep + jitter + (retry * 0.15))
 
         info = get_ticker_info_cached(ticker)
-        h_day = t.history(period="1d", interval="1m", prepost=ext)
-        if h_day.empty: h_day = t.history(period="5d", prepost=ext)
+        h_day = safe_history(t, period="1d", interval="1m", prepost=ext)
+        if h_day.empty: h_day = safe_history(t, period="5d", prepost=ext)
         if h_day.empty: return None
         
         price = h_day['Close'].iloc[-1]
         day_low, day_high = h_day['Low'].min(), h_day['High'].max()
-        reg = t.history(period="5d", prepost=False)
+        reg = safe_history(t, period="5d", prepost=False)
         change_pct = change_abs_day = 0.0
         if len(reg) >= 2:
             prev = reg['Close'].iloc[-2]
@@ -147,9 +209,9 @@ def fetch(ticker, ext=False, retry=0):
             change_5d = None
             change_abs_5d = None
 
-        h1m, h6m = t.history(period="2mo"), t.history(period="7mo")
-        ytd = t.history(start=datetime(datetime.now().year, 1, 1).strftime('%Y-%m-%d'))
-        y, h30 = t.history(period="1y"), t.history(period="60d")
+        h1m, h6m = safe_history(t, period="2mo"), safe_history(t, period="7mo")
+        ytd = safe_history(t, start=datetime(datetime.now().year, 1, 1).strftime('%Y-%m-%d'))
+        y, h30 = safe_history(t, period="1y"), safe_history(t, period="60d")
         
         def calc_ch(h):
             if len(h) >= 2 and h['Close'].iloc[0] > 0:
@@ -183,7 +245,8 @@ def fetch(ticker, ext=False, retry=0):
             elif short_pct > 15 and days_cover > 5: squeeze = "Moderate"
         
         rsi_val = rsi(h30['Close'])
-        macd_val, macd_sig, macd_lbl = macd(t.history(period="100d")['Close'])
+        h100 = safe_history(t, period="100d")
+        macd_val, macd_sig, macd_lbl = macd(h100['Close']) if not h100.empty else (None, None, "N/A")
         
         vol_spike = False
         if len(h30) > 1:
@@ -191,24 +254,31 @@ def fetch(ticker, ext=False, retry=0):
             if avg > 0: vol_spike = vol > 1.5 * avg
         
         pc_ratio = impl_move = impl_hi = impl_lo = exp_date = None
-        if getattr(t, 'options', None):
-            exp_date = t.options[0]
-            try:
-                chain = t.option_chain(exp_date)
-                strikes = pd.concat([chain.calls['strike'], chain.puts['strike']]).unique()
-                if len(strikes) > 0:
-                    atm = min(strikes, key=lambda s: abs(s - price))
-                    cp = chain.calls.loc[chain.calls['strike'] == atm, 'lastPrice'].iloc[0] if not chain.calls[chain.calls['strike'] == atm].empty else 0
-                    pp = chain.puts.loc[chain.puts['strike'] == atm, 'lastPrice'].iloc[0] if not chain.puts[chain.puts['strike'] == atm].empty else 0
-                    straddle = cp + pp
-                    if straddle > 0:
-                        impl_move = (straddle / price) * 100
-                        cons = impl_move * 0.85
-                        impl_hi = price * (1 + cons/100)
-                        impl_lo = price * (1 - cons/100)
-                        cvol, pvol = chain.calls['volume'].fillna(0).sum(), chain.puts['volume'].fillna(0).sum()
-                        if cvol > 0: pc_ratio = pvol / cvol
-            except: pass
+        # Options endpoints increasingly return 401; wrap fully and degrade gracefully
+        try:
+            opts = getattr(t, 'options', None)
+            if opts:
+                exp_date = opts[0]
+                try:
+                    chain = t.option_chain(exp_date)
+                    strikes = pd.concat([chain.calls['strike'], chain.puts['strike']]).unique()
+                    if len(strikes) > 0:
+                        atm = min(strikes, key=lambda s: abs(s - price))
+                        cp = chain.calls.loc[chain.calls['strike'] == atm, 'lastPrice'].iloc[0] if not chain.calls[chain.calls['strike'] == atm].empty else 0
+                        pp = chain.puts.loc[chain.puts['strike'] == atm, 'lastPrice'].iloc[0] if not chain.puts[chain.puts['strike'] == atm].empty else 0
+                        straddle = cp + pp
+                        if straddle > 0 and price > 0:
+                            impl_move = (straddle / price) * 100
+                            cons = impl_move * 0.85
+                            impl_hi = price * (1 + cons/100)
+                            impl_lo = price * (1 - cons/100)
+                            cvol, pvol = chain.calls['volume'].fillna(0).sum(), chain.puts['volume'].fillna(0).sum()
+                            if cvol > 0: pc_ratio = pvol / cvol
+                except Exception:
+                    pass
+        except Exception:
+            # ignore options entirely on failure (e.g., 401 Unauthorized)
+            pass
         
         down_bias = False
         if len(h30) > 0:
@@ -303,6 +373,7 @@ def fetch(ticker, ext=False, retry=0):
         aum = info.get('totalAssets') or info.get('fundTotalAssets') or info.get('total_assets')
 
         tu = ticker.upper()
+        category = infer_category_from_info(tu, info) or get_category(tu)
         return {
             'ticker': tu, 'price': price, 'change_pct': change_pct, 'change_abs_day': change_abs_day,
             'change_1m': ch1m, 'change_abs_1m': abs1m, 'change_5d': change_5d, 'change_abs_5d': change_abs_5d, 'change_6m': ch6m, 'change_abs_6m': abs6m,
@@ -324,6 +395,7 @@ def fetch(ticker, ext=False, retry=0):
             'dividend_rate': div_rate, 'dividend_yield': div_yield,
             'earnings_date': earnings_date, 'earnings_date_iso': earnings_date_iso,
             'market_cap': market_cap, 'aum': aum,
+            'category': category,
         }
     except Exception as e:
         error_msg = str(e)
@@ -337,6 +409,10 @@ def fetch(ticker, ext=False, retry=0):
             else:
                 print(f"{ticker}: Max retries reached, skipping")
                 return None
+        elif 'Unauthorized' in error_msg or '401' in error_msg:
+            # Yahoo Finance feature gated; skip this ticker gracefully
+            print(f"{ticker}: Unauthorized for some endpoints, skipping options/advanced data")
+            return None
         else:
             print(f"Error {ticker}: {e}")
             time.sleep(5)
@@ -363,7 +439,12 @@ def fmt_mcap(v):
 def fmt_change(p, a=None):
     if p is None: return '<span class="neutral">N/A</span>'
     sign, cls = ("▲", "positive") if p >= 0 else ("▼", "negative")
-    abs_str = f' ({a:+.2f})' if a is not None else ''
+    abs_str = ''
+    if a is not None:
+        try:
+            abs_str = f' ({float(a):+.2f})'
+        except (ValueError, TypeError):
+            pass
     return f'<span class="{cls}" data-sort="{p:.10f}">{sign} {p:+.2f}%{abs_str}</span>'
 
 @lru_cache(maxsize=32)  # OPTIMIZED: Cache index data
@@ -377,11 +458,17 @@ def get_index_data(symbol):
         ch_abs = None
         if price is not None and prev is not None:
             try:
+                # Ensure numeric types
+                price = float(price)
+                prev = float(prev)
                 ch_abs = price - prev
-            except Exception:
+            except (ValueError, TypeError):
                 ch_abs = None
         if ch_pct is None and price is not None and prev is not None and prev > 0:
-            ch_pct = ((price - prev) / prev) * 100
+            try:
+                ch_pct = ((float(price) - float(prev)) / float(prev)) * 100
+            except (ValueError, TypeError):
+                ch_pct = None
         return {'price': price, 'change_pct': ch_pct, 'change_abs': ch_abs}
     except:
         return {'price': None, 'change_pct': None, 'change_abs': None}
@@ -543,7 +630,7 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
         cls = "positive" if ch_abs is not None and ch_abs >= 0 else "negative"
         return f'<span class="{cls}">{name}: {na(data["price"])} ({na(ch_abs, "{:+.2f}")})</span>'
     
-    indices_h = f"{index_str(dow, 'Dow')} {index_str(sp, 'S&P')} {index_str(nas, 'Nasdaq')} {index_str(vix, 'VIX')}"
+    indices_h = f"{index_str(dow, 'Dow')} | {index_str(sp, 'S&P')} | {index_str(nas, 'Nasdaq')} | {index_str(vix, 'VIX')}"
     
     fg_h = '<span class="neutral">F&G: N/A</span>'
     if fg.get('score') is not None:
@@ -586,7 +673,7 @@ td{{padding:12px;border-bottom:1px solid var(--border);vertical-align:top}}
 .negative{{color:var(--neg);font-weight:bold}}
 .neutral{{color:#888}}
 .bullish{{color:var(--bullish);font-weight:bold}}
-.bearish{{color:var(--bearish);font-weight:bold}}
+.bearish{{color:#ff0000;font-weight:bold}}
 .extreme-fear{{color:#ff0000;font-weight:bold}}
 .fear{{color:#ff8800}}
 .greed{{color:#88ff88}}
@@ -594,7 +681,7 @@ td{{padding:12px;border-bottom:1px solid var(--border);vertical-align:top}}
 .strong-bull{{color:#008800;font-weight:bold}}
 .bull{{color:#00bb00}}
 .strong-bear{{color:#ff0000;font-weight:bold}}
-.bear{{color:#ff8800}}
+.bear{{color:#ff0000;font-weight:bold}}
 .vol-hot{{color:#ff0000;font-weight:bold}}
 .range-bar{{width:100%;height:8px;background:#e0e0e0;border-radius:4px;position:relative;margin:4px 0}}
 .range-bar-marker{{position:absolute;width:3px;height:12px;background:#000;top:-2px}}
@@ -613,7 +700,11 @@ input:checked + .toggle-slider:before{{transform:translateX(26px)}}
 <div class="top-bar">
 <div><h1>📊 Dashboard</h1><small>{update}</small></div>
 <div style="display:flex;gap:15px;flex-wrap:wrap;align-items:center">
-<span>{indices_h}</span><span>{fg_h}</span><span>{aaii_h}</span>
+<span>{indices_h}</span><span style="color:#888"> | </span><span>{fg_h}</span><span style="color:#888"> | </span><span>{aaii_h}</span>
+</div>
+</div>
+
+<div style="display:flex;gap:15px;flex-wrap:wrap;align-items:center;background:var(--card);padding:15px 20px;border-radius:12px;margin-bottom:20px;justify-content:space-between">
 <div class="hours-toggle">
 <span>Regular</span>
 <label class="toggle-switch">
@@ -622,23 +713,28 @@ input:checked + .toggle-slider:before{{transform:translateX(26px)}}
 </label>
 <span>Extended</span>
 </div>
-    <button class="btn" onclick="toggleTheme()">🌓</button>
-    <button class="btn" onclick="location.reload()">🔄</button>
+<div style="display:flex;gap:10px">
+<button class="btn" onclick="toggleTheme()">🌓</button>
+<button class="btn" onclick="location.reload()">🔄</button>
 </div>
 </div>
 
 <div class="quick-filters">
 <div class="chip active" data-filter="all">All</div>
+<div class="chip" data-filter="volume">📊 High Vol</div>
+<div class="chip" data-filter="earnings-week">📅 Earnings</div>
 <div class="chip" data-filter="oversold">📉 Oversold</div>
 <div class="chip" data-filter="overbought">📈 Overbought</div>
 <div class="chip" data-filter="surge">🚀 Surge</div>
 <div class="chip" data-filter="crash">💥 Crash</div>
-<div class="chip" data-filter="earnings-week">📅 Earnings</div>
-<div class="chip" data-filter="meme">🎮 Meme</div>
-<div class="chip" data-filter="volume">📊 High Vol</div>
 <div class="chip" data-filter="squeeze">🔥 Squeeze</div>
 <div class="chip" data-filter="bb-squeeze">📏 BB Squeeze</div>
+<div class="chip" data-filter="cat-spec-meme">🎲 Speculative</div>
 <div class="chip" data-filter="dividend">💰 Dividend</div>
+<div class="chip" data-filter="cat-major-tech">🌐 Major Tech/Growth</div>
+<div class="chip" data-filter="cat-leveraged-etf">⚡ Leveraged/Inverse ETFs</div>
+<div class="chip" data-filter="cat-sector-etf">🏦 Sector & Index ETFs</div>
+<div class="chip" data-filter="cat-emerging-tech">🚧 Emerging Tech (AI/Energy)</div>
 </div>
 
 <div class="views">
@@ -667,7 +763,7 @@ input:checked + .toggle-slider:before{{transform:translateX(26px)}}
     for _, r in df.iterrows():
         bb_width_val = r['bb_width_pct'] if r['bb_width_pct'] is not None else 100
         hv = r['hv_30_annualized']
-        hv_cls = "vol-hot" if hv and hv > 50 else "neutral"
+        hv_cls = "negative" if hv and hv > 50 else "neutral"
         hv_str = na(hv, '{:.1f}%')
         
         macd_cls = "bullish" if r['macd_label'] == "Bullish" else "bearish" if r['macd_label'] == "Bearish" else "neutral"
@@ -738,8 +834,8 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         div_ds = r.get('dividend_yield') if r.get('dividend_yield') is not None else (r.get('dividend_rate') if r.get('dividend_rate') is not None else '')
         # sentiment text (exclude analyst rating)
         sent_text = r['sentiment']
-        html += f'''<tr class="stock-row" data-ticker="{r['ticker']}" data-change="{r['change_pct']}" data-change-5d="{r.get('change_5d') or ''}" data-earnings="{r.get('earnings_date_iso') or ''}" data-rsi="{r['rsi'] or 50}" data-vol="{r['volume_raw']}" data-meme="{r['is_meme_stock']}" data-squeeze="{r['squeeze_level']}" data-bb-width="{bb_width_val}" data-dividend="{div_ds}">
-    <td><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a> <a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.9em;margin-left:6px">(Y)</a> <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.9em;margin-left:6px">(F)</a></td>
+        html += f'''<tr class="stock-row" data-ticker="{r['ticker']}" data-change="{r['change_pct']}" data-change-5d="{r.get('change_5d') or ''}" data-earnings="{r.get('earnings_date_iso') or ''}" data-rsi="{r['rsi'] or 50}" data-vol="{r['volume_raw']}" data-meme="{r['is_meme_stock']}" data-squeeze="{r['squeeze_level']}" data-bb-width="{bb_width_val}" data-dividend="{div_ds}" data-category="{r.get('category') or ''}">
+    <td><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.9em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.9em">F</a>)</td>
 <td data-sort="{r['price']:.2f}">${r['price']:.2f} {r['sparkline']}</td>
 <td>{fmt_change(r['change_pct'], r['change_abs_day'])}</td>
 <td>{fmt_change(r.get('change_5d'), r.get('change_abs_5d'))}</td>
@@ -757,7 +853,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         bg = "rgba(0,170,0,0.1)" if r['change_pct'] > 0 else "rgba(204,0,0,0.1)"
         bb_width_val = r['bb_width_pct'] if r['bb_width_pct'] is not None else 100
         hv = r['hv_30_annualized']
-        hv_cls = "vol-hot" if hv and hv > 50 else "neutral"
+        hv_cls = "negative" if hv and hv > 50 else "neutral"
         hv_str = na(hv, '{:.1f}%')
         # Color coding for card attributes
         macd_num_cls = "neutral"
@@ -860,25 +956,25 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
             data-vol="{r['volume_raw']}" 
             data-meme="{r['is_meme_stock']}" 
             data-squeeze="{r['squeeze_level']}" 
-            data-bb-width="{bb_width_val}" data-dividend="{card_div_ds}">
-    <h2><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a> <a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.8em;margin-left:6px">(Y)</a> <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.8em;margin-left:6px">(F)</a> ${r['price']:.2f}</h2>
+            data-bb-width="{bb_width_val}" data-dividend="{card_div_ds}" data-category="{r.get('category') or ''}">
+    <h2><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.8em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.8em">F</a>) ${r['price']:.2f}</h2>
 <div style="font-size:1.5em">{fmt_change(r['change_pct'], r['change_abs_day'])}</div>
 {r['sparkline']}
 <div>1M: {fmt_change(r['change_1m'], r['change_abs_1m'])}</div>
 <div>5D: {fmt_change(r.get('change_5d'), r.get('change_abs_5d'))}</div>
 <div>6M: {fmt_change(r['change_6m'], r['change_abs_6m'])}</div>
 <div>YTD: {fmt_change(r['change_ytd'], r['change_abs_ytd'])}</div>
+<div><strong>52W: {y52_display}</strong></div>
 <div><span class="{hv_cls}">Volatility: {hv_str}</span></div>
 <div>BB: {r['bb_status']} ({na(r['bb_width_pct'], '{:.1f}%')})</div>
-<div>52W: {y52_display}</div>
 <div>MACD: <span class="{macd_num_cls}">{na(r.get('macd_line'), '{:+.3f}')}</span> | <span class="{macd_num_cls}">{na(r.get('macd_signal'), '{:+.3f}')}</span> (<span class="{ 'bullish' if r.get('macd_label')=='Bullish' else 'bearish' if r.get('macd_label')=='Bearish' else 'neutral' }">{r.get('macd_label','N/A')}</span>)</div>
-<div>P/C Vol Ratio: <span class="{pc_cls}">{na(r.get('pc_ratio'), '{:.2f}')}</span></div>
 <div>P/E: <span class="{pe_cls}">{na(r.get('pe'), '{:.2f}')}</span></div>
 <div>EPS: <span class="{pe_cls}">{na(r.get('eps'), '{:.2f}')}</span></div>
-    <div>Div: <span class="{div_cls}">{na(r.get('dividend_rate'), '${:.2f}')}</span> (<span class="{div_cls}">{div_yield_display}</span>)</div>
+<div>Div: <span class="{div_cls}">{na(r.get('dividend_rate'), '${:.2f}')}</span> (<span class="{div_cls}">{div_yield_display}</span>)</div>
+<div>{display_label}: <span class="{mcap_cls}"><strong>{fmt_mcap(display_val)}</strong></span></div>
 <div>Earnings: <strong>{r.get('earnings_date') or 'N/A'}</strong></div>
-<div>{display_label}: <span class="{mcap_cls}">{fmt_mcap(display_val)}</span></div>
-<div>Opt Dir: <span class="{opt_dir_cls}">{opt_dir_val}</span> &nbsp; Short: <span class="{short_cls}">{na(short_pct, '{:.1f}%')}</span> ({na(days_cover, '{:.1f}d')})</div>
+<div>P/C Vol Ratio: <span class="{pc_cls}">{na(r.get('pc_ratio'), '{:.2f}')}</span></div>
+<div><strong>Opt Dir: <span class="{opt_dir_cls}">{opt_dir_val}</span> &nbsp; Short: <span class="{short_cls}">{na(short_pct, '{:.1f}%')}</span> ({na(days_cover, '{:.1f}d')})</strong></div>
 </div>'''
     
     html += "</div></div><div id='heatView'><div class='heat-grid'>"
@@ -919,7 +1015,6 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         # include dividend dataset for heat tiles
         heat_div_ds = r.get('dividend_yield') if r.get('dividend_yield') is not None else (r.get('dividend_rate') if r.get('dividend_rate') is not None else '')
         html += f'''<div class="heat-tile stock-row" style="background:{bg}" 
-        onclick="window.open('https://www.barchart.com/stocks/quotes/{r['ticker']}', '_blank')"
         data-ticker="{r['ticker']}" 
         data-change="{r['change_pct']}" 
         data-change-5d="{r.get('change_5d') or ''}"
@@ -928,11 +1023,12 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         data-vol="{r['volume_raw']}" 
         data-meme="{r['is_meme_stock']}" 
         data-squeeze="{r['squeeze_level']}" 
-        data-bb-width="{bb_width_val}" data-dividend="{heat_div_ds}">
-    <strong><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a> <a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.85em;margin-left:6px">(Y)</a> <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.85em;margin-left:6px">(F)</a> {price_display}</strong>
+        data-bb-width="{bb_width_val}" data-dividend="{heat_div_ds}" data-category="{r.get('category') or ''}">
+    <strong><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.85em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.85em">F</a>) {price_display}</strong>
     <div style="margin-top:6px">{fmt_change(r['change_pct'], r.get('change_abs_day'))}</div>
-    <div style="font-size:0.9em">{display_label}: <span class="{mcap_cls}">{fmt_mcap(display_val)}</span></div>
-    <div style="font-size:0.9em;margin-top:6px">52W: {y52_display}</div>
+    <div style="font-size:0.85em">5D: {fmt_change(r.get('change_5d'), r.get('change_abs_5d'))}</div>
+    <div style="font-size:0.9em">{display_label}: <span class="{mcap_cls}"><strong>{fmt_mcap(display_val)}</strong></span></div>
+    <div style="font-size:0.9em;margin-top:6px"><strong>52W: {y52_display}</strong></div>
     </div>'''
     
     html += "</div></div></div>"
@@ -971,6 +1067,7 @@ function applyFilter() {
         const rsi = parseFloat(r.dataset.rsi || 50);
         const vol = parseFloat(r.dataset.vol || 0);
         const meme = r.dataset.meme === 'True';
+        const cat = (r.dataset.category || '').toLowerCase();
         const sq = r.dataset.squeeze || 'None';
         const bbw = parseFloat(r.dataset.bbWidth || 100);
         if (currentFilter === 'oversold') show = rsi < 30;
@@ -1000,6 +1097,7 @@ function applyFilter() {
         })();
         else if (currentFilter === 'bb-squeeze') show = bbw < 6;
         else if (currentFilter === 'dividend') show = parseFloat(r.dataset.dividend || 0) > 0;
+        else if (currentFilter.startsWith('cat-')) show = cat === currentFilter.replace('cat-','');
         if (tickerVal) {
             const tk = (r.dataset.ticker || '').toString().toLowerCase();
             show = show && tk.includes(tickerVal);
