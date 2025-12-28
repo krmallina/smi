@@ -317,6 +317,14 @@ def fetch(ticker, ext=False, retry=0):
                 bb_position_pct = max(0, min(100, bb_position_pct))
             bb_status = "Above Upper" if price > bb_upper else "Below Lower" if price < bb_lower else "Inside"
         
+        # BB %B Signal: Buy when %B <= 0 (at/below lower band), Short when %B >= 100 (at/above upper band)
+        bb_signal = None
+        if bb_position_pct is not None:
+            if bb_position_pct <= 0:
+                bb_signal = "BUY"
+            elif bb_position_pct >= 100:
+                bb_signal = "SHORT"
+        
         div_rate = info.get('dividendRate')
         div_yield = info.get('dividendYield')
 
@@ -388,7 +396,7 @@ def fetch(ticker, ext=False, retry=0):
             'implied_high': impl_hi, 'implied_low': impl_lo,
             'down_volume_bias': down_bias, 'sparkline': spk,
             'bb_upper': bb_upper, 'bb_lower': bb_lower, 'bb_middle': bb_middle,
-            'bb_width_pct': bb_width_pct, 'bb_position_pct': bb_position_pct, 'bb_status': bb_status,
+            'bb_width_pct': bb_width_pct, 'bb_position_pct': bb_position_pct, 'bb_status': bb_status, 'bb_signal': bb_signal,
             'hv_30_annualized': hv,
             'macd_line': macd_val, 'macd_signal': macd_sig, 'macd_label': macd_lbl,
             'pc_ratio': pc_ratio, 'pe': pe, 'eps': eps,
@@ -762,6 +770,11 @@ input:checked + .toggle-slider:before{{transform:translateX(26px)}}
 """
     for _, r in df.iterrows():
         bb_width_val = r['bb_width_pct'] if r['bb_width_pct'] is not None else 100
+        bb_icon = ''
+        if r.get('bb_signal') == 'BUY':
+            bb_icon = '<span style="font-size:0.5em">🟢</span> '
+        elif r.get('bb_signal') == 'SHORT':
+            bb_icon = '<span style="font-size:0.5em">🔴</span> '
         hv = r['hv_30_annualized']
         hv_cls = "negative" if hv and hv > 50 else "neutral"
         hv_str = na(hv, '{:.1f}%')
@@ -835,7 +848,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         # sentiment text (exclude analyst rating)
         sent_text = r['sentiment']
         html += f'''<tr class="stock-row" data-ticker="{r['ticker']}" data-change="{r['change_pct']}" data-change-5d="{r.get('change_5d') or ''}" data-earnings="{r.get('earnings_date_iso') or ''}" data-rsi="{r['rsi'] or 50}" data-vol="{r['volume_raw']}" data-meme="{r['is_meme_stock']}" data-squeeze="{r['squeeze_level']}" data-bb-width="{bb_width_val}" data-dividend="{div_ds}" data-category="{r.get('category') or ''}">
-    <td><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.9em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.9em">F</a>)</td>
+    <td><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.9em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.9em">F</a>)</td>
 <td data-sort="{r['price']:.2f}">${r['price']:.2f} {r['sparkline']}</td>
 <td>{fmt_change(r['change_pct'], r['change_abs_day'])}</td>
 <td>{fmt_change(r.get('change_5d'), r.get('change_abs_5d'))}</td>
@@ -852,6 +865,11 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
     for _, r in df.iterrows():
         bg = "rgba(0,170,0,0.1)" if r['change_pct'] > 0 else "rgba(204,0,0,0.1)"
         bb_width_val = r['bb_width_pct'] if r['bb_width_pct'] is not None else 100
+        bb_icon = ''
+        if r.get('bb_signal') == 'BUY':
+            bb_icon = '<span style="font-size:0.5em">🟢</span> '
+        elif r.get('bb_signal') == 'SHORT':
+            bb_icon = '<span style="font-size:0.5em">🔴</span> '
         hv = r['hv_30_annualized']
         hv_cls = "negative" if hv and hv > 50 else "neutral"
         hv_str = na(hv, '{:.1f}%')
@@ -957,7 +975,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
             data-meme="{r['is_meme_stock']}" 
             data-squeeze="{r['squeeze_level']}" 
             data-bb-width="{bb_width_val}" data-dividend="{card_div_ds}" data-category="{r.get('category') or ''}">
-    <h2><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.8em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.8em">F</a>) ${r['price']:.2f}</h2>
+    <h2><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.8em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.8em">F</a>) ${r['price']:.2f}</h2>
 <div style="font-size:1.5em">{fmt_change(r['change_pct'], r['change_abs_day'])}</div>
 {r['sparkline']}
 <div>1M: {fmt_change(r['change_1m'], r['change_abs_1m'])}</div>
@@ -1014,6 +1032,11 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 
         # include dividend dataset for heat tiles
         heat_div_ds = r.get('dividend_yield') if r.get('dividend_yield') is not None else (r.get('dividend_rate') if r.get('dividend_rate') is not None else '')
+        bb_icon = ''
+        if r.get('bb_signal') == 'BUY':
+            bb_icon = '<span style="font-size:0.5em">🟢</span> '
+        elif r.get('bb_signal') == 'SHORT':
+            bb_icon = '<span style="font-size:0.5em">🔴</span> '
         html += f'''<div class="heat-tile stock-row" style="background:{bg}" 
         data-ticker="{r['ticker']}" 
         data-change="{r['change_pct']}" 
@@ -1024,7 +1047,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         data-meme="{r['is_meme_stock']}" 
         data-squeeze="{r['squeeze_level']}" 
         data-bb-width="{bb_width_val}" data-dividend="{heat_div_ds}" data-category="{r.get('category') or ''}">
-    <strong><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.85em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.85em">F</a>) {price_display}</strong>
+    <strong><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.85em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.85em">F</a>) {price_display}</strong>
     <div style="margin-top:6px">{fmt_change(r['change_pct'], r.get('change_abs_day'))}</div>
     <div style="font-size:0.85em">5D: {fmt_change(r.get('change_5d'), r.get('change_abs_5d'))}</div>
     <div style="font-size:0.9em">{display_label}: <span class="{mcap_cls}"><strong>{fmt_mcap(display_val)}</strong></span></div>
