@@ -113,45 +113,22 @@ def infer_category_from_info(ticker, info):
 
 
 # PERFORMANCE OPTIMIZATION: Cache alerts with TTL to avoid constant file reads
-# Enhanced alerts cache: store data, last load time, file mtime, and a lock
-_alerts_cache = {"data": None, "time": 0, "mtime": None, "lock": threading.Lock()}
+_alerts_cache = {"data": None, "time": 0}
 CACHE_TTL = 300  # 5 minutes
 
 
-def load_alerts(force=False):
-    """Cached alerts loading with TTL and file-mtime check.
-    If `force` is True, always reload from disk.
-    """
+def load_alerts():
+    """Cached alerts loading with TTL"""
     global _alerts_cache
     now = time.time()
-    try:
-        file_mtime = (
-            os.path.getmtime(ALERTS_FILE) if os.path.exists(ALERTS_FILE) else None
-        )
-    except Exception:
-        file_mtime = None
-
-    with _alerts_cache["lock"]:
-        # If not forcing, return cache if mtime unchanged or TTL not expired
-        if not force and _alerts_cache["data"] is not None:
-            if file_mtime is not None and _alerts_cache.get("mtime") == file_mtime:
-                return _alerts_cache["data"]
-            if (now - _alerts_cache.get("time", 0)) <= CACHE_TTL:
-                return _alerts_cache["data"]
-
-        # Otherwise attempt to (re)load from disk
+    if _alerts_cache["data"] is None or (now - _alerts_cache["time"]) > CACHE_TTL:
         try:
-            with open(ALERTS_FILE, "r", encoding="utf-8") as f:
-                data = tuple(json.load(f))
-            _alerts_cache["data"] = data
+            with open(ALERTS_FILE) as f:
+                _alerts_cache["data"] = tuple(json.load(f))
+                _alerts_cache["time"] = now
+        except:
+            _alerts_cache["data"] = ()
             _alerts_cache["time"] = now
-            _alerts_cache["mtime"] = file_mtime
-        except Exception:
-            # On any error, keep previous data if present, otherwise empty tuple
-            if _alerts_cache.get("data") is None:
-                _alerts_cache["data"] = ()
-            _alerts_cache["time"] = now
-            _alerts_cache["mtime"] = file_mtime
     return _alerts_cache["data"]
 
 
@@ -159,7 +136,6 @@ def check_alerts(data):
     custom_alerts = load_alerts()
     now = datetime.now(UTC).astimezone(PST)
     high_52w, low_52w, surge, crash, volume_spike, custom = [], [], [], [], [], []
-    buy_signals, short_signals, sell_signals = [], [], []
     stock_dict = {x["ticker"]: x for x in data}
 
     for a in custom_alerts:
@@ -204,85 +180,24 @@ def check_alerts(data):
                     {"ticker": s["ticker"], "msg": f"NEAR 52W LOW ({pos_pct:.1f}%)"}
                 )
 
-        # Simple BUY / SHORT / SELL heuristics for alerts
-        try:
-            is_buy = False
-            is_short = False
-            is_sell = False
-            # Bollinger Band signals
-            if s.get("bb_signal") == "BUY":
-                is_buy = True
-            elif s.get("bb_signal") == "SHORT":
-                is_short = True
-                # BB short combined with bearish MACD -> stronger SELL
-                if s.get("macd_label") == "Bearish":
-                    is_sell = True
-            # MACD/rsi support
-            if s.get("macd_label") == "Bullish" and (
-                s.get("rsi") is None or s.get("rsi") < 70
-            ):
-                is_buy = True
-            if s.get("macd_label") == "Bearish" and (
-                s.get("rsi") is None or s.get("rsi") > 30
-            ):
-                is_short = True
-                # Bearish MACD with high RSI -> SELL
-                if s.get("rsi") is not None and s.get("rsi") > 70:
-                    is_sell = True
-            # Options flow / put-call bias
-            od = s.get("options_direction") or ""
-            pc = s.get("pc_ratio")
-            try:
-                pc_val = float(pc) if pc is not None else None
-            except Exception:
-                pc_val = None
-            if "Bull" in od and (pc_val is None or pc_val < 1.0):
-                is_buy = True
-            if "Bear" in od and pc_val is not None and pc_val > 1.0:
-                is_short = True
-                if pc_val > 1.2:
-                    is_sell = True
-
-            # Finalize list assignment (avoid duplicates and conflicting tags)
-            if is_buy and not (is_short or is_sell):
-                buy_signals.append(s["ticker"])
-            elif is_sell and not is_buy:
-                sell_signals.append(s["ticker"])
-            elif is_short and not is_buy and not is_sell:
-                short_signals.append(s["ticker"])
-        except Exception:
-            pass
-
     def fmt(items, emoji, label):
-        # normalize list of tickers and skip if none
-        tickers = []
-        for a in items:
-            if isinstance(a, str):
-                tk = a.strip()
-            else:
-                tk = a.get("ticker") if isinstance(a, dict) else None
-                tk = tk.strip() if isinstance(tk, str) else None
-            if tk:
-                tickers.append(tk)
-        if not tickers:
-            return None
-        return f"{emoji} <strong>{label}:</strong> {', '.join(tickers)}"
+        return (
+            f"{emoji} <strong>{label}:</strong> {', '.join(a['ticker'] for a in items)}"
+        )
 
     grouped = []
-    for items, emoji, label in [
-        (buy_signals, "🟢", "Buy"),
-        (sell_signals, "🔻", "Sell"),
-        (short_signals, "🔴", "Short"),
-        (high_52w, "🔥", "52W High"),
-        (low_52w, "📉", "52W Low"),
-        (surge, "🚀", "Surge"),
-        (crash, "💥", "Crash"),
-        (volume_spike, "📈", "Vol Spike"),
-        (custom, "⚡", "Custom"),
-    ]:
-        line = fmt(items, emoji, label)
-        if line:
-            grouped.append(line)
+    if high_52w:
+        grouped.append(fmt(high_52w, "🔥", "52W High"))
+    if low_52w:
+        grouped.append(fmt(low_52w, "📉", "52W Low"))
+    if surge:
+        grouped.append(fmt(surge, "🚀", "Surge"))
+    if crash:
+        grouped.append(fmt(crash, "💥", "Crash"))
+    if volume_spike:
+        grouped.append(fmt(volume_spike, "📈", "Vol Spike"))
+    if custom:
+        grouped.append(f"⚡ <strong>Custom:</strong> {len(custom)}")
     return {"grouped": grouped, "time": now.strftime("%I:%M %p")}
 
 
@@ -359,7 +274,6 @@ def fetch(ticker, ext=False, retry=0):
             return None
 
         price = h_day["Close"].iloc[-1]
-
         day_low, day_high = h_day["Low"].min(), h_day["High"].max()
         reg = safe_history(t, period="5d", prepost=False)
         change_pct = change_abs_day = 0.0
@@ -799,7 +713,6 @@ def dashboard(csv="data/tickers.csv", ext=False):
             res = r.result()
             if res:
                 data.append(res)
-    # Summary printing removed to reduce console noise
     return pd.DataFrame(data).sort_values("change_pct", ascending=False)
 
 
@@ -931,109 +844,6 @@ def get_aaii_sentiment():
     return {"bullish": None, "bearish": None, "spread": None}
 
 
-def get_cvr3_signal(vix, fg=None):
-    """Compute CVR3 signal using the Implementation Summary Table:
-    - VIX vs 10d SMA: Entire bar Above => BUY, Entire bar Below => SELL
-    - PPO(1,10,1): >=10 => BUY, <=-10 => SELL
-    - Candle Color: Black (Close < Open) => BUY, White (Close > Open) => SELL
-    - Market Sentiment (F&G): Extreme Fear => BUY, Extreme Greed => SELL
-
-    If all criteria point BUY -> CVR3 BUY
-    If all criteria point SELL -> CVR3 SELL
-    If majority SELL -> CVR3 SHORT
-    Else -> CVR3 NEUTRAL
-    """
-    votes = {"buy": 0, "sell": 0}
-    # Attempt to fetch recent VIX history
-    try:
-        t = yf.Ticker("^VIX")
-        h = safe_history(t, period="15d")
-    except Exception:
-        h = pd.DataFrame()
-
-    # VIX vs 10d SMA (entire bar)
-    try:
-        if (
-            not h.empty
-            and all(c in h.columns for c in ("High", "Low", "Close"))
-            and len(h) >= 10
-        ):
-            sma10 = h["Close"].rolling(window=10).mean().iloc[-1]
-            last = h.iloc[-1]
-            # Entire bar above: low > sma10
-            if last["Low"] > sma10:
-                votes["buy"] += 1
-            # Entire bar below: high < sma10
-            elif last["High"] < sma10:
-                votes["sell"] += 1
-    except Exception:
-        pass
-
-    # PPO(1,10,1) approximation
-    try:
-        if not h.empty and "Close" in h and len(h) >= 10:
-            ema1 = h["Close"].ewm(span=1, adjust=False).mean().iloc[-1]
-            ema10 = h["Close"].ewm(span=10, adjust=False).mean().iloc[-1]
-            if ema10 and ema10 != 0:
-                ppo = (ema1 - ema10) / ema10 * 100.0
-                if ppo >= 10:
-                    votes["buy"] += 1
-                elif ppo <= -10:
-                    votes["sell"] += 1
-    except Exception:
-        pass
-
-    # Candle color (last candle)
-    try:
-        if not h.empty and all(c in h.columns for c in ("Open", "Close")):
-            last = h.iloc[-1]
-            if last["Close"] < last["Open"]:
-                votes["buy"] += 1
-            elif last["Close"] > last["Open"]:
-                votes["sell"] += 1
-    except Exception:
-        pass
-
-    # Market sentiment via Fear & Greed
-    try:
-        rating = (fg or {}).get("rating") if fg is not None else None
-        if rating is None and fg is not None and fg.get("score") is not None:
-            # fallback mapping from score
-            s = float(fg.get("raw_score") or fg.get("score") or 0)
-            rating = (
-                "Extreme Fear"
-                if s <= 24
-                else (
-                    "Fear"
-                    if s <= 44
-                    else (
-                        "Neutral"
-                        if s <= 55
-                        else "Greed" if s <= 74 else "Extreme Greed"
-                    )
-                )
-            )
-        if rating == "Extreme Fear":
-            votes["buy"] += 1
-        elif rating == "Extreme Greed":
-            votes["sell"] += 1
-    except Exception:
-        pass
-
-    # Decide final signal based on votes
-    b = votes["buy"]
-    s = votes["sell"]
-    if b >= 3 and s == 0:
-        return '<span class="bullish">CVR3 BUY</span>'
-    if s >= 3 and b == 0:
-        return '<span class="strong-bear">CVR3 SELL</span>'
-    if s > b:
-        return '<span class="bear">CVR3 SHORT</span>'
-    if b > s:
-        return '<span class="bull">CVR3 BUY</span>'
-    return '<span class="neutral">CVR3 NEUTRAL</span>'
-
-
 # NOTE: html() function continues with the full HTML generation...
 # Due to character limits, the complete html() function and main block remain unchanged
 # from original code. Simply append the original html() function and main block here.
@@ -1063,8 +873,7 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
         cls = "positive" if ch_abs is not None and ch_abs >= 0 else "negative"
         return f'<span class="{cls}">{name}: {na(data["price"])} ({na(ch_abs, "{:+.2f}")})</span>'
 
-    # Prefix VIX with CVR3 signal computed with Fear & Greed context
-    indices_h = f"{index_str(dow, 'Dow')} | {index_str(sp, 'S&P')} | {index_str(nas, 'Nasdaq')} | {get_cvr3_signal(vix, fg)} {index_str(vix, 'VIX')}"
+    indices_h = f"{index_str(dow, 'Dow')} | {index_str(sp, 'S&P')} | {index_str(nas, 'Nasdaq')} | {index_str(vix, 'VIX')}"
 
     fg_h = '<span class="neutral">F&G: N/A</span>'
     if fg.get("score") is not None:
@@ -1077,7 +886,7 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
                 else (
                     "neutral"
                     if fg["score"] <= 55
-                    else "bullish" if fg["score"] <= 74 else "positive"
+                    else ("bullish" if fg["score"] <= 74 else "positive")
                 )
             )
         )
@@ -1142,13 +951,13 @@ td{{padding:12px;border-bottom:1px solid var(--border);vertical-align:top}}
 .bear{{color:#ff0000;font-weight:bold}}
 .vol-hot{{color:#ff0000;font-weight:bold}}
 .range-bar{{width:100%;height:8px;background:#e0e0e0;border-radius:4px;position:relative;margin:4px 0}}
-.range-bar-marker{{position:absolute;width=3px;height=12px;background:#000;top:-2px}}
+.range-bar-marker{{position:absolute;width:3px;height:12px;background:#000;top:-2px}}
 .range-labels{{display:flex;justify-content:space-between;font-size:0.75em;margin-top:2px}}
 .range-container{{margin:8px 0}}
 .toggle-switch{{position:relative;display:inline-block;width:60px;height:34px}}
 .toggle-switch input{{opacity:0;width:0;height:0}}
 .toggle-slider{{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#ccc;transition:.4s;border-radius:34px}}
-.toggle-slider:before{{position:absolute;content:"";height:26px;width:26px;left=4px;bottom=4px;background:#fff;transition:.4s;border-radius:50%}}
+.toggle-slider:before{{position:absolute;content:"";height:26px;width:26px;left=4px;bottom:4px;background:#fff;transition:.4s;border-radius:50%}}
 input:checked + .toggle-slider{{background:var(--accent)}}
 input:checked + .toggle-slider:before{{transform:translateX(26px)}}
 .hours-toggle{{display:flex;align-items:center;gap:10px;font-weight:600;margin-left:20px}}
@@ -1196,9 +1005,9 @@ input:checked + .toggle-slider:before{{transform:translateX(26px)}}
 </div>
 
 <div class="views">
-<button class="view-btn active" onclick="setView(this,'table')">📋 Table</button>
-<button class="view-btn" onclick="setView(this,'card')">🗂️ Cards</button>
-<button class="view-btn" onclick="setView(this,'heat')">🔥 Heatmap</button>
+<button class="view-btn active" data-view="table" onclick="setView(this,'table')">📋 Table</button>
+<button class="view-btn" data-view="card" onclick="setView(this,'card')">🗂️ Cards</button>
+<button class="view-btn" data-view="heat" onclick="setView(this,'heat')">🔥 Heatmap</button>
 <input id="tickerFilter" placeholder="Filter tickers..." oninput="applyFilter()" style="padding:8px;border-radius:6px;border:1px solid var(--border);margin-left:12px;min-width:160px">
 </div>
 
@@ -1343,7 +1152,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         # sentiment text (exclude analyst rating)
         sent_text = r["sentiment"]
         html += f"""<tr class="stock-row" data-ticker="{r['ticker']}" data-change="{r['change_pct']}" data-change-5d="{r.get('change_5d') or ''}" data-earnings="{r.get('earnings_date_iso') or ''}" data-rsi="{r['rsi'] or 50}" data-vol="{r['volume_raw']}" data-meme="{r['is_meme_stock']}" data-squeeze="{r['squeeze_level']}" data-bb-width="{bb_width_val}" data-dividend="{div_ds}" data-category="{r.get('category') or ''}">
-    <td><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.9em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.9em">F</a>, <a href="https://www.zacks.com/stock/quote/{r['ticker']}" target="_blank" style="font-size:0.9em">Z</a>)</td>
+    <td><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.9em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.9em">F</a>)</td>
 <td data-sort="{r['price']:.2f}">${r['price']:.2f} {r['sparkline']}</td>
 <td>{fmt_change(r['change_pct'], r['change_abs_day'])}</td>
 <td>{fmt_change(r.get('change_5d'), r.get('change_abs_5d'))}</td>
@@ -1387,140 +1196,321 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
             try:
                 pv = float(pc_val)
                 pc_cls = (
-                    "negative" if pv > 1.2 else ("positive" if pv < 0.8 else "neutral")
+                    "negative" if pv > 1.2 else "positive" if pv < 0.8 else "neutral"
                 )
             except Exception:
                 pc_cls = "neutral"
 
-        html += f"""<div class="stock-card" style="background:{bg}" data-ticker="{r['ticker']}" data-change="{r['change_pct']}" data-change-5d="{r.get('change_5d') or ''}" data-earnings="{r.get('earnings_date_iso') or ''}" data-rsi="{r['rsi'] or 50}" data-vol="{r['volume_raw']}" data-meme="{r['is_meme_stock']}" data-squeeze="{r['squeeze_level']}" data-bb-width="{bb_width_val}" data-dividend="{div_ds}" data-category="{r.get('category') or ''}">
-<div style="display:flex;justify-content:space-between;align-items:center">
-<div>
-<h3 style="margin:0;font-size:1.5em">{bb_icon}{r['ticker']}</h3>
-<div style="font-size:0.9em;color:#888">
-<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="color:#0066cc;text-decoration:none">Yahoo</a> |
-<a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank" style="color:#0066cc;text-decoration:none">Barchart</a> |
-<a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="color:#0066cc;text-decoration:none">Finviz</a> |
-<a href="https://www.zacks.com/stock/quote/{r['ticker']}" target="_blank" style="color:#0066cc;text-decoration:none">Zacks</a>
-</div>
-</div>
-<div style="font-size:1.2em">
-<span class="{macd_cls}">{r['macd_label']}</span><br>
-<span class="{sent_cls}">{sent_text}</span>
-</div>
-</div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
-<div>
-<div style="font-weight:bold;margin-bottom:5px">Price Action</div>
-<div style="font-size:1.2em">${r['price']:.2f}</div>
-<div class="range-container" style="margin-top:5px">
-<div class="range-title">Day</div>
-<div class="range-bar" style="background:{day_color}"><div class="range-bar-marker" style="left:{day_pos}%"></div></div>
-<div class="range-labels"><span>${r['day_low']:.2f}</span><span>${r['day_high']:.2f}</span></div>
-</div>
-<div class="range-container" style="margin-top:5px">
-<div class="range-title">52W</div>
-<div class="range-bar" style="background:{y52_color}"><div class="range-bar-marker" style="left:{y52_pos}%"></div></div>
-<div class="range-labels"><span>${r['52w_low']:.2f}</span><span>${r['52w_high']:.2f}</span></div>
-</div>
-</div>
-<div>
-<div style="font-weight:bold;margin-bottom:5px">Technical Indicators</div>
-<div style="font-size:0.9em">
-<span class="{macd_cls}">MACD: {r['macd_label']}</span><br>
-Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<br>
-<span class="{hv_cls}">Volatility: {hv_str}</span><br>
-<span class="{opt_dir_cls}">Opt Dir: {r['options_direction']}</span><br>
-<span class="{bias_cls}">Bias: {'Down' if r['down_volume_bias'] else 'Up'}</span>
-</div>
-</div>
-</div>
-<div class="range-container" style="margin-top:10px">
-<div class="range-title">Bollinger Bands</div>
-<div class="range-bar" style="background:{bb_color}"><div class="range-bar-marker" style="left:{pos}%"></div></div>
-<div class="range-labels"><span>${na(r["bb_lower"])}</span><span>${na(r["bb_middle"])}</span><span>${na(r["bb_upper"])}</span></div>
-<div style="font-size:0.75em;text-align:center">Width: {na(r["bb_width_pct"],"{:.1f}")}% – {r["bb_status"]}</div>
-</div>
-</div>
-</div>
-</div>
-"""
-    html += """</div><div id='heatView' style="display:none">
-<div class="heat-grid">
-"""
+        pe_val = r.get("pe")
+        if pe_val is None:
+            pe_cls = "neutral"
+        else:
+            try:
+                pv = float(pe_val)
+                pe_cls = "negative" if pv > 30 else "positive" if pv < 15 else "neutral"
+            except Exception:
+                pe_cls = "neutral"
+
+        div_val = r.get("dividend_yield")
+        div_cls = "positive" if div_val is not None and div_val > 0 else "neutral"
+        # Display dividend yield with a '%' suffix but keep the raw dataset unmodified
+        div_yield_display = na(div_val, "{}") + "%" if div_val is not None else "N/A"
+
+        mcap_val = r.get("market_cap")
+        aum_val = r.get("aum")
+        # determine display value and label (Market Cap preferred, fallback to AUM)
+        display_val = None
+        display_label = "Market Cap"
+        if mcap_val is not None and pd.notna(mcap_val):
+            display_val = mcap_val
+            display_label = "Market Cap"
+        elif aum_val is not None and pd.notna(aum_val):
+            display_val = aum_val
+            display_label = "AUM"
+        try:
+            base_val = float(display_val) if display_val is not None else None
+        except Exception:
+            base_val = None
+        try:
+            mcap_cls = (
+                "strong-bull"
+                if base_val is not None and base_val >= 200e9
+                else "bull" if base_val is not None and base_val >= 10e9 else "neutral"
+            )
+        except Exception:
+            mcap_cls = "neutral"
+
+        # 52W display
+        y52_low = r.get("52w_low")
+        y52_high = r.get("52w_high")
+        if pd.notna(y52_low) and pd.notna(y52_high):
+            y52_display = f"${y52_low:.2f} - ${y52_high:.2f}"
+        else:
+            y52_display = "N/A"
+
+        # include dividend dataset for card
+        card_div_ds = (
+            r.get("dividend_yield")
+            if r.get("dividend_yield") is not None
+            else (r.get("dividend_rate") if r.get("dividend_rate") is not None else "")
+        )
+        # Option direction and short percent/days color coding for card
+        opt_dir_val = r.get("options_direction") or "Neutral"
+        if "Strong Bear" in opt_dir_val or "Strong Bearish" in opt_dir_val:
+            opt_dir_cls = "strong-bear"
+        elif "Bear" in opt_dir_val:
+            opt_dir_cls = "bear"
+        elif "Strong Bull" in opt_dir_val or "Strong Bullish" in opt_dir_val:
+            opt_dir_cls = "strong-bull"
+        elif "Bull" in opt_dir_val:
+            opt_dir_cls = "bull"
+        else:
+            opt_dir_cls = "neutral"
+
+        short_pct = r.get("short_percent")
+        days_cover = r.get("days_to_cover")
+        try:
+            sp = float(short_pct) if short_pct is not None else None
+        except Exception:
+            sp = None
+        if sp is None:
+            short_cls = "neutral"
+        elif sp >= 20:
+            short_cls = "strong-bear"
+        elif sp >= 10:
+            short_cls = "bear"
+        elif sp >= 5:
+            short_cls = "vol-hot"
+        else:
+            short_cls = "neutral"
+        html += f"""<div class="stock-card stock-row" style="background:{bg}" 
+            data-ticker="{r['ticker']}" 
+            data-change="{r['change_pct']}" 
+            data-change-5d="{r.get('change_5d') or ''}" 
+            data-earnings="{r.get('earnings_date_iso') or ''}"
+            data-rsi="{r['rsi'] or 50}" 
+            data-vol="{r['volume_raw']}" 
+            data-meme="{r['is_meme_stock']}" 
+            data-squeeze="{r['squeeze_level']}" 
+            data-bb-width="{bb_width_val}" data-dividend="{card_div_ds}" data-category="{r.get('category') or ''}">
+    <h2><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.8em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.8em">F</a>) ${r['price']:.2f}</h2>
+<div style="font-size:1.5em">{fmt_change(r['change_pct'], r['change_abs_day'])}</div>
+{r['sparkline']}
+<div>1M: {fmt_change(r['change_1m'], r['change_abs_1m'])}</div>
+<div>5D: {fmt_change(r.get('change_5d'), r.get('change_abs_5d'))}</div>
+<div>6M: {fmt_change(r['change_6m'], r['change_abs_6m'])}</div>
+<div>YTD: {fmt_change(r['change_ytd'], r['change_abs_ytd'])}</div>
+<div><strong>52W: {y52_display}</strong></div>
+<div><span class="{hv_cls}">Volatility: {hv_str}</span></div>
+<div>BB: {r['bb_status']} ({na(r['bb_width_pct'], '{:.1f}%')})</div>
+<div>MACD: <span class="{macd_num_cls}">{na(r.get('macd_line'), '{:+.3f}')}</span> | <span class="{macd_num_cls}">{na(r.get('macd_signal'), '{:+.3f}')}</span> (<span class="{ 'bullish' if r.get('macd_label')=='Bullish' else 'bearish' if r.get('macd_label')=='Bearish' else 'neutral' }">{r.get('macd_label','N/A')}</span>)</div>
+<div>P/E: <span class="{pe_cls}">{na(r.get('pe'), '{:.2f}')}</span></div>
+<div>EPS: <span class="{pe_cls}">{na(r.get('eps'), '{:.2f}')}</span></div>
+<div>Div: <span class="{div_cls}">{na(r.get('dividend_rate'), '${:.2f}')}</span> (<span class="{div_cls}">{div_yield_display}</span>)</div>
+<div>{display_label}: <span class="{mcap_cls}"><strong>{fmt_mcap(display_val)}</strong></span></div>
+<div>Earnings: <strong>{r.get('earnings_date') or 'N/A'}</strong></div>
+<div>P/C Vol Ratio: <span class="{pc_cls}">{na(r.get('pc_ratio'), '{:.2f}')}</span></div>
+<div><strong>Opt Dir: <span class="{opt_dir_cls}">{opt_dir_val}</span> &nbsp; Short: <span class="{short_cls}">{na(short_pct, '{:.1f}%')}</span> ({na(days_cover, '{:.1f}d')})</strong></div>
+</div>"""
+
+    html += "</div></div><div id='heatView'><div class='heat-grid'>"
     for _, r in df.iterrows():
-        ch = r["change_pct"]
-        cls = "vol-hot" if r["volume_spike"] else "neutral"
-        html += f"""
-<div class="heat-tile" data-ticker="{r['ticker']}" data-change="{ch}" style="background:{bg}">
-<div style="font-weight:bold">{r['ticker']}</div>
-<div style="font-size:0.9em;color:#666">
-<span style="display:inline-block;width:60px">${r['price']:.2f}</span>
-<span class="{cls}" style="display:inline-block;width:60px;text-align:right">{fmt_change(ch)}</span>
-</div>
-<div class="range-container" style="margin-top:5px">
-<div class="range-title">Day</div>
-<div class="range-bar" style="background:{day_color}"><div class="range-bar-marker" style="left:{day_pos}%"></div></div>
-<div class="range-labels"><span>${r['day_low']:.2f}</span><span>${r['day_high']:.2f}</span></div>
-</div>
-<div class="range-container" style="margin-top:5px">
-<div class="range-title">52W</div>
-<div class="range-bar" style="background:{y52_color}"><div class="range-bar-marker" style="left:{y52_pos}%"></div></div>
-<div class="range-labels"><span>${r['52w_low']:.2f}</span><span>${r['52w_high']:.2f}</span></div>
-</div>
-</div>
-</div>
-"""
-    html += """</div>
-</div>
+        intensity = min(abs(r["change_pct"]) / 15, 1)
+        bg = (
+            f"rgba(0,170,0,{intensity})"
+            if r["change_pct"] >= 0
+            else f"rgba(204,0,0,{intensity})"
+        )
+        bb_width_val = r["bb_width_pct"] if r["bb_width_pct"] is not None else 100
+        price_display = (
+            f"${r['price']:.2f}"
+            if (r.get("price") is not None and pd.notna(r.get("price")))
+            else "N/A"
+        )
+
+        # Prefer Market Cap, fallback to AUM when market cap missing
+        mcap_val = r.get("market_cap")
+        aum_val = r.get("aum")
+        display_val = None
+        display_label = "Market Cap"
+        if mcap_val is not None and pd.notna(mcap_val):
+            display_val = mcap_val
+            display_label = "Market Cap"
+        elif aum_val is not None and pd.notna(aum_val):
+            display_val = aum_val
+            display_label = "AUM"
+        try:
+            base_val = float(display_val) if display_val is not None else None
+        except Exception:
+            base_val = None
+        try:
+            mcap_cls = (
+                "strong-bull"
+                if base_val is not None and base_val >= 200e9
+                else "bull" if base_val is not None and base_val >= 10e9 else "neutral"
+            )
+        except Exception:
+            mcap_cls = "neutral"
+
+        # 52W range
+        y52_low = r.get("52w_low")
+        y52_high = r.get("52w_high")
+        if pd.notna(y52_low) and pd.notna(y52_high):
+            y52_display = f"${y52_low:.2f} - ${y52_high:.2f}"
+        else:
+            y52_display = "N/A"
+
+        # include dividend dataset for heat tiles
+        heat_div_ds = (
+            r.get("dividend_yield")
+            if r.get("dividend_yield") is not None
+            else (r.get("dividend_rate") if r.get("dividend_rate") is not None else "")
+        )
+        bb_icon = ""
+        if r.get("bb_signal") == "BUY":
+            bb_icon = '<span style="font-size:0.5em">🟢</span> '
+        elif r.get("bb_signal") == "SHORT":
+            bb_icon = '<span style="font-size:0.5em">🔴</span> '
+        html += f"""<div class="heat-tile stock-row" style="background:{bg}" 
+        data-ticker="{r['ticker']}" 
+        data-change="{r['change_pct']}" 
+        data-change-5d="{r.get('change_5d') or ''}"
+        data-earnings="{r.get('earnings_date_iso') or ''}"
+        data-rsi="{r['rsi'] or 50}" 
+        data-vol="{r['volume_raw']}" 
+        data-meme="{r['is_meme_stock']}" 
+        data-squeeze="{r['squeeze_level']}" 
+        data-bb-width="{bb_width_val}" data-dividend="{heat_div_ds}" data-category="{r.get('category') or ''}">
+    <strong><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.85em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.85em">F</a>) {price_display}</strong>
+    <div style="margin-top:6px">{fmt_change(r['change_pct'], r.get('change_abs_day'))}</div>
+    <div style="font-size:0.85em">5D: {fmt_change(r.get('change_5d'), r.get('change_abs_5d'))}</div>
+    <div style="font-size:0.9em">{display_label}: <span class="{mcap_cls}"><strong>{fmt_mcap(display_val)}</strong></span></div>
+    <div style="font-size:0.9em;margin-top:6px"><strong>52W: {y52_display}</strong></div>
+    </div>"""
+
+    html += "</div></div></div>"
+
+    html += """
 <script>
-function toggleHours(checked) {
-var labels = document.querySelectorAll('.hours-toggle span');
-var ext = checked ? '1' : '0';
-labels[0].style.color = checked ? '#888' : '';
-labels[1].style.color = checked ? '' : '#888';
-document.querySelectorAll('.stock-row,.stock-card').forEach(function(el) {
-var cls = el.classList;
-if (checked) {
-cls.add('ext');
-cls.remove('reg');
-} else {
-cls.add('reg');
-cls.remove('ext');
+const prefsKey = 'dash_prefs';
+let prefs = JSON.parse(localStorage.getItem(prefsKey) || '{"theme":"light","view":"table"}');
+document.documentElement.setAttribute('data-theme', prefs.theme);
+
+function setView(btn, view) {
+    document.getElementById('tableView').style.display = view==='table' ? 'block' : 'none';
+    document.getElementById('cardView').style.display = view==='card' ? 'block' : 'none';
+    document.getElementById('heatView').style.display = view==='heat' ? 'block' : 'none';
+    document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    prefs.view = view;
+    localStorage.setItem(prefsKey, JSON.stringify(prefs));
+    applyFilter();
 }
-});
+
+function toggleHours(extended) {
+    const newFile = extended ? 'extnd_dashboard.html' : 'reg_dashboard.html';
+    try {
+        const path = window.location.pathname || window.location.href;
+        if (path.endsWith(newFile)) return;
+        const dir = path.replace(/\/[^\/]*$/, '/');
+        window.location.href = dir + newFile;
+    } catch (e) {
+        // fallback to relative link
+        window.location.href = newFile;
+    }
 }
-function toggleTheme() {
-var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-document.documentElement.setAttribute('data-theme', isDark ? 'light' : 'dark');
-localStorage.setItem('theme', isDark ? 'light' : 'dark');
-}
-function setView(btn,view) {
-document.querySelectorAll('.view-btn').forEach(function(b) { b.classList.remove('active')});
-btn.classList.add('active');
-document.querySelectorAll('#tableView,#cardView,#heatView').forEach(function(v) {
-v.style.display = 'none';
-});
-document.getElementById(view+'View').style.display = 'block';
-}
+
+let currentFilter = 'all';
 function applyFilter() {
-var input = document.getElementById('tickerFilter');
-var filter = input.value.toUpperCase();
-document.querySelectorAll('.stock-row,.stock-card').forEach(function(row) {
-var ticker = row.getAttribute('data-ticker') || '';
-if (ticker.indexOf(filter) > -1) {
-row.style.display = '';
-} else {
-row.style.display = 'none';
+    const rows = document.querySelectorAll('.stock-row');
+    const tickerVal = (document.getElementById('tickerFilter') && document.getElementById('tickerFilter').value) ? document.getElementById('tickerFilter').value.trim().toLowerCase() : '';
+    rows.forEach r => {
+        let show = true;
+        const ch = parseFloat(r.dataset.change || 0);
+        const ch5 = parseFloat(r.dataset.change5d || 0);
+        const rsi = parseFloat(r.dataset.rsi || 50);
+        const vol = parseFloat(r.dataset.vol || 0);
+        const meme = r.dataset.meme === 'True';
+        const cat = (r.dataset.category || '').toLowerCase();
+        const sq = r.dataset.squeeze || 'None';
+        const bbw = parseFloat(r.dataset.bbWidth || 100);
+        if (currentFilter === 'oversold') show = rsi < 30;
+        else if (currentFilter === 'overbought') show = rsi > 70;
+        else if (currentFilter === 'surge') show = (ch > 10) || (ch5 > 10);
+        else if (currentFilter === 'crash') show = (ch < -10) || (ch5 < -10);
+        else if (currentFilter === 'meme') show = meme;
+        else if (currentFilter === 'volume') show = vol > 5e7;
+        else if (currentFilter === 'squeeze') show = sq !== 'None';
+        else if (currentFilter === 'earnings-week') show = (function(){
+            const ed = r.dataset.earnings;
+            if (!ed) return false;
+            try {
+                const edDate = new Date(ed + 'T00:00:00');
+                edDate.setHours(0,0,0,0);
+                const now = new Date();
+                const day = now.getDay();
+                const start = new Date(now);
+                start.setHours(0,0,0,0);
+                start.setDate(now.getDate() - day); // week starts Sunday
+                const end = new Date(start);
+                end.setDate(start.getDate() + 6);
+                return edDate >= start && edDate <= end;
+            } catch (e) {
+                return false;
+            }
+        })();
+        else if (currentFilter === 'bb-squeeze') show = bbw < 6;
+        else if (currentFilter === 'dividend') show = parseFloat(r.dataset.dividend || 0) > 0;
+        else if (currentFilter.startsWith('cat-')) show = cat === currentFilter.replace('cat-','');
+        if (tickerVal) {
+            const tk = (r.dataset.ticker || '').toString().toLowerCase();
+            show = show && tk.includes(tickerVal);
+        }
+        r.style.display = show ? '' : 'none';
+    });
 }
+
+document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', function() {
+    document.querySelectorAll('.chip').forEach(x => x.classList.remove('active'));
+    this.classList.add('active');
+    currentFilter = this.dataset.filter;
+    applyFilter();
+}));
+
+document.querySelectorAll('th[data-sort]').forEach((th, col) => {
+    th.onclick = () => {
+        const table = document.getElementById('stockTable');
+        const rows = Array.from(table.querySelectorAll('tr:nth-child(n+2)'));
+        const dir = th.dataset.dir = (th.dataset.dir === 'asc' ? 'desc' : 'asc');
+        rows.sort((a, b) => {
+           
+            let av = a.cells[col].querySelector('[data-sort]')?.dataset.sort || a.cells[col].textContent.trim();
+            let bv = b.cells[col].querySelector('[data-sort]')?.dataset.sort || b.cells[col].textContent.trim();
+            av = isNaN(parseFloat(av)) ? av : parseFloat(av);
+            bv = isNaN(parseFloat(bv)) ? bv : parseFloat(bv);
+            if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * (dir === 'asc' ? 1 : -1);
+            return av.localeCompare(bv, undefined, {numeric: true}) * (dir === 'asc' ? 1 : -1);
+        });
+        rows.forEach(r => table.appendChild(r));
+    };
 });
+
+applyFilter();
+if (prefs.view !== 'table') {
+    const btn = document.querySelector(`.view-btn[data-view="${prefs.view}"]`);
+    if (btn) setView(btn, prefs.view);
+}
+
+function toggleTheme() {
+    prefs.theme = prefs.theme === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', prefs.theme);
+    localStorage.setItem(prefsKey, JSON.stringify(prefs));
 }
 </script>
-</body></html>
-"""
+</body></html>"""
+
     with open(file, "w", encoding="utf-8") as f:
         f.write(html)
-    # Return the update timestamp so caller can log elapsed time
-    return update
 
 
 if __name__ == "__main__":
@@ -1534,8 +1524,6 @@ if __name__ == "__main__":
         (True, "data/extnd_dashboard.html", "Extended"),
     ]:
         try:
-            print(f"[main] Generating {name} dashboard -> {file} (ext={ext})")
-            start_t = time.time()
             df = dashboard(args.csv_file, ext)
             alerts = check_alerts(df.to_dict("records"))
             html(
@@ -1547,8 +1535,6 @@ if __name__ == "__main__":
                 ext,
                 alerts=alerts,
             )
-            elapsed_min = (time.time() - start_t) / 60.0
-            print(f"Dashboard generated: {file} (elapsed: {elapsed_min:.1f} min)")
             print(f"✓ {name} Hours Dashboard generated: {file}")
         except Exception as e:
             print(f"✗ {name} failed: {e}")
