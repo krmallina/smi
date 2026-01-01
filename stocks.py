@@ -135,7 +135,17 @@ def load_alerts():
 def check_alerts(data):
     custom_alerts = load_alerts()
     now = datetime.now(UTC).astimezone(PST)
-    high_52w, low_52w, surge, crash, volume_spike, custom = [], [], [], [], [], []
+    (
+        high_52w,
+        low_52w,
+        surge,
+        crash,
+        volume_spike,
+        buy_signals,
+        sell_signals,
+        short_signals,
+        custom,
+    ) = ([], [], [], [], [], [], [], [], [])
     stock_dict = {x["ticker"]: x for x in data}
 
     for a in custom_alerts:
@@ -157,6 +167,17 @@ def check_alerts(data):
             msg = f"RSI OVERBOUGHT → {s['rsi']:.1f}"
         elif cond == "volume_spike" and s["volume_spike"]:
             msg = "VOLUME SPIKE"
+        elif cond == "buy" and s.get("bb_signal") == "BUY":
+            buy_signals.append({"ticker": s["ticker"]})
+        elif (
+            cond == "sell"
+            and s.get("bb_signal") is None
+            and s.get("bb_position_pct") is not None
+            and 0 < s.get("bb_position_pct", -1) < 100
+        ):
+            sell_signals.append({"ticker": s["ticker"]})
+        elif cond == "short" and s.get("bb_signal") == "SHORT":
+            short_signals.append({"ticker": s["ticker"]})
         if msg:
             custom.append({"ticker": s["ticker"], "msg": msg})
 
@@ -190,6 +211,12 @@ def check_alerts(data):
         grouped.append(fmt(high_52w, "🔥", "52W High"))
     if low_52w:
         grouped.append(fmt(low_52w, "📉", "52W Low"))
+    if buy_signals:
+        grouped.append(fmt(buy_signals, "💚", "Buy"))
+    if sell_signals:
+        grouped.append(fmt(sell_signals, "💛", "Sell"))
+    if short_signals:
+        grouped.append(fmt(short_signals, "❤️", "Short"))
     if surge:
         grouped.append(fmt(surge, "🚀", "Surge"))
     if crash:
@@ -466,6 +493,39 @@ def fetch(ticker, ext=False, retry=0):
             elif bb_position_pct >= 100:
                 bb_signal = "SHORT"
 
+        # CVR3 VIX Signal: Generate BUY/SELL/SHORT based on VIX (market, not individual ticker)
+        cvr3_vix_signal = None
+        cvr3_vix_pct = None
+        cvr3_vix_value = None
+        try:
+            vix_data = safe_history(yf.Ticker("^VIX"), period="60d")
+            if len(vix_data) >= 10:
+                vix_close_prices = vix_data["Close"]
+                vix_sma = vix_close_prices.rolling(window=10).mean().iloc[-1]
+                if vix_sma > 0:
+                    current_vix = vix_close_prices.iloc[-1]
+                    prev_vix = (
+                        vix_close_prices.iloc[-2]
+                        if len(vix_close_prices) >= 2
+                        else current_vix
+                    )
+                    cvr3_vix_value = current_vix
+                    cvr3_vix_pct = current_vix - prev_vix
+                    pct_diff = ((current_vix - vix_sma) / vix_sma) * 100
+                    # Buy Signal: VIX significantly above 10-day SMA
+                    if pct_diff >= 10:
+                        cvr3_vix_signal = "BUY"
+                    # Sell Signal: VIX significantly below 10-day SMA
+                    elif pct_diff <= -10:
+                        cvr3_vix_signal = "SELL"
+                    # Short Signal: VIX extremely elevated above SMA
+                    elif pct_diff >= 20:
+                        cvr3_vix_signal = "SHORT"
+        except Exception:
+            cvr3_vix_signal = None
+            cvr3_vix_pct = None
+            cvr3_vix_value = None
+
         div_rate = info.get("dividendRate")
         div_yield = info.get("dividendYield")
 
@@ -580,6 +640,9 @@ def fetch(ticker, ext=False, retry=0):
             "bb_position_pct": bb_position_pct,
             "bb_status": bb_status,
             "bb_signal": bb_signal,
+            "cvr3_vix_signal": cvr3_vix_signal,
+            "cvr3_vix_pct": cvr3_vix_pct,
+            "cvr3_vix_value": cvr3_vix_value,
             "hv_30_annualized": hv,
             "macd_line": macd_val,
             "macd_signal": macd_sig,
@@ -866,6 +929,25 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
     sp = get_index_data("^GSPC")
     nas = get_index_data("^IXIC")
 
+    # Calculate CVR3 Signal
+    cvr3_signal = "NEUTRAL"
+    try:
+        vix_data = safe_history(yf.Ticker("^VIX"), period="60d")
+        if len(vix_data) >= 10:
+            vix_close = vix_data["Close"]
+            vix_sma = vix_close.rolling(window=10).mean().iloc[-1]
+            if vix_sma > 0:
+                current_vix = vix_close.iloc[-1]
+                pct_diff = ((current_vix - vix_sma) / vix_sma) * 100
+                if pct_diff >= 20:
+                    cvr3_signal = "SHORT"
+                elif pct_diff >= 10:
+                    cvr3_signal = "BUY"
+                elif pct_diff <= -10:
+                    cvr3_signal = "SELL"
+    except Exception:
+        cvr3_signal = "NEUTRAL"
+
     def index_str(data, name):
         if data["price"] is None:
             return f'<span class="neutral">{name}: N/A</span>'
@@ -873,7 +955,16 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
         cls = "positive" if ch_abs is not None and ch_abs >= 0 else "negative"
         return f'<span class="{cls}">{name}: {na(data["price"])} ({na(ch_abs, "{:+.2f}")})</span>'
 
-    indices_h = f"{index_str(dow, 'Dow')} | {index_str(sp, 'S&P')} | {index_str(nas, 'Nasdaq')} | {index_str(vix, 'VIX')}"
+    # CVR3 signal color
+    cvr3_color = (
+        "positive"
+        if cvr3_signal == "BUY"
+        else ("negative" if cvr3_signal in ("SELL", "SHORT") else "neutral")
+    )
+    cvr3_str = f'<span class="{cvr3_color}">CVR3: {cvr3_signal}</span>'
+
+    # Build multi-line market summary
+    indices_h = f'{index_str(dow, "Dow")} | {index_str(sp, "S&P")} | {index_str(nas, "Nasdaq")} | {index_str(vix, "VIX")} | {cvr3_str}'
 
     fg_h = '<span class="neutral">F&G: N/A</span>'
     if fg.get("score") is not None:
@@ -1034,6 +1125,10 @@ input:checked + .toggle-slider:before{{transform:translateX(26px)}}
             bb_icon = '<span style="font-size:0.5em">🟢</span> '
         elif r.get("bb_signal") == "SHORT":
             bb_icon = '<span style="font-size:0.5em">🔴</span> '
+        elif r.get("cvr3_vix_signal") == "BUY":
+            bb_icon = '<span style="font-size:0.5em">🟢</span> '
+        elif r.get("cvr3_vix_signal") == "SHORT":
+            bb_icon = '<span style="font-size:0.5em">🔴</span> '
         hv = r["hv_30_annualized"]
         hv_cls = "negative" if hv and hv > 50 else "neutral"
         hv_str = na(hv, "{:.1f}%")
@@ -1137,11 +1232,32 @@ input:checked + .toggle-slider:before{{transform:translateX(26px)}}
 
         ranges_html = f"{day_block}{y52_block}{bb_bar}{impl_bar}"
 
+        # CVR3 Signal color coding
+        cvr3_color = "var(--neutral)"
+        if r.get("cvr3_vix_signal") == "BUY":
+            cvr3_color = "var(--pos)"
+        elif r.get("cvr3_vix_signal") == "SELL":
+            cvr3_color = "var(--neg)"
+        elif r.get("cvr3_vix_signal") == "SHORT":
+            cvr3_color = "#ff8800"
+
+        # VIX change color coding
+        vix_change_color = "var(--neutral)"
+        if r.get("cvr3_vix_pct") is not None:
+            if r.get("cvr3_vix_pct") > 0:
+                vix_change_color = "var(--neg)"
+            elif r.get("cvr3_vix_pct") < 0:
+                vix_change_color = "var(--pos)"
+
+        cvr3_html = ""
+        if r.get("cvr3_vix_value") is not None:
+            cvr3_html = f"""<br><span style="color: {cvr3_color}">CVR3: {r.get('cvr3_vix_signal') or 'NEUTRAL'}</span> <span style="color: {vix_change_color}">VIX: {na(r['cvr3_vix_value'], '{:.2f}')} ({('+' if (r.get('cvr3_vix_pct') or 0) >= 0 else '')}{na(r['cvr3_vix_pct'], '{:.2f}')})</span>"""
+
         indicators_html = f"""<span class="{macd_cls}">MACD: {r['macd_label']}</span><br>
 Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<br>
 <span class="{hv_cls}">Volatility: {hv_str}</span><br>
 <span class="{opt_dir_cls}">Opt Dir: {r['options_direction']}</span><br>
-<span class="{bias_cls}">Bias: {'Down' if r['down_volume_bias'] else 'Up'}</span>"""
+<span class="{bias_cls}">Bias: {'Down' if r['down_volume_bias'] else 'Up'}</span>{cvr3_html}"""
 
         # include dividend dataset (percent) for filtering
         div_ds = (
@@ -1152,7 +1268,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         # sentiment text (exclude analyst rating)
         sent_text = r["sentiment"]
         html += f"""<tr class="stock-row" data-ticker="{r['ticker']}" data-change="{r['change_pct']}" data-change-5d="{r.get('change_5d') or ''}" data-earnings="{r.get('earnings_date_iso') or ''}" data-rsi="{r['rsi'] or 50}" data-vol="{r['volume_raw']}" data-meme="{r['is_meme_stock']}" data-squeeze="{r['squeeze_level']}" data-bb-width="{bb_width_val}" data-dividend="{div_ds}" data-category="{r.get('category') or ''}">
-    <td><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.9em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.9em">F</a>)</td>
+    <td><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.9em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.9em">F</a>, <a href="https://www.zacks.com/stock/research/{r['ticker']}/" target="_blank" style="font-size:0.9em">Z</a>)</td>
 <td data-sort="{r['price']:.2f}">${r['price']:.2f} {r['sparkline']}</td>
 <td>{fmt_change(r['change_pct'], r['change_abs_day'])}</td>
 <td>{fmt_change(r.get('change_5d'), r.get('change_abs_5d'))}</td>
@@ -1293,7 +1409,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
             data-meme="{r['is_meme_stock']}" 
             data-squeeze="{r['squeeze_level']}" 
             data-bb-width="{bb_width_val}" data-dividend="{card_div_ds}" data-category="{r.get('category') or ''}">
-    <h2><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.8em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.8em">F</a>) ${r['price']:.2f}</h2>
+    <h2><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.8em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.8em">F</a>, <a href="https://www.zacks.com/stock/research/{r['ticker']}/" target="_blank" style="font-size:0.8em">Z</a>) ${r['price']:.2f}</h2>
 <div style="font-size:1.5em">{fmt_change(r['change_pct'], r['change_abs_day'])}</div>
 {r['sparkline']}
 <div>1M: {fmt_change(r['change_1m'], r['change_abs_1m'])}</div>
@@ -1381,7 +1497,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         data-meme="{r['is_meme_stock']}" 
         data-squeeze="{r['squeeze_level']}" 
         data-bb-width="{bb_width_val}" data-dividend="{heat_div_ds}" data-category="{r.get('category') or ''}">
-    <strong><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.85em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.85em">F</a>) {price_display}</strong>
+    <strong><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.85em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.85em">F</a>, <a href="https://www.zacks.com/stock/research/{r['ticker']}/" target="_blank" style="font-size:0.85em">Z</a>) {price_display}</strong>
     <div style="margin-top:6px">{fmt_change(r['change_pct'], r.get('change_abs_day'))}</div>
     <div style="font-size:0.85em">5D: {fmt_change(r.get('change_5d'), r.get('change_abs_5d'))}</div>
     <div style="font-size:0.9em">{display_label}: <span class="{mcap_cls}"><strong>{fmt_mcap(display_val)}</strong></span></div>
@@ -1507,6 +1623,8 @@ function toggleTheme() {
 
 if __name__ == "__main__":
     os.makedirs("data", exist_ok=True)
+    # Pre-load alerts cache at startup
+    load_alerts()
     parser = argparse.ArgumentParser()
     parser.add_argument("csv_file", nargs="?", default="data/tickers.csv")
     args = parser.parse_args()
