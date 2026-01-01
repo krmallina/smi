@@ -13,26 +13,51 @@ import time
 from functools import lru_cache
 import threading
 
-ALERTS_FILE = 'data/alerts.json'
+ALERTS_FILE = "data/alerts.json"
 UTC = pytz.utc
-PST = pytz.timezone('America/Los_Angeles')
-MEME_STOCKS = frozenset({'GME','AMC','BB','KOSS','EXPR','DJT','HOOD','RDDT','SPCE','RIVN','DNUT','OPEN','KSS','RKLB','GPRO','AEO','BYND','CVNA','PLTR','SMCI'})
+PST = pytz.timezone("America/Los_Angeles")
+MEME_STOCKS = frozenset(
+    {
+        "GME",
+        "AMC",
+        "BB",
+        "KOSS",
+        "EXPR",
+        "DJT",
+        "HOOD",
+        "RDDT",
+        "SPCE",
+        "RIVN",
+        "DNUT",
+        "OPEN",
+        "KSS",
+        "RKLB",
+        "GPRO",
+        "AEO",
+        "BYND",
+        "CVNA",
+        "PLTR",
+        "SMCI",
+    }
+)
 
 # Category buckets for filtering chips
 CATEGORY_MAP = {
-    'major-tech': frozenset({'AAPL', 'AMZN', 'GOOGL', 'META', 'MSFT', 'NVDA', 'TSLA'}),
-    'leveraged-etf': frozenset({'TQQQ', 'SPXL', 'AAPU', 'PLTU'}),
-    'sector-etf': frozenset({'SPY', 'XLF', 'SMH', 'XBI'}),
-    'spec-meme': MEME_STOCKS,
-    'emerging-tech': frozenset({'OKLO', 'SMR', 'CRWV', 'RKLB'}),
+    "major-tech": frozenset({"AAPL", "AMZN", "GOOGL", "META", "MSFT", "NVDA", "TSLA"}),
+    "leveraged-etf": frozenset({"TQQQ", "SPXL", "AAPU", "PLTU"}),
+    "sector-etf": frozenset({"SPY", "XLF", "SMH", "XBI"}),
+    "spec-meme": MEME_STOCKS,
+    "emerging-tech": frozenset({"OKLO", "SMR", "CRWV", "RKLB"}),
 }
+
 
 def get_category(ticker):
     tu = ticker.upper()
     for slug, tickers in CATEGORY_MAP.items():
         if tu in tickers:
             return slug
-    return ''
+    return ""
+
 
 def infer_category_from_info(ticker, info):
     tu = ticker.upper()
@@ -41,109 +66,246 @@ def infer_category_from_info(ticker, info):
     if mapped:
         return mapped
 
-    qtype = (info.get('quoteType') or '').lower()
-    sector = (info.get('sector') or '').lower()
-    industry = (info.get('industry') or '').lower()
-    lname = (info.get('longName') or '').lower()
-    sname = (info.get('shortName') or '').lower()
+    qtype = (info.get("quoteType") or "").lower()
+    sector = (info.get("sector") or "").lower()
+    industry = (info.get("industry") or "").lower()
+    lname = (info.get("longName") or "").lower()
+    sname = (info.get("shortName") or "").lower()
 
     # Detect leveraged/inverse ETFs via quoteType or naming
-    if qtype == 'etf' or 'etf' in lname or 'etf' in sname:
-        lever_markers = ('3x', '2x', 'ultra', 'ultrapro', 'leveraged', 'inverse', '-1x', '-2x', '-3x')
-        if any(m in tu.lower() for m in ('3x', '2x', 'ultra', 'pro', 'bull', 'bear')) or any(m in lname for m in lever_markers) or any(m in sname for m in lever_markers):
-            return 'leveraged-etf'
-        return 'sector-etf'
+    if qtype == "etf" or "etf" in lname or "etf" in sname:
+        lever_markers = (
+            "3x",
+            "2x",
+            "ultra",
+            "ultrapro",
+            "leveraged",
+            "inverse",
+            "-1x",
+            "-2x",
+            "-3x",
+        )
+        if (
+            any(m in tu.lower() for m in ("3x", "2x", "ultra", "pro", "bull", "bear"))
+            or any(m in lname for m in lever_markers)
+            or any(m in sname for m in lever_markers)
+        ):
+            return "leveraged-etf"
+        return "sector-etf"
 
     # Meme / speculative
     if tu in MEME_STOCKS:
-        return 'spec-meme'
+        return "spec-meme"
 
     # Major tech/growth heuristics
-    if sector == 'technology' or any(k in industry for k in ('semiconductor', 'software', 'ai')):
-        return 'major-tech'
+    if sector == "technology" or any(
+        k in industry for k in ("semiconductor", "software", "ai")
+    ):
+        return "major-tech"
 
     # Emerging tech / energy heuristics
-    if any(k in industry for k in ('nuclear', 'battery', 'clean energy', 'solar', 'space')) or any(k in lname for k in ('nuclear', 'battery', 'rocket', 'fusion', 'space')):
-        return 'emerging-tech'
+    if any(
+        k in industry for k in ("nuclear", "battery", "clean energy", "solar", "space")
+    ) or any(k in lname for k in ("nuclear", "battery", "rocket", "fusion", "space")):
+        return "emerging-tech"
 
-    return ''
+    return ""
+
 
 # PERFORMANCE OPTIMIZATION: Cache alerts with TTL to avoid constant file reads
-_alerts_cache = {'data': None, 'time': 0}
+# Enhanced alerts cache: store data, last load time, file mtime, and a lock
+_alerts_cache = {"data": None, "time": 0, "mtime": None, "lock": threading.Lock()}
 CACHE_TTL = 300  # 5 minutes
 
-def load_alerts():
-    """Cached alerts loading with TTL"""
+
+def load_alerts(force=False):
+    """Cached alerts loading with TTL and file-mtime check.
+    If `force` is True, always reload from disk.
+    """
     global _alerts_cache
     now = time.time()
-    if _alerts_cache['data'] is None or (now - _alerts_cache['time']) > CACHE_TTL:
+    try:
+        file_mtime = (
+            os.path.getmtime(ALERTS_FILE) if os.path.exists(ALERTS_FILE) else None
+        )
+    except Exception:
+        file_mtime = None
+
+    with _alerts_cache["lock"]:
+        # If not forcing, return cache if mtime unchanged or TTL not expired
+        if not force and _alerts_cache["data"] is not None:
+            if file_mtime is not None and _alerts_cache.get("mtime") == file_mtime:
+                return _alerts_cache["data"]
+            if (now - _alerts_cache.get("time", 0)) <= CACHE_TTL:
+                return _alerts_cache["data"]
+
+        # Otherwise attempt to (re)load from disk
         try:
-            with open(ALERTS_FILE) as f:
-                _alerts_cache['data'] = tuple(json.load(f))
-                _alerts_cache['time'] = now
-        except:
-            _alerts_cache['data'] = ()
-            _alerts_cache['time'] = now
-    return _alerts_cache['data']
+            with open(ALERTS_FILE, "r", encoding="utf-8") as f:
+                data = tuple(json.load(f))
+            _alerts_cache["data"] = data
+            _alerts_cache["time"] = now
+            _alerts_cache["mtime"] = file_mtime
+        except Exception:
+            # On any error, keep previous data if present, otherwise empty tuple
+            if _alerts_cache.get("data") is None:
+                _alerts_cache["data"] = ()
+            _alerts_cache["time"] = now
+            _alerts_cache["mtime"] = file_mtime
+    return _alerts_cache["data"]
+
 
 def check_alerts(data):
     custom_alerts = load_alerts()
     now = datetime.now(UTC).astimezone(PST)
     high_52w, low_52w, surge, crash, volume_spike, custom = [], [], [], [], [], []
-    stock_dict = {x['ticker']: x for x in data}
+    buy_signals, short_signals, sell_signals = [], [], []
+    stock_dict = {x["ticker"]: x for x in data}
 
     for a in custom_alerts:
-        s = stock_dict.get(a['ticker'].upper())
-        if not s: continue
-        msg, cond, val = "", a['condition'], a.get('value')
-        if cond == "price_above" and val and s['price'] > val: msg = f"price ABOVE ${val:.2f} → ${s['price']:.2f}"
-        elif cond == "price_below" and val and s['price'] < val: msg = f"price BELOW ${val:.2f} → ${s['price']:.2f}"
-        elif cond == "day_change_above" and val and s['change_pct'] > val: msg = f"DAY % ABOVE {val}% → {s['change_pct']:+.2f}%"
-        elif cond == "day_change_below" and val and s['change_pct'] < val: msg = f"DAY % BELOW {val}% → {s['change_pct']:+.2f}%"
-        elif cond == "rsi_oversold" and s['rsi'] is not None and s['rsi'] < 30: msg = f"RSI OVERSOLD → {s['rsi']:.1f}"
-        elif cond == "rsi_overbought" and s['rsi'] is not None and s['rsi'] > 70: msg = f"RSI OVERBOUGHT → {s['rsi']:.1f}"
-        elif cond == "volume_spike" and s['volume_spike']: msg = "VOLUME SPIKE"
-        if msg: custom.append({'ticker': s['ticker'], 'msg': msg})
+        s = stock_dict.get(a["ticker"].upper())
+        if not s:
+            continue
+        msg, cond, val = "", a["condition"], a.get("value")
+        if cond == "price_above" and val and s["price"] > val:
+            msg = f"price ABOVE ${val:.2f} → ${s['price']:.2f}"
+        elif cond == "price_below" and val and s["price"] < val:
+            msg = f"price BELOW ${val:.2f} → ${s['price']:.2f}"
+        elif cond == "day_change_above" and val and s["change_pct"] > val:
+            msg = f"DAY % ABOVE {val}% → {s['change_pct']:+.2f}%"
+        elif cond == "day_change_below" and val and s["change_pct"] < val:
+            msg = f"DAY % BELOW {val}% → {s['change_pct']:+.2f}%"
+        elif cond == "rsi_oversold" and s["rsi"] is not None and s["rsi"] < 30:
+            msg = f"RSI OVERSOLD → {s['rsi']:.1f}"
+        elif cond == "rsi_overbought" and s["rsi"] is not None and s["rsi"] > 70:
+            msg = f"RSI OVERBOUGHT → {s['rsi']:.1f}"
+        elif cond == "volume_spike" and s["volume_spike"]:
+            msg = "VOLUME SPIKE"
+        if msg:
+            custom.append({"ticker": s["ticker"], "msg": msg})
 
     for s in data:
-        ch = s['change_pct']
-        if ch > 15: surge.append({'ticker': s['ticker'], 'msg': f"SURGED > +15% → {ch:+.2f}%"})
-        elif ch < -15: crash.append({'ticker': s['ticker'], 'msg': f"CRASHED < -15% → {ch:+.2f}%"})
-        if s['volume_spike']: volume_spike.append({'ticker': s['ticker'], 'msg': "VOLUME SPIKE"})
-        range_52w = s['52w_high'] - s['52w_low']
+        ch = s["change_pct"]
+        if ch > 15:
+            surge.append({"ticker": s["ticker"], "msg": f"SURGED > +15% → {ch:+.2f}%"})
+        elif ch < -15:
+            crash.append({"ticker": s["ticker"], "msg": f"CRASHED < -15% → {ch:+.2f}%"})
+        if s["volume_spike"]:
+            volume_spike.append({"ticker": s["ticker"], "msg": "VOLUME SPIKE"})
+        range_52w = s["52w_high"] - s["52w_low"]
         if range_52w > 0:
-            pos_pct = (s['price'] - s['52w_low']) / range_52w * 100
-            if pos_pct >= 95: high_52w.append({'ticker': s['ticker'], 'msg': f"NEAR 52W HIGH ({pos_pct:.1f}%)"})
-            elif pos_pct <= 5: low_52w.append({'ticker': s['ticker'], 'msg': f"NEAR 52W LOW ({pos_pct:.1f}%)"})
+            pos_pct = (s["price"] - s["52w_low"]) / range_52w * 100
+            if pos_pct >= 95:
+                high_52w.append(
+                    {"ticker": s["ticker"], "msg": f"NEAR 52W HIGH ({pos_pct:.1f}%)"}
+                )
+            elif pos_pct <= 5:
+                low_52w.append(
+                    {"ticker": s["ticker"], "msg": f"NEAR 52W LOW ({pos_pct:.1f}%)"}
+                )
+
+        # Simple BUY / SHORT / SELL heuristics for alerts
+        try:
+            is_buy = False
+            is_short = False
+            is_sell = False
+            # Bollinger Band signals
+            if s.get("bb_signal") == "BUY":
+                is_buy = True
+            elif s.get("bb_signal") == "SHORT":
+                is_short = True
+                # BB short combined with bearish MACD -> stronger SELL
+                if s.get("macd_label") == "Bearish":
+                    is_sell = True
+            # MACD/rsi support
+            if s.get("macd_label") == "Bullish" and (
+                s.get("rsi") is None or s.get("rsi") < 70
+            ):
+                is_buy = True
+            if s.get("macd_label") == "Bearish" and (
+                s.get("rsi") is None or s.get("rsi") > 30
+            ):
+                is_short = True
+                # Bearish MACD with high RSI -> SELL
+                if s.get("rsi") is not None and s.get("rsi") > 70:
+                    is_sell = True
+            # Options flow / put-call bias
+            od = s.get("options_direction") or ""
+            pc = s.get("pc_ratio")
+            try:
+                pc_val = float(pc) if pc is not None else None
+            except Exception:
+                pc_val = None
+            if "Bull" in od and (pc_val is None or pc_val < 1.0):
+                is_buy = True
+            if "Bear" in od and pc_val is not None and pc_val > 1.0:
+                is_short = True
+                if pc_val > 1.2:
+                    is_sell = True
+
+            # Finalize list assignment (avoid duplicates and conflicting tags)
+            if is_buy and not (is_short or is_sell):
+                buy_signals.append(s["ticker"])
+            elif is_sell and not is_buy:
+                sell_signals.append(s["ticker"])
+            elif is_short and not is_buy and not is_sell:
+                short_signals.append(s["ticker"])
+        except Exception:
+            pass
 
     def fmt(items, emoji, label):
-        return f"{emoji} <strong>{label}:</strong> {', '.join(a['ticker'] for a in items)}"
-    
+        # normalize list of tickers and skip if none
+        tickers = []
+        for a in items:
+            if isinstance(a, str):
+                tk = a.strip()
+            else:
+                tk = a.get("ticker") if isinstance(a, dict) else None
+                tk = tk.strip() if isinstance(tk, str) else None
+            if tk:
+                tickers.append(tk)
+        if not tickers:
+            return None
+        return f"{emoji} <strong>{label}:</strong> {', '.join(tickers)}"
+
     grouped = []
-    if high_52w: grouped.append(fmt(high_52w, "🔥", "52W High"))
-    if low_52w: grouped.append(fmt(low_52w, "📉", "52W Low"))
-    if surge: grouped.append(fmt(surge, "🚀", "Surge"))
-    if crash: grouped.append(fmt(crash, "💥", "Crash"))
-    if volume_spike: grouped.append(fmt(volume_spike, "📈", "Vol Spike"))
-    if custom: grouped.append(f"⚡ <strong>Custom:</strong> {len(custom)}")
-    return {'grouped': grouped, 'time': now.strftime('%I:%M %p')}
+    for items, emoji, label in [
+        (buy_signals, "🟢", "Buy"),
+        (sell_signals, "🔻", "Sell"),
+        (short_signals, "🔴", "Short"),
+        (high_52w, "🔥", "52W High"),
+        (low_52w, "📉", "52W Low"),
+        (surge, "🚀", "Surge"),
+        (crash, "💥", "Crash"),
+        (volume_spike, "📈", "Vol Spike"),
+        (custom, "⚡", "Custom"),
+    ]:
+        line = fmt(items, emoji, label)
+        if line:
+            grouped.append(line)
+    return {"grouped": grouped, "time": now.strftime("%I:%M %p")}
+
 
 def rsi(s):
     """OPTIMIZED: Use EWM instead of rolling mean for faster calculation"""
-    if len(s) < 15: return None
+    if len(s) < 15:
+        return None
     d = s.diff()
     g = d.clip(lower=0).ewm(span=14, adjust=False).mean()
     l = (-d.clip(upper=0)).ewm(span=14, adjust=False).mean()
     rs = g / l
-    return (100 - 100 / (1 + rs.iloc[-1]))
+    return 100 - 100 / (1 + rs.iloc[-1])
+
 
 def macd(s):
-    if len(s) < 26: return None, None, "N/A"
+    if len(s) < 26:
+        return None, None, "N/A"
     e12, e26 = s.ewm(span=12, adjust=False).mean(), s.ewm(span=26, adjust=False).mean()
     line = e12 - e26
     sig = line.ewm(span=9, adjust=False).mean()
     last_line, last_sig = line.iloc[-1], sig.iloc[-1]
     return last_line, last_sig, "Bullish" if last_line > last_sig else "Bearish"
+
 
 def na(v, f="{:.2f}"):
     if v is None or pd.isna(v):
@@ -153,15 +315,21 @@ def na(v, f="{:.2f}"):
     except (ValueError, TypeError):
         return "N/A"
 
+
 def sparkline(prices):
-    if len(prices) < 2: return ""
+    if len(prices) < 2:
+        return ""
     prices = prices[-30:]
     mn, mx = min(prices), max(prices)
     rng = mx - mn if mx != mn else 1
     w, h = 60, 20
-    pts = [f"{(i/(len(prices)-1))*w:.1f},{h-((p-mn)/rng*h):.1f}" for i,p in enumerate(prices)]
+    pts = [
+        f"{(i/(len(prices)-1))*w:.1f},{h-((p-mn)/rng*h):.1f}"
+        for i, p in enumerate(prices)
+    ]
     c = "#00aa00" if prices[-1] >= prices[0] else "#cc0000"
     return f'<svg width="{w}" height="{h}"><polyline points="{" ".join(pts)}" fill="none" stroke="{c}" stroke-width="1.5"/></svg>'
+
 
 # Safe wrapper for yfinance history calls to avoid hard failures (e.g., 401 Unauthorized)
 def safe_history(ticker_obj, **kwargs):
@@ -169,6 +337,7 @@ def safe_history(ticker_obj, **kwargs):
         return ticker_obj.history(**kwargs)
     except Exception:
         return pd.DataFrame()
+
 
 def fetch(ticker, ext=False, retry=0):
     max_retries = 3
@@ -184,15 +353,18 @@ def fetch(ticker, ext=False, retry=0):
 
         info = get_ticker_info_cached(ticker)
         h_day = safe_history(t, period="1d", interval="1m", prepost=ext)
-        if h_day.empty: h_day = safe_history(t, period="5d", prepost=ext)
-        if h_day.empty: return None
-        
-        price = h_day['Close'].iloc[-1]
-        day_low, day_high = h_day['Low'].min(), h_day['High'].max()
+        if h_day.empty:
+            h_day = safe_history(t, period="5d", prepost=ext)
+        if h_day.empty:
+            return None
+
+        price = h_day["Close"].iloc[-1]
+
+        day_low, day_high = h_day["Low"].min(), h_day["High"].max()
         reg = safe_history(t, period="5d", prepost=False)
         change_pct = change_abs_day = 0.0
         if len(reg) >= 2:
-            prev = reg['Close'].iloc[-2]
+            prev = reg["Close"].iloc[-2]
             if prev and prev > 0:
                 change_pct = ((price - prev) / prev) * 100
                 change_abs_day = price - prev
@@ -201,7 +373,7 @@ def fetch(ticker, ext=False, retry=0):
         change_abs_5d = None
         try:
             if len(reg) >= 2:
-                ref5 = reg['Close'].iloc[0]
+                ref5 = reg["Close"].iloc[0]
                 if ref5 and ref5 > 0:
                     change_5d = ((price - ref5) / ref5) * 100
                     change_abs_5d = price - ref5
@@ -210,102 +382,153 @@ def fetch(ticker, ext=False, retry=0):
             change_abs_5d = None
 
         h1m, h6m = safe_history(t, period="2mo"), safe_history(t, period="7mo")
-        ytd = safe_history(t, start=datetime(datetime.now().year, 1, 1).strftime('%Y-%m-%d'))
+        ytd = safe_history(
+            t, start=datetime(datetime.now().year, 1, 1).strftime("%Y-%m-%d")
+        )
         y, h30 = safe_history(t, period="1y"), safe_history(t, period="60d")
-        
+
         def calc_ch(h):
-            if len(h) >= 2 and h['Close'].iloc[0] > 0:
-                return ((price - h['Close'].iloc[0]) / h['Close'].iloc[0]) * 100, price - h['Close'].iloc[0]
+            if len(h) >= 2 and h["Close"].iloc[0] > 0:
+                return (
+                    (price - h["Close"].iloc[0]) / h["Close"].iloc[0]
+                ) * 100, price - h["Close"].iloc[0]
             return None, None
-        
+
         ch1m, abs1m = calc_ch(h1m)
         ch6m, abs6m = calc_ch(h6m)
         chytd, absytd = calc_ch(ytd)
-        
-        high52, low52 = (y['High'].max(), y['Low'].min()) if not y.empty else (price, price)
-        vol = h_day['Volume'].sum()
-        
+
+        high52, low52 = (
+            (y["High"].max(), y["Low"].min()) if not y.empty else (price, price)
+        )
+        vol = h_day["Volume"].sum()
+
         hv = None
         if len(h30) >= 30:
-            r = h30['Close'].pct_change().dropna()
-            if len(r) > 1: hv = r.std() * (252**0.5) * 100
-        
-        short_pct = info.get('shortPercentOfFloat')
-        if short_pct: short_pct *= 100
-        
+            r = h30["Close"].pct_change().dropna()
+            if len(r) > 1:
+                hv = r.std() * (252**0.5) * 100
+
+        short_pct = info.get("shortPercentOfFloat")
+        if short_pct:
+            short_pct *= 100
+
         days_cover = None
-        if info.get('sharesShort'):
-            avg = info.get('averageDailyVolume10Day') or info.get('averageVolume') or vol or 1
-            if avg > 0: days_cover = info['sharesShort'] / avg
-        
+        if info.get("sharesShort"):
+            avg = (
+                info.get("averageDailyVolume10Day")
+                or info.get("averageVolume")
+                or vol
+                or 1
+            )
+            if avg > 0:
+                days_cover = info["sharesShort"] / avg
+
         squeeze = "None"
         if short_pct and days_cover:
-            if short_pct > 30 and days_cover > 10: squeeze = "Extreme"
-            elif short_pct > 20 and days_cover > 7: squeeze = "High"
-            elif short_pct > 15 and days_cover > 5: squeeze = "Moderate"
-        
-        rsi_val = rsi(h30['Close'])
+            if short_pct > 30 and days_cover > 10:
+                squeeze = "Extreme"
+            elif short_pct > 20 and days_cover > 7:
+                squeeze = "High"
+            elif short_pct > 15 and days_cover > 5:
+                squeeze = "Moderate"
+
+        rsi_val = rsi(h30["Close"])
         h100 = safe_history(t, period="100d")
-        macd_val, macd_sig, macd_lbl = macd(h100['Close']) if not h100.empty else (None, None, "N/A")
-        
+        macd_val, macd_sig, macd_lbl = (
+            macd(h100["Close"]) if not h100.empty else (None, None, "N/A")
+        )
+
         vol_spike = False
         if len(h30) > 1:
-            avg = h30['Volume'][:-1].mean()
-            if avg > 0: vol_spike = vol > 1.5 * avg
-        
+            avg = h30["Volume"][:-1].mean()
+            if avg > 0:
+                vol_spike = vol > 1.5 * avg
+
         pc_ratio = impl_move = impl_hi = impl_lo = exp_date = None
         # Options endpoints increasingly return 401; wrap fully and degrade gracefully
         try:
-            opts = getattr(t, 'options', None)
+            opts = getattr(t, "options", None)
             if opts:
                 exp_date = opts[0]
                 try:
                     chain = t.option_chain(exp_date)
-                    strikes = pd.concat([chain.calls['strike'], chain.puts['strike']]).unique()
+                    strikes = pd.concat(
+                        [chain.calls["strike"], chain.puts["strike"]]
+                    ).unique()
                     if len(strikes) > 0:
                         atm = min(strikes, key=lambda s: abs(s - price))
-                        cp = chain.calls.loc[chain.calls['strike'] == atm, 'lastPrice'].iloc[0] if not chain.calls[chain.calls['strike'] == atm].empty else 0
-                        pp = chain.puts.loc[chain.puts['strike'] == atm, 'lastPrice'].iloc[0] if not chain.puts[chain.puts['strike'] == atm].empty else 0
+                        cp = (
+                            chain.calls.loc[
+                                chain.calls["strike"] == atm, "lastPrice"
+                            ].iloc[0]
+                            if not chain.calls[chain.calls["strike"] == atm].empty
+                            else 0
+                        )
+                        pp = (
+                            chain.puts.loc[
+                                chain.puts["strike"] == atm, "lastPrice"
+                            ].iloc[0]
+                            if not chain.puts[chain.puts["strike"] == atm].empty
+                            else 0
+                        )
                         straddle = cp + pp
                         if straddle > 0 and price > 0:
                             impl_move = (straddle / price) * 100
                             cons = impl_move * 0.85
-                            impl_hi = price * (1 + cons/100)
-                            impl_lo = price * (1 - cons/100)
-                            cvol, pvol = chain.calls['volume'].fillna(0).sum(), chain.puts['volume'].fillna(0).sum()
-                            if cvol > 0: pc_ratio = pvol / cvol
+                            impl_hi = price * (1 + cons / 100)
+                            impl_lo = price * (1 - cons / 100)
+                            cvol, pvol = (
+                                chain.calls["volume"].fillna(0).sum(),
+                                chain.puts["volume"].fillna(0).sum(),
+                            )
+                            if cvol > 0:
+                                pc_ratio = pvol / cvol
                 except Exception:
                     pass
         except Exception:
             # ignore options entirely on failure (e.g., 401 Unauthorized)
             pass
-        
+
         down_bias = False
         if len(h30) > 0:
-            down_vol = h30[h30['Close'] < h30['Open']]['Volume'].sum()
-            up_vol = h30[h30['Close'] > h30['Open']]['Volume'].sum()
+            down_vol = h30[h30["Close"] < h30["Open"]]["Volume"].sum()
+            up_vol = h30[h30["Close"] > h30["Open"]]["Volume"].sum()
             down_bias = down_vol > up_vol
-        
+
         opt_dir = "Neutral"
         if pc_ratio:
-            if pc_ratio > 1.2 and down_bias: opt_dir = "Strong Bearish"
-            elif pc_ratio > 1.0 or down_bias: opt_dir = "Bearish"
-            elif pc_ratio < 0.8 and not down_bias: opt_dir = "Bullish"
-        
-        rec_mean = info.get('recommendationMean', 5)
+            if pc_ratio > 1.2 and down_bias:
+                opt_dir = "Strong Bearish"
+            elif pc_ratio > 1.0 or down_bias:
+                opt_dir = "Bearish"
+            elif pc_ratio < 0.8 and not down_bias:
+                opt_dir = "Bullish"
+
+        rec_mean = info.get("recommendationMean", 5)
         sentiment = ("Strong Buy", "Buy", "Hold", "Sell", "Strong Sell")[
-            0 if rec_mean <= 1.5 else 1 if rec_mean <= 2.5 else 2 if rec_mean <= 3.5 else 3 if rec_mean <= 4.5 else 4
+            (
+                0
+                if rec_mean <= 1.5
+                else (
+                    1
+                    if rec_mean <= 2.5
+                    else 2 if rec_mean <= 3.5 else 3 if rec_mean <= 4.5 else 4
+                )
+            )
         ]
-        
-        rating = info.get('recommendationKey', 'none').title().replace('_', ' ')
-        target = info.get('targetMeanPrice')
+
+        rating = info.get("recommendationKey", "none").title().replace("_", " ")
+        target = info.get("targetMeanPrice")
         upside = ((target - price) / price) * 100 if target and price > 0 else None
-        spk = sparkline(h30['Close'].tolist() if not h30.empty else [])
-        
+        spk = sparkline(h30["Close"].tolist() if not h30.empty else [])
+
         bb_period = 20
-        bb_upper = bb_lower = bb_middle = bb_width_pct = bb_position_pct = bb_status = None
+        bb_upper = bb_lower = bb_middle = bb_width_pct = bb_position_pct = bb_status = (
+            None
+        )
         if len(h30) >= bb_period:
-            close = h30['Close']
+            close = h30["Close"]
             bb_middle = close.rolling(window=bb_period).mean().iloc[-1]
             std_dev = close.rolling(window=bb_period).std().iloc[-1]
             bb_upper = bb_middle + (std_dev * 2)
@@ -315,8 +538,12 @@ def fetch(ticker, ext=False, retry=0):
             if (bb_upper - bb_lower) > 0:
                 bb_position_pct = ((price - bb_lower) / (bb_upper - bb_lower)) * 100
                 bb_position_pct = max(0, min(100, bb_position_pct))
-            bb_status = "Above Upper" if price > bb_upper else "Below Lower" if price < bb_lower else "Inside"
-        
+            bb_status = (
+                "Above Upper"
+                if price > bb_upper
+                else "Below Lower" if price < bb_lower else "Inside"
+            )
+
         # BB %B Signal: Buy when %B <= 0 (at/below lower band), Short when %B >= 100 (at/above upper band)
         bb_signal = None
         if bb_position_pct is not None:
@@ -324,9 +551,9 @@ def fetch(ticker, ext=False, retry=0):
                 bb_signal = "BUY"
             elif bb_position_pct >= 100:
                 bb_signal = "SHORT"
-        
-        div_rate = info.get('dividendRate')
-        div_yield = info.get('dividendYield')
+
+        div_rate = info.get("dividendRate")
+        div_yield = info.get("dividendYield")
 
         # Do not normalize dividend yield — render the raw value as provided
         # by the data source. Keep `div_yield` unchanged.
@@ -335,6 +562,7 @@ def fetch(ticker, ext=False, retry=0):
         earnings_date = None
         earnings_date_iso = None
         try:
+
             def _parse_earnings_display_and_iso(val):
                 if val is None:
                     return None, None
@@ -343,28 +571,33 @@ def fetch(ticker, ext=False, retry=0):
                 # numeric epoch
                 if isinstance(val, (int, float)):
                     dt = datetime.fromtimestamp(int(val), UTC).astimezone(PST)
-                    return dt.strftime('%b %d, %Y'), dt.date().isoformat()
+                    return dt.strftime("%b %d, %Y"), dt.date().isoformat()
                 if isinstance(val, str):
                     s = val.strip()
                     if s.isdigit():
                         dt = datetime.fromtimestamp(int(s), UTC).astimezone(PST)
-                        return dt.strftime('%b %d, %Y'), dt.date().isoformat()
+                        return dt.strftime("%b %d, %Y"), dt.date().isoformat()
                     try:
-                        d = datetime.fromisoformat(s.split('T')[0])
+                        d = datetime.fromisoformat(s.split("T")[0])
                         d = d.replace(tzinfo=UTC)
                         dt = d.astimezone(PST)
-                        return dt.strftime('%b %d, %Y'), dt.date().isoformat()
+                        return dt.strftime("%b %d, %Y"), dt.date().isoformat()
                     except Exception:
                         try:
-                            d = datetime.strptime(s.split('T')[0], '%Y-%m-%d')
+                            d = datetime.strptime(s.split("T")[0], "%Y-%m-%d")
                             d = d.replace(tzinfo=UTC)
                             dt = d.astimezone(PST)
-                            return dt.strftime('%b %d, %Y'), dt.date().isoformat()
+                            return dt.strftime("%b %d, %Y"), dt.date().isoformat()
                         except Exception:
                             return None, None
                 return None, None
 
-            for k in ('earningsTimestamp', 'earningsTimestampStart', 'earningsDate', 'nextEarningsDate'):
+            for k in (
+                "earningsTimestamp",
+                "earningsTimestampStart",
+                "earningsDate",
+                "nextEarningsDate",
+            ):
                 ed = info.get(k)
                 disp, iso = _parse_earnings_display_and_iso(ed)
                 if disp:
@@ -375,94 +608,154 @@ def fetch(ticker, ext=False, retry=0):
             earnings_date = None
             earnings_date_iso = None
 
-        pe = info.get('trailingPE') or info.get('forwardPE')
-        eps = info.get('trailingEps') or info.get('epsTrailingTwelveMonths') or info.get('earningsPerShare') or info.get('forwardEps')
-        market_cap = info.get('marketCap')
-        aum = info.get('totalAssets') or info.get('fundTotalAssets') or info.get('total_assets')
+        pe = info.get("trailingPE") or info.get("forwardPE")
+        eps = (
+            info.get("trailingEps")
+            or info.get("epsTrailingTwelveMonths")
+            or info.get("earningsPerShare")
+            or info.get("forwardEps")
+        )
+        market_cap = info.get("marketCap")
+        aum = (
+            info.get("totalAssets")
+            or info.get("fundTotalAssets")
+            or info.get("total_assets")
+        )
 
         tu = ticker.upper()
         category = infer_category_from_info(tu, info) or get_category(tu)
         return {
-            'ticker': tu, 'price': price, 'change_pct': change_pct, 'change_abs_day': change_abs_day,
-            'change_1m': ch1m, 'change_abs_1m': abs1m, 'change_5d': change_5d, 'change_abs_5d': change_abs_5d, 'change_6m': ch6m, 'change_abs_6m': abs6m,
-            'change_ytd': chytd, 'change_abs_ytd': absytd, 'volume': vol, 'volume_raw': vol,
-            '52w_high': high52, '52w_low': low52, 'day_low': day_low, 'day_high': day_high,
-            'short_percent': short_pct, 'days_to_cover': days_cover,
-            'squeeze_level': squeeze, 'rsi': rsi_val,
-            'macd_label': macd_lbl, 'volume_spike': vol_spike,
-            'is_meme_stock': tu in MEME_STOCKS, 'sentiment': sentiment,
-            'analyst_rating': rating, 'upside_potential': upside,
-            'options_direction': opt_dir, 'implied_move_pct': impl_move,
-            'implied_high': impl_hi, 'implied_low': impl_lo,
-            'down_volume_bias': down_bias, 'sparkline': spk,
-            'bb_upper': bb_upper, 'bb_lower': bb_lower, 'bb_middle': bb_middle,
-            'bb_width_pct': bb_width_pct, 'bb_position_pct': bb_position_pct, 'bb_status': bb_status, 'bb_signal': bb_signal,
-            'hv_30_annualized': hv,
-            'macd_line': macd_val, 'macd_signal': macd_sig, 'macd_label': macd_lbl,
-            'pc_ratio': pc_ratio, 'pe': pe, 'eps': eps,
-            'dividend_rate': div_rate, 'dividend_yield': div_yield,
-            'earnings_date': earnings_date, 'earnings_date_iso': earnings_date_iso,
-            'market_cap': market_cap, 'aum': aum,
-            'category': category,
+            "ticker": tu,
+            "price": price,
+            "change_pct": change_pct,
+            "change_abs_day": change_abs_day,
+            "change_1m": ch1m,
+            "change_abs_1m": abs1m,
+            "change_5d": change_5d,
+            "change_abs_5d": change_abs_5d,
+            "change_6m": ch6m,
+            "change_abs_6m": abs6m,
+            "change_ytd": chytd,
+            "change_abs_ytd": absytd,
+            "volume": vol,
+            "volume_raw": vol,
+            "52w_high": high52,
+            "52w_low": low52,
+            "day_low": day_low,
+            "day_high": day_high,
+            "short_percent": short_pct,
+            "days_to_cover": days_cover,
+            "squeeze_level": squeeze,
+            "rsi": rsi_val,
+            "macd_label": macd_lbl,
+            "volume_spike": vol_spike,
+            "is_meme_stock": tu in MEME_STOCKS,
+            "sentiment": sentiment,
+            "analyst_rating": rating,
+            "upside_potential": upside,
+            "options_direction": opt_dir,
+            "implied_move_pct": impl_move,
+            "implied_high": impl_hi,
+            "implied_low": impl_lo,
+            "down_volume_bias": down_bias,
+            "sparkline": spk,
+            "bb_upper": bb_upper,
+            "bb_lower": bb_lower,
+            "bb_middle": bb_middle,
+            "bb_width_pct": bb_width_pct,
+            "bb_position_pct": bb_position_pct,
+            "bb_status": bb_status,
+            "bb_signal": bb_signal,
+            "hv_30_annualized": hv,
+            "macd_line": macd_val,
+            "macd_signal": macd_sig,
+            "macd_label": macd_lbl,
+            "pc_ratio": pc_ratio,
+            "pe": pe,
+            "eps": eps,
+            "dividend_rate": div_rate,
+            "dividend_yield": div_yield,
+            "earnings_date": earnings_date,
+            "earnings_date_iso": earnings_date_iso,
+            "market_cap": market_cap,
+            "aum": aum,
+            "category": category,
         }
     except Exception as e:
         error_msg = str(e)
-        if 'Too Many Requests' in error_msg or 'Rate limit' in error_msg:
+        if "Too Many Requests" in error_msg or "Rate limit" in error_msg:
             if retry < max_retries:
                 # exponential backoff with jitter
-                wait_time = (2 ** retry) * 5 + random.uniform(0, 3)
-                print(f"{ticker}: Rate limited, waiting {wait_time:.1f}s (retry {retry+1}/{max_retries})")
+                wait_time = (2**retry) * 5 + random.uniform(0, 3)
+                print(
+                    f"{ticker}: Rate limited, waiting {wait_time:.1f}s (retry {retry+1}/{max_retries})"
+                )
                 time.sleep(wait_time)
                 return fetch(ticker, ext, retry + 1)
             else:
                 print(f"{ticker}: Max retries reached, skipping")
                 return None
-        elif 'Unauthorized' in error_msg or '401' in error_msg:
+        elif "Unauthorized" in error_msg or "401" in error_msg:
             # Yahoo Finance feature gated; skip this ticker gracefully
-            print(f"{ticker}: Unauthorized for some endpoints, skipping options/advanced data")
+            print(
+                f"{ticker}: Unauthorized for some endpoints, skipping options/advanced data"
+            )
             return None
         else:
             print(f"Error {ticker}: {e}")
             time.sleep(5)
             return None
 
+
 def fmt_vol(v):
-    if v is None: return "N/A"
-    if v >= 1e9: return f"{v/1e9:.1f}B"
-    if v >= 1e6: return f"{v/1e6:.1f}M"
-    if v >= 1e3: return f"{v/1e3:.1f}K"
+    if v is None:
+        return "N/A"
+    if v >= 1e9:
+        return f"{v/1e9:.1f}B"
+    if v >= 1e6:
+        return f"{v/1e6:.1f}M"
+    if v >= 1e3:
+        return f"{v/1e3:.1f}K"
     return str(int(v))
 
+
 def fmt_mcap(v):
-    if v is None or pd.isna(v): return "N/A"
+    if v is None or pd.isna(v):
+        return "N/A"
     try:
         v = float(v)
     except Exception:
         return str(v)
-    if v >= 1e12: return f"{v/1e12:.2f}T"
-    if v >= 1e9: return f"{v/1e9:.2f}B"
-    if v >= 1e6: return f"{v/1e6:.2f}M"
+    if v >= 1e12:
+        return f"{v/1e12:.2f}T"
+    if v >= 1e9:
+        return f"{v/1e9:.2f}B"
+    if v >= 1e6:
+        return f"{v/1e6:.2f}M"
     return str(int(v))
 
+
 def fmt_change(p, a=None):
-    if p is None: return '<span class="neutral">N/A</span>'
+    if p is None:
+        return '<span class="neutral">N/A</span>'
     sign, cls = ("▲", "positive") if p >= 0 else ("▼", "negative")
-    abs_str = ''
+    abs_str = ""
     if a is not None:
         try:
-            abs_str = f' ({float(a):+.2f})'
+            abs_str = f" ({float(a):+.2f})"
         except (ValueError, TypeError):
             pass
     return f'<span class="{cls}" data-sort="{p:.10f}">{sign} {p:+.2f}%{abs_str}</span>'
+
 
 @lru_cache(maxsize=32)  # OPTIMIZED: Cache index data
 def get_index_data(symbol):
     try:
         t = yf.Ticker(symbol)
         info = t.info
-        price = info.get('regularMarketPrice') or info.get('previousClose')
-        ch_pct = info.get('regularMarketChangePercent')
-        prev = info.get('regularMarketPreviousClose') or info.get('previousClose')
+        price = info.get("regularMarketPrice") or info.get("previousClose")
+        ch_pct = info.get("regularMarketChangePercent")
+        prev = info.get("regularMarketPreviousClose") or info.get("previousClose")
         ch_abs = None
         if price is not None and prev is not None:
             try:
@@ -477,24 +770,25 @@ def get_index_data(symbol):
                 ch_pct = ((float(price) - float(prev)) / float(prev)) * 100
             except (ValueError, TypeError):
                 ch_pct = None
-        return {'price': price, 'change_pct': ch_pct, 'change_abs': ch_abs}
+        return {"price": price, "change_pct": ch_pct, "change_abs": ch_abs}
     except:
-        return {'price': None, 'change_pct': None, 'change_abs': None}
+        return {"price": None, "change_pct": None, "change_abs": None}
 
-def dashboard(csv='data/tickers.csv', ext=False):
-    os.makedirs('data', exist_ok=True)
+
+def dashboard(csv="data/tickers.csv", ext=False):
+    os.makedirs("data", exist_ok=True)
     try:
-        with open(csv, 'r', encoding='utf-8') as f:
+        with open(csv, "r", encoding="utf-8") as f:
             txt = f.read()
-        txt = txt.replace('\r\n', '\n').replace('\r', '\n')
-        parts = re.split(r'[\n,]+', txt.strip())
+        txt = txt.replace("\r\n", "\n").replace("\r", "\n")
+        parts = re.split(r"[\n,]+", txt.strip())
         parts = [p.strip().upper() for p in parts if p and p.strip()]
-        if parts and parts[0].lower() in ('ticker', 'tickers'):
+        if parts and parts[0].lower() in ("ticker", "tickers"):
             parts = parts[1:]
         tickers = pd.Series(parts).unique().tolist()
     except Exception:
-        tickers = ['AAPL','MSFT','GOOGL','AMZN','NVDA','TSLA','META','SPY']
-    
+        tickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "SPY"]
+
     data = []
     # Adaptive worker count: scale with number of tickers but cap to avoid rate limits
     # cap workers to 3 to avoid excessive parallel requests
@@ -503,18 +797,23 @@ def dashboard(csv='data/tickers.csv', ext=False):
         futures = [ex.submit(fetch, t, ext) for t in tickers]
         for r in as_completed(futures):
             res = r.result()
-            if res: data.append(res)
-    return pd.DataFrame(data).sort_values('change_pct', ascending=False)
+            if res:
+                data.append(res)
+    # Summary printing removed to reduce console noise
+    return pd.DataFrame(data).sort_values("change_pct", ascending=False)
+
 
 def get_vix_data():
     return get_index_data("^VIX")
 
+
 # OPTIMIZED: Cache F&G data with 1 hour TTL
-_fg_cache = {'data': None, 'time': 0}
+_fg_cache = {"data": None, "time": 0}
 FG_CACHE_TTL = 3600
 
 # Shared requests session for fewer TCP handshakes
 SESSION = requests.Session()
+
 
 # Cache ticker info to avoid repeated yf.Ticker(...).info calls
 @lru_cache(maxsize=512)
@@ -545,112 +844,263 @@ class RateLimiter:
 
 RATE_LIMITER = RateLimiter(min_interval=0.9)
 
+
 def get_fear_greed_data():
     global _fg_cache
     now = time.time()
-    if _fg_cache['data'] is not None and (now - _fg_cache['time']) < FG_CACHE_TTL:
-        return _fg_cache['data']
-    
+    if _fg_cache["data"] is not None and (now - _fg_cache["time"]) < FG_CACHE_TTL:
+        return _fg_cache["data"]
+
     try:
-        today = datetime.now().strftime('%Y-%m-%d')
+        today = datetime.now().strftime("%Y-%m-%d")
         url = f"https://production.dataviz.cnn.io/index/fearandgreed/graphdata/{today}"
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Referer': 'https://www.cnn.com/markets/fear-and-greed'
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "https://www.cnn.com/markets/fear-and-greed",
         }
         r = requests.get(url, headers=headers, timeout=5)  # OPTIMIZED: Reduced timeout
         r.raise_for_status()
         data = r.json()
-        fg = data.get('fear_and_greed') or data
-        score = float(fg['score'])
+        fg = data.get("fear_and_greed") or data
+        score = float(fg["score"])
         s = int(round(score))
         rating = ("Extreme Fear", "Fear", "Neutral", "Greed", "Extreme Greed")[
             0 if s <= 24 else 1 if s <= 44 else 2 if s <= 55 else 3 if s <= 74 else 4
         ]
-        result = {'score': score, 'rating': rating, 'raw_score': s}
-        _fg_cache['data'] = result
-        _fg_cache['time'] = now
+        result = {"score": score, "rating": rating, "raw_score": s}
+        _fg_cache["data"] = result
+        _fg_cache["time"] = now
         return result
     except Exception:
         try:
-            r = requests.get("https://production.dataviz.cnn.io/index/fearandgreed/graphdata",
-                             headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
+            r = requests.get(
+                "https://production.dataviz.cnn.io/index/fearandgreed/graphdata",
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=5,
+            )
             r.raise_for_status()
             data = r.json()
-            score = float(data['fear_and_greed']['score'])
+            score = float(data["fear_and_greed"]["score"])
             s = int(round(score))
             rating = ("Extreme Fear", "Fear", "Neutral", "Greed", "Extreme Greed")[
-                0 if s <= 24 else 1 if s <= 44 else 2 if s <= 55 else 3 if s <= 74 else 4
+                (
+                    0
+                    if s <= 24
+                    else 1 if s <= 44 else 2 if s <= 55 else 3 if s <= 74 else 4
+                )
             ]
-            result = {'score': score, 'rating': rating, 'raw_score': s}
-            _fg_cache['data'] = result
-            _fg_cache['time'] = now
+            result = {"score": score, "rating": rating, "raw_score": s}
+            _fg_cache["data"] = result
+            _fg_cache["time"] = now
             return result
         except Exception as e:
             print(f"F&G error: {e}")
-    return {'score': None, 'rating': "N/A", 'raw_score': None}
+    return {"score": None, "rating": "N/A", "raw_score": None}
+
 
 # OPTIMIZED: Cache AAII data with 1 hour TTL
-_aaii_cache = {'data': None, 'time': 0}
+_aaii_cache = {"data": None, "time": 0}
 AAII_CACHE_TTL = 3600
+
 
 def get_aaii_sentiment():
     global _aaii_cache
     now = time.time()
-    if _aaii_cache['data'] is not None and (now - _aaii_cache['time']) < AAII_CACHE_TTL:
-        return _aaii_cache['data']
-    
+    if _aaii_cache["data"] is not None and (now - _aaii_cache["time"]) < AAII_CACHE_TTL:
+        return _aaii_cache["data"]
+
     try:
-        r = requests.get("https://www.aaii.com/sentimentsurvey/sent_results", 
-                        headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
-        m = re.search(r'\w+\s*\d{1,2}.*?([\d\.]+)%.*?([\d\.]+)%', r.text)
+        r = requests.get(
+            "https://www.aaii.com/sentimentsurvey/sent_results",
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=5,
+        )
+        m = re.search(r"\w+\s*\d{1,2}.*?([\d\.]+)%.*?([\d\.]+)%", r.text)
         if not m:
-            m = re.search(r'Bullish.*?([\d\.]+)%.*?Bearish.*?([\d\.]+)%', r.text, re.DOTALL)
+            m = re.search(
+                r"Bullish.*?([\d\.]+)%.*?Bearish.*?([\d\.]+)%", r.text, re.DOTALL
+            )
         if m:
             b, be = float(m.group(1)), float(m.group(2))
-            result = {'bullish': b, 'bearish': be, 'spread': b - be}
-            _aaii_cache['data'] = result
-            _aaii_cache['time'] = now
+            result = {"bullish": b, "bearish": be, "spread": b - be}
+            _aaii_cache["data"] = result
+            _aaii_cache["time"] = now
             return result
     except Exception as e:
         print(f"AAII fetch error: {e}")
-    return {'bullish': None, 'bearish': None, 'spread': None}
+    return {"bullish": None, "bearish": None, "spread": None}
+
+
+def get_cvr3_signal(vix, fg=None):
+    """Compute CVR3 signal using the Implementation Summary Table:
+    - VIX vs 10d SMA: Entire bar Above => BUY, Entire bar Below => SELL
+    - PPO(1,10,1): >=10 => BUY, <=-10 => SELL
+    - Candle Color: Black (Close < Open) => BUY, White (Close > Open) => SELL
+    - Market Sentiment (F&G): Extreme Fear => BUY, Extreme Greed => SELL
+
+    If all criteria point BUY -> CVR3 BUY
+    If all criteria point SELL -> CVR3 SELL
+    If majority SELL -> CVR3 SHORT
+    Else -> CVR3 NEUTRAL
+    """
+    votes = {"buy": 0, "sell": 0}
+    # Attempt to fetch recent VIX history
+    try:
+        t = yf.Ticker("^VIX")
+        h = safe_history(t, period="15d")
+    except Exception:
+        h = pd.DataFrame()
+
+    # VIX vs 10d SMA (entire bar)
+    try:
+        if (
+            not h.empty
+            and all(c in h.columns for c in ("High", "Low", "Close"))
+            and len(h) >= 10
+        ):
+            sma10 = h["Close"].rolling(window=10).mean().iloc[-1]
+            last = h.iloc[-1]
+            # Entire bar above: low > sma10
+            if last["Low"] > sma10:
+                votes["buy"] += 1
+            # Entire bar below: high < sma10
+            elif last["High"] < sma10:
+                votes["sell"] += 1
+    except Exception:
+        pass
+
+    # PPO(1,10,1) approximation
+    try:
+        if not h.empty and "Close" in h and len(h) >= 10:
+            ema1 = h["Close"].ewm(span=1, adjust=False).mean().iloc[-1]
+            ema10 = h["Close"].ewm(span=10, adjust=False).mean().iloc[-1]
+            if ema10 and ema10 != 0:
+                ppo = (ema1 - ema10) / ema10 * 100.0
+                if ppo >= 10:
+                    votes["buy"] += 1
+                elif ppo <= -10:
+                    votes["sell"] += 1
+    except Exception:
+        pass
+
+    # Candle color (last candle)
+    try:
+        if not h.empty and all(c in h.columns for c in ("Open", "Close")):
+            last = h.iloc[-1]
+            if last["Close"] < last["Open"]:
+                votes["buy"] += 1
+            elif last["Close"] > last["Open"]:
+                votes["sell"] += 1
+    except Exception:
+        pass
+
+    # Market sentiment via Fear & Greed
+    try:
+        rating = (fg or {}).get("rating") if fg is not None else None
+        if rating is None and fg is not None and fg.get("score") is not None:
+            # fallback mapping from score
+            s = float(fg.get("raw_score") or fg.get("score") or 0)
+            rating = (
+                "Extreme Fear"
+                if s <= 24
+                else (
+                    "Fear"
+                    if s <= 44
+                    else (
+                        "Neutral"
+                        if s <= 55
+                        else "Greed" if s <= 74 else "Extreme Greed"
+                    )
+                )
+            )
+        if rating == "Extreme Fear":
+            votes["buy"] += 1
+        elif rating == "Extreme Greed":
+            votes["sell"] += 1
+    except Exception:
+        pass
+
+    # Decide final signal based on votes
+    b = votes["buy"]
+    s = votes["sell"]
+    if b >= 3 and s == 0:
+        return '<span class="bullish">CVR3 BUY</span>'
+    if s >= 3 and b == 0:
+        return '<span class="strong-bear">CVR3 SELL</span>'
+    if s > b:
+        return '<span class="bear">CVR3 SHORT</span>'
+    if b > s:
+        return '<span class="bull">CVR3 BUY</span>'
+    return '<span class="neutral">CVR3 NEUTRAL</span>'
+
 
 # NOTE: html() function continues with the full HTML generation...
 # Due to character limits, the complete html() function and main block remain unchanged
 # from original code. Simply append the original html() function and main block here.
 
+
 def html(df, vix, fg, aaii, file, ext=False, alerts=None):
-    alerts = alerts or {'grouped': [], 'time': ''}
-    update = datetime.now(UTC).astimezone(PST).strftime('%I:%M:%S %p PST on %B %d, %Y')
-    
-    banner = '<div class="alert-banner">🚨 <strong>ALERTS</strong> ' + " | ".join(alerts['grouped']) + '</div>' if alerts['grouped'] else ""
-    
+    alerts = alerts or {"grouped": [], "time": ""}
+    update = datetime.now(UTC).astimezone(PST).strftime("%I:%M:%S %p PST on %B %d, %Y")
+
+    banner = (
+        '<div class="alert-banner">🚨 <strong>ALERTS</strong> '
+        + " | ".join(alerts["grouped"])
+        + "</div>"
+        if alerts["grouped"]
+        else ""
+    )
+
     # Major indices
     dow = get_index_data("^DJI")
     sp = get_index_data("^GSPC")
     nas = get_index_data("^IXIC")
-    
+
     def index_str(data, name):
-        if data['price'] is None:
+        if data["price"] is None:
             return f'<span class="neutral">{name}: N/A</span>'
-        ch_abs = data.get('change_abs')
+        ch_abs = data.get("change_abs")
         cls = "positive" if ch_abs is not None and ch_abs >= 0 else "negative"
         return f'<span class="{cls}">{name}: {na(data["price"])} ({na(ch_abs, "{:+.2f}")})</span>'
-    
-    indices_h = f"{index_str(dow, 'Dow')} | {index_str(sp, 'S&P')} | {index_str(nas, 'Nasdaq')} | {index_str(vix, 'VIX')}"
-    
+
+    # Prefix VIX with CVR3 signal computed with Fear & Greed context
+    indices_h = f"{index_str(dow, 'Dow')} | {index_str(sp, 'S&P')} | {index_str(nas, 'Nasdaq')} | {get_cvr3_signal(vix, fg)} {index_str(vix, 'VIX')}"
+
     fg_h = '<span class="neutral">F&G: N/A</span>'
-    if fg.get('score') is not None:
-        cls = "negative" if fg['score'] <= 24 else "high-risk" if fg['score'] <= 44 else "neutral" if fg['score'] <= 55 else "bullish" if fg['score'] <= 74 else "positive"
+    if fg.get("score") is not None:
+        cls = (
+            "negative"
+            if fg["score"] <= 24
+            else (
+                "high-risk"
+                if fg["score"] <= 44
+                else (
+                    "neutral"
+                    if fg["score"] <= 55
+                    else "bullish" if fg["score"] <= 74 else "positive"
+                )
+            )
+        )
         fg_h = f'<span class="{cls}">F&G: {fg["score"]:.1f} ({fg["rating"]})</span>'
-    
+
     aaii_h = '<span class="neutral">AAII: N/A</span>'
-    if aaii.get('bullish') is not None:
-        spread = aaii['spread']
-        cls = "positive" if spread > 20 else "bullish" if spread > 0 else "neutral" if spread > -20 else "high-risk" if spread > -40 else "negative"
+    if aaii.get("bullish") is not None:
+        spread = aaii["spread"]
+        cls = (
+            "positive"
+            if spread > 20
+            else (
+                "bullish"
+                if spread > 0
+                else (
+                    "neutral"
+                    if spread > -20
+                    else "high-risk" if spread > -40 else "negative"
+                )
+            )
+        )
         aaii_h = f'<span class="{cls}">AAII: Bull {aaii["bullish"]:.1f}% Bear {aaii["bearish"]:.1f}%</span>'
-    
+
     html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Dashboard</title>
 <meta name="viewport" content="width=device-width,initial-scale=1"><style>
 :root{{ --bg:#f5f5f5; --card:#fff; --text:#333; --border:#ddd; --accent:#0066cc; --pos:#00aa00; --neg:#cc0000; --bullish:#00aa00; --bearish:#cc0000 }}
@@ -692,13 +1142,13 @@ td{{padding:12px;border-bottom:1px solid var(--border);vertical-align:top}}
 .bear{{color:#ff0000;font-weight:bold}}
 .vol-hot{{color:#ff0000;font-weight:bold}}
 .range-bar{{width:100%;height:8px;background:#e0e0e0;border-radius:4px;position:relative;margin:4px 0}}
-.range-bar-marker{{position:absolute;width:3px;height:12px;background:#000;top:-2px}}
+.range-bar-marker{{position:absolute;width=3px;height=12px;background:#000;top:-2px}}
 .range-labels{{display:flex;justify-content:space-between;font-size:0.75em;margin-top:2px}}
 .range-container{{margin:8px 0}}
 .toggle-switch{{position:relative;display:inline-block;width:60px;height:34px}}
 .toggle-switch input{{opacity:0;width:0;height:0}}
 .toggle-slider{{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#ccc;transition:.4s;border-radius:34px}}
-.toggle-slider:before{{position:absolute;content:"";height:26px;width:26px;left:4px;bottom:4px;background:#fff;transition:.4s;border-radius:50%}}
+.toggle-slider:before{{position:absolute;content:"";height:26px;width:26px;left=4px;bottom=4px;background:#fff;transition:.4s;border-radius:50%}}
 input:checked + .toggle-slider{{background:var(--accent)}}
 input:checked + .toggle-slider:before{{transform:translateX(26px)}}
 .hours-toggle{{display:flex;align-items:center;gap:10px;font-weight:600;margin-left:20px}}
@@ -769,86 +1219,131 @@ input:checked + .toggle-slider:before{{transform:translateX(26px)}}
 </tr>
 """
     for _, r in df.iterrows():
-        bb_width_val = r['bb_width_pct'] if r['bb_width_pct'] is not None else 100
-        bb_icon = ''
-        if r.get('bb_signal') == 'BUY':
+        bb_width_val = r["bb_width_pct"] if r["bb_width_pct"] is not None else 100
+        bb_icon = ""
+        if r.get("bb_signal") == "BUY":
             bb_icon = '<span style="font-size:0.5em">🟢</span> '
-        elif r.get('bb_signal') == 'SHORT':
+        elif r.get("bb_signal") == "SHORT":
             bb_icon = '<span style="font-size:0.5em">🔴</span> '
-        hv = r['hv_30_annualized']
+        hv = r["hv_30_annualized"]
         hv_cls = "negative" if hv and hv > 50 else "neutral"
-        hv_str = na(hv, '{:.1f}%')
-        
-        macd_cls = "bullish" if r['macd_label'] == "Bullish" else "bearish" if r['macd_label'] == "Bearish" else "neutral"
-        opt_dir_cls = "bullish" if "Bullish" in r['options_direction'] else "bearish" if "Bearish" in r['options_direction'] else "neutral"
-        bias_cls = "bearish" if r['down_volume_bias'] else "bullish"
-        
-        sent_cls = "bullish" if "Buy" in r['sentiment'] else "bearish" if "Sell" in r['sentiment'] else "neutral"
+        hv_str = na(hv, "{:.1f}%")
+
+        macd_cls = (
+            "bullish"
+            if r["macd_label"] == "Bullish"
+            else "bearish" if r["macd_label"] == "Bearish" else "neutral"
+        )
+        opt_dir_cls = (
+            "bullish"
+            if "Bullish" in r["options_direction"]
+            else "bearish" if "Bearish" in r["options_direction"] else "neutral"
+        )
+        bias_cls = "bearish" if r["down_volume_bias"] else "bullish"
+
+        sent_cls = (
+            "bullish"
+            if "Buy" in r["sentiment"]
+            else "bearish" if "Sell" in r["sentiment"] else "neutral"
+        )
         # include analyst rating in sentiment display and adjust class if needed
-        analyst_rating = r.get('analyst_rating') or ''
+        analyst_rating = r.get("analyst_rating") or ""
         # if analyst rating suggests Buy/Sell, reflect that in the class (fallback to sentiment)
         if analyst_rating:
             if "Buy" in analyst_rating:
                 sent_cls = "bullish"
             elif "Sell" in analyst_rating:
                 sent_cls = "bearish"
-        upside_cls = "bullish" if r['upside_potential'] and r['upside_potential'] > 0 else "bearish" if r['upside_potential'] and r['upside_potential'] < 0 else "neutral"
-        
+        upside_cls = (
+            "bullish"
+            if r["upside_potential"] and r["upside_potential"] > 0
+            else (
+                "bearish"
+                if r["upside_potential"] and r["upside_potential"] < 0
+                else "neutral"
+            )
+        )
+
         bb_bar = ""
         # Only render Bollinger Bands bar when BB values are present and numeric
-        if pd.notna(r.get('bb_position_pct')) and pd.notna(r.get('bb_lower')) and pd.notna(r.get('bb_middle')) and pd.notna(r.get('bb_upper')):
+        if (
+            pd.notna(r.get("bb_position_pct"))
+            and pd.notna(r.get("bb_lower"))
+            and pd.notna(r.get("bb_middle"))
+            and pd.notna(r.get("bb_upper"))
+        ):
             try:
-                pos = float(r['bb_position_pct'])
+                pos = float(r["bb_position_pct"])
                 pos = max(0.0, min(100.0, pos))
                 bb_color = f"linear-gradient(to right, var(--pos) 0%, var(--pos) {pos}%, var(--neg) {pos}%, var(--neg) 100%)"
                 bb_bar = f'<div class="range-container"><div class="range-title">Bollinger Bands</div><div class="range-bar" style="background:{bb_color}"><div class="range-bar-marker" style="left:{pos}%"></div></div><div class="range-labels"><span>${na(r["bb_lower"])}</span><span>${na(r["bb_middle"])}</span><span>${na(r["bb_upper"])}</span></div><div style="font-size:0.75em;text-align:center">Width: {na(r["bb_width_pct"],"{:.1f}")}% – {r["bb_status"]}</div></div>'
             except Exception:
                 bb_bar = ""
-        
+
         impl_bar = ""
         # Only render implied-move chart when values are present and numeric (avoid NaN%)
-        if pd.notna(r.get('implied_move_pct')) and pd.notna(r.get('implied_low')) and pd.notna(r.get('implied_high')):
+        if (
+            pd.notna(r.get("implied_move_pct"))
+            and pd.notna(r.get("implied_low"))
+            and pd.notna(r.get("implied_high"))
+        ):
             try:
-                im_pct = float(r['implied_move_pct'])
+                im_pct = float(r["implied_move_pct"])
                 if im_pct > 0:
-                    left_pct = 50 - im_pct/2
-                    right_pct = 50 + im_pct/2
+                    left_pct = 50 - im_pct / 2
+                    right_pct = 50 + im_pct / 2
                     i_color = f"linear-gradient(to right, var(--neg) 0%, var(--neg) {left_pct}%, var(--pos) {right_pct}%, var(--pos) 100%)"
                     impl_bar = f'<div class="range-container"><div class="range-title">Implied Move ±{im_pct:.1f}%</div><div class="range-bar" style="background:{i_color}"><div class="range-bar-marker" style="left:50%"></div></div><div class="range-labels"><span>${na(r["implied_low"])}</span><span>${na(r["implied_high"])}</span></div></div>'
             except Exception:
                 impl_bar = ""
-        
+
         # Only render range charts when values are present and valid (avoid NaN% rendering)
-        day_block = ''
-        if pd.notna(r.get('day_low')) and pd.notna(r.get('day_high')) and r['day_high'] is not None and r['day_low'] is not None and (r['day_high'] - r['day_low']) > 0:
-            day_pos = ((r['price'] - r['day_low']) / (r['day_high'] - r['day_low']) * 100)
+        day_block = ""
+        if (
+            pd.notna(r.get("day_low"))
+            and pd.notna(r.get("day_high"))
+            and r["day_high"] is not None
+            and r["day_low"] is not None
+            and (r["day_high"] - r["day_low"]) > 0
+        ):
+            day_pos = (r["price"] - r["day_low"]) / (r["day_high"] - r["day_low"]) * 100
             day_color = f"linear-gradient(to right, var(--pos) 0%, var(--pos) {day_pos}%, var(--neg) {day_pos}%, var(--neg) 100%)"
             day_block = f"""
     <div class="range-container"><div class="range-title">Day</div><div class="range-bar" style="background:{day_color}"><div class="range-bar-marker" style="left:{day_pos}%"></div></div><div class="range-labels"><span>${r['day_low']:.2f}</span><span>${r['day_high']:.2f}</span></div></div>
     """
 
-        y52_block = ''
-        if pd.notna(r.get('52w_low')) and pd.notna(r.get('52w_high')) and r['52w_high'] is not None and r['52w_low'] is not None and (r['52w_high'] - r['52w_low']) > 0:
-            y52_pos = ((r['price'] - r['52w_low']) / (r['52w_high'] - r['52w_low']) * 100)
+        y52_block = ""
+        if (
+            pd.notna(r.get("52w_low"))
+            and pd.notna(r.get("52w_high"))
+            and r["52w_high"] is not None
+            and r["52w_low"] is not None
+            and (r["52w_high"] - r["52w_low"]) > 0
+        ):
+            y52_pos = (r["price"] - r["52w_low"]) / (r["52w_high"] - r["52w_low"]) * 100
             y52_color = f"linear-gradient(to right, var(--pos) 0%, var(--pos) {y52_pos}%, var(--neg) {y52_pos}%, var(--neg) 100%)"
             y52_block = f"""
     <div class="range-container"><div class="range-title">52W</div><div class="range-bar" style="background:{y52_color}"><div class="range-bar-marker" style="left:{y52_pos}%"></div></div><div class="range-labels"><span>${r['52w_low']:.2f}</span><span>${r['52w_high']:.2f}</span></div></div>
     """
 
         ranges_html = f"{day_block}{y52_block}{bb_bar}{impl_bar}"
-        
-        indicators_html = f'''<span class="{macd_cls}">MACD: {r['macd_label']}</span><br>
+
+        indicators_html = f"""<span class="{macd_cls}">MACD: {r['macd_label']}</span><br>
 Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<br>
 <span class="{hv_cls}">Volatility: {hv_str}</span><br>
 <span class="{opt_dir_cls}">Opt Dir: {r['options_direction']}</span><br>
-<span class="{bias_cls}">Bias: {'Down' if r['down_volume_bias'] else 'Up'}</span>'''
-        
+<span class="{bias_cls}">Bias: {'Down' if r['down_volume_bias'] else 'Up'}</span>"""
+
         # include dividend dataset (percent) for filtering
-        div_ds = r.get('dividend_yield') if r.get('dividend_yield') is not None else (r.get('dividend_rate') if r.get('dividend_rate') is not None else '')
+        div_ds = (
+            r.get("dividend_yield")
+            if r.get("dividend_yield") is not None
+            else (r.get("dividend_rate") if r.get("dividend_rate") is not None else "")
+        )
         # sentiment text (exclude analyst rating)
-        sent_text = r['sentiment']
-        html += f'''<tr class="stock-row" data-ticker="{r['ticker']}" data-change="{r['change_pct']}" data-change-5d="{r.get('change_5d') or ''}" data-earnings="{r.get('earnings_date_iso') or ''}" data-rsi="{r['rsi'] or 50}" data-vol="{r['volume_raw']}" data-meme="{r['is_meme_stock']}" data-squeeze="{r['squeeze_level']}" data-bb-width="{bb_width_val}" data-dividend="{div_ds}" data-category="{r.get('category') or ''}">
-    <td><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.9em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.9em">F</a>)</td>
+        sent_text = r["sentiment"]
+        html += f"""<tr class="stock-row" data-ticker="{r['ticker']}" data-change="{r['change_pct']}" data-change-5d="{r.get('change_5d') or ''}" data-earnings="{r.get('earnings_date_iso') or ''}" data-rsi="{r['rsi'] or 50}" data-vol="{r['volume_raw']}" data-meme="{r['is_meme_stock']}" data-squeeze="{r['squeeze_level']}" data-bb-width="{bb_width_val}" data-dividend="{div_ds}" data-category="{r.get('category') or ''}">
+    <td><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.9em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.9em">F</a>, <a href="https://www.zacks.com/stock/quote/{r['ticker']}" target="_blank" style="font-size:0.9em">Z</a>)</td>
 <td data-sort="{r['price']:.2f}">${r['price']:.2f} {r['sparkline']}</td>
 <td>{fmt_change(r['change_pct'], r['change_abs_day'])}</td>
 <td>{fmt_change(r.get('change_5d'), r.get('change_abs_5d'))}</td>
@@ -859,328 +1354,201 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 <td>{ranges_html}</td>
 <td>{indicators_html}</td>
 <td><span class="{sent_cls}">{sent_text}</span><br><span class="{upside_cls}">Upside: {na(r['upside_potential'],"{:+.1f}%")}</span></td>
-</tr>'''
-    
+</tr>"""
+
     html += "</table></div><div id='cardView'><div class='card-grid'>"
     for _, r in df.iterrows():
-        bg = "rgba(0,170,0,0.1)" if r['change_pct'] > 0 else "rgba(204,0,0,0.1)"
-        bb_width_val = r['bb_width_pct'] if r['bb_width_pct'] is not None else 100
-        bb_icon = ''
-        if r.get('bb_signal') == 'BUY':
+        bg = "rgba(0,170,0,0.1)" if r["change_pct"] > 0 else "rgba(204,0,0,0.1)"
+        bb_width_val = r["bb_width_pct"] if r["bb_width_pct"] is not None else 100
+        bb_icon = ""
+        if r.get("bb_signal") == "BUY":
             bb_icon = '<span style="font-size:0.5em">🟢</span> '
-        elif r.get('bb_signal') == 'SHORT':
+        elif r.get("bb_signal") == "SHORT":
             bb_icon = '<span style="font-size:0.5em">🔴</span> '
-        hv = r['hv_30_annualized']
+        hv = r["hv_30_annualized"]
         hv_cls = "negative" if hv and hv > 50 else "neutral"
-        hv_str = na(hv, '{:.1f}%')
+        hv_str = na(hv, "{:.1f}%")
         # Color coding for card attributes
         macd_num_cls = "neutral"
         try:
-            ml = r.get('macd_line')
-            macd_num_cls = "positive" if ml is not None and float(ml) >= 0 else "negative" if ml is not None else "neutral"
+            ml = r.get("macd_line")
+            macd_num_cls = (
+                "positive"
+                if ml is not None and float(ml) >= 0
+                else "negative" if ml is not None else "neutral"
+            )
         except Exception:
             macd_num_cls = "neutral"
 
-        pc_val = r.get('pc_ratio')
+        pc_val = r.get("pc_ratio")
         if pc_val is None:
-            pc_cls = 'neutral'
+            pc_cls = "neutral"
         else:
             try:
                 pv = float(pc_val)
-                pc_cls = 'negative' if pv > 1.2 else 'positive' if pv < 0.8 else 'neutral'
+                pc_cls = (
+                    "negative" if pv > 1.2 else ("positive" if pv < 0.8 else "neutral")
+                )
             except Exception:
-                pc_cls = 'neutral'
+                pc_cls = "neutral"
 
-        pe_val = r.get('pe')
-        if pe_val is None:
-            pe_cls = 'neutral'
-        else:
-            try:
-                pv = float(pe_val)
-                pe_cls = 'negative' if pv > 30 else 'positive' if pv < 15 else 'neutral'
-            except Exception:
-                pe_cls = 'neutral'
-
-        div_val = r.get('dividend_yield')
-        div_cls = 'positive' if div_val is not None and div_val > 0 else 'neutral'
-        # Display dividend yield with a '%' suffix but keep the raw dataset unmodified
-        div_yield_display = na(div_val, '{}') + '%' if div_val is not None else 'N/A'
-
-        mcap_val = r.get('market_cap')
-        aum_val = r.get('aum')
-        # determine display value and label (Market Cap preferred, fallback to AUM)
-        display_val = None
-        display_label = 'Market Cap'
-        if mcap_val is not None and pd.notna(mcap_val):
-            display_val = mcap_val
-            display_label = 'Market Cap'
-        elif aum_val is not None and pd.notna(aum_val):
-            display_val = aum_val
-            display_label = 'AUM'
-        try:
-            base_val = float(display_val) if display_val is not None else None
-        except Exception:
-            base_val = None
-        try:
-            mcap_cls = 'strong-bull' if base_val is not None and base_val >= 200e9 else 'bull' if base_val is not None and base_val >= 10e9 else 'neutral'
-        except Exception:
-            mcap_cls = 'neutral'
-
-        # 52W display
-        y52_low = r.get('52w_low')
-        y52_high = r.get('52w_high')
-        if pd.notna(y52_low) and pd.notna(y52_high):
-            y52_display = f"${y52_low:.2f} - ${y52_high:.2f}"
-        else:
-            y52_display = 'N/A'
-
-        # include dividend dataset for card
-        card_div_ds = r.get('dividend_yield') if r.get('dividend_yield') is not None else (r.get('dividend_rate') if r.get('dividend_rate') is not None else '')
-        # Option direction and short percent/days color coding for card
-        opt_dir_val = r.get('options_direction') or 'Neutral'
-        if 'Strong Bear' in opt_dir_val or 'Strong Bearish' in opt_dir_val:
-            opt_dir_cls = 'strong-bear'
-        elif 'Bear' in opt_dir_val:
-            opt_dir_cls = 'bear'
-        elif 'Strong Bull' in opt_dir_val or 'Strong Bullish' in opt_dir_val:
-            opt_dir_cls = 'strong-bull'
-        elif 'Bull' in opt_dir_val:
-            opt_dir_cls = 'bull'
-        else:
-            opt_dir_cls = 'neutral'
-
-        short_pct = r.get('short_percent')
-        days_cover = r.get('days_to_cover')
-        try:
-            sp = float(short_pct) if short_pct is not None else None
-        except Exception:
-            sp = None
-        if sp is None:
-            short_cls = 'neutral'
-        elif sp >= 20:
-            short_cls = 'strong-bear'
-        elif sp >= 10:
-            short_cls = 'bear'
-        elif sp >= 5:
-            short_cls = 'vol-hot'
-        else:
-            short_cls = 'neutral'
-        html += f'''<div class="stock-card stock-row" style="background:{bg}" 
-            data-ticker="{r['ticker']}" 
-            data-change="{r['change_pct']}" 
-            data-change-5d="{r.get('change_5d') or ''}" 
-            data-earnings="{r.get('earnings_date_iso') or ''}"
-            data-rsi="{r['rsi'] or 50}" 
-            data-vol="{r['volume_raw']}" 
-            data-meme="{r['is_meme_stock']}" 
-            data-squeeze="{r['squeeze_level']}" 
-            data-bb-width="{bb_width_val}" data-dividend="{card_div_ds}" data-category="{r.get('category') or ''}">
-    <h2><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.8em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.8em">F</a>) ${r['price']:.2f}</h2>
-<div style="font-size:1.5em">{fmt_change(r['change_pct'], r['change_abs_day'])}</div>
-{r['sparkline']}
-<div>1M: {fmt_change(r['change_1m'], r['change_abs_1m'])}</div>
-<div>5D: {fmt_change(r.get('change_5d'), r.get('change_abs_5d'))}</div>
-<div>6M: {fmt_change(r['change_6m'], r['change_abs_6m'])}</div>
-<div>YTD: {fmt_change(r['change_ytd'], r['change_abs_ytd'])}</div>
-<div><strong>52W: {y52_display}</strong></div>
-<div><span class="{hv_cls}">Volatility: {hv_str}</span></div>
-<div>BB: {r['bb_status']} ({na(r['bb_width_pct'], '{:.1f}%')})</div>
-<div>MACD: <span class="{macd_num_cls}">{na(r.get('macd_line'), '{:+.3f}')}</span> | <span class="{macd_num_cls}">{na(r.get('macd_signal'), '{:+.3f}')}</span> (<span class="{ 'bullish' if r.get('macd_label')=='Bullish' else 'bearish' if r.get('macd_label')=='Bearish' else 'neutral' }">{r.get('macd_label','N/A')}</span>)</div>
-<div>P/E: <span class="{pe_cls}">{na(r.get('pe'), '{:.2f}')}</span></div>
-<div>EPS: <span class="{pe_cls}">{na(r.get('eps'), '{:.2f}')}</span></div>
-<div>Div: <span class="{div_cls}">{na(r.get('dividend_rate'), '${:.2f}')}</span> (<span class="{div_cls}">{div_yield_display}</span>)</div>
-<div>{display_label}: <span class="{mcap_cls}"><strong>{fmt_mcap(display_val)}</strong></span></div>
-<div>Earnings: <strong>{r.get('earnings_date') or 'N/A'}</strong></div>
-<div>P/C Vol Ratio: <span class="{pc_cls}">{na(r.get('pc_ratio'), '{:.2f}')}</span></div>
-<div><strong>Opt Dir: <span class="{opt_dir_cls}">{opt_dir_val}</span> &nbsp; Short: <span class="{short_cls}">{na(short_pct, '{:.1f}%')}</span> ({na(days_cover, '{:.1f}d')})</strong></div>
-</div>'''
-    
-    html += "</div></div><div id='heatView'><div class='heat-grid'>"
+        html += f"""<div class="stock-card" style="background:{bg}" data-ticker="{r['ticker']}" data-change="{r['change_pct']}" data-change-5d="{r.get('change_5d') or ''}" data-earnings="{r.get('earnings_date_iso') or ''}" data-rsi="{r['rsi'] or 50}" data-vol="{r['volume_raw']}" data-meme="{r['is_meme_stock']}" data-squeeze="{r['squeeze_level']}" data-bb-width="{bb_width_val}" data-dividend="{div_ds}" data-category="{r.get('category') or ''}">
+<div style="display:flex;justify-content:space-between;align-items:center">
+<div>
+<h3 style="margin:0;font-size:1.5em">{bb_icon}{r['ticker']}</h3>
+<div style="font-size:0.9em;color:#888">
+<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="color:#0066cc;text-decoration:none">Yahoo</a> |
+<a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank" style="color:#0066cc;text-decoration:none">Barchart</a> |
+<a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="color:#0066cc;text-decoration:none">Finviz</a> |
+<a href="https://www.zacks.com/stock/quote/{r['ticker']}" target="_blank" style="color:#0066cc;text-decoration:none">Zacks</a>
+</div>
+</div>
+<div style="font-size:1.2em">
+<span class="{macd_cls}">{r['macd_label']}</span><br>
+<span class="{sent_cls}">{sent_text}</span>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+<div>
+<div style="font-weight:bold;margin-bottom:5px">Price Action</div>
+<div style="font-size:1.2em">${r['price']:.2f}</div>
+<div class="range-container" style="margin-top:5px">
+<div class="range-title">Day</div>
+<div class="range-bar" style="background:{day_color}"><div class="range-bar-marker" style="left:{day_pos}%"></div></div>
+<div class="range-labels"><span>${r['day_low']:.2f}</span><span>${r['day_high']:.2f}</span></div>
+</div>
+<div class="range-container" style="margin-top:5px">
+<div class="range-title">52W</div>
+<div class="range-bar" style="background:{y52_color}"><div class="range-bar-marker" style="left:{y52_pos}%"></div></div>
+<div class="range-labels"><span>${r['52w_low']:.2f}</span><span>${r['52w_high']:.2f}</span></div>
+</div>
+</div>
+<div>
+<div style="font-weight:bold;margin-bottom:5px">Technical Indicators</div>
+<div style="font-size:0.9em">
+<span class="{macd_cls}">MACD: {r['macd_label']}</span><br>
+Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<br>
+<span class="{hv_cls}">Volatility: {hv_str}</span><br>
+<span class="{opt_dir_cls}">Opt Dir: {r['options_direction']}</span><br>
+<span class="{bias_cls}">Bias: {'Down' if r['down_volume_bias'] else 'Up'}</span>
+</div>
+</div>
+</div>
+<div class="range-container" style="margin-top:10px">
+<div class="range-title">Bollinger Bands</div>
+<div class="range-bar" style="background:{bb_color}"><div class="range-bar-marker" style="left:{pos}%"></div></div>
+<div class="range-labels"><span>${na(r["bb_lower"])}</span><span>${na(r["bb_middle"])}</span><span>${na(r["bb_upper"])}</span></div>
+<div style="font-size:0.75em;text-align:center">Width: {na(r["bb_width_pct"],"{:.1f}")}% – {r["bb_status"]}</div>
+</div>
+</div>
+</div>
+</div>
+"""
+    html += """</div><div id='heatView' style="display:none">
+<div class="heat-grid">
+"""
     for _, r in df.iterrows():
-        intensity = min(abs(r['change_pct']) / 15, 1)
-        bg = f"rgba(0,170,0,{intensity})" if r['change_pct'] >= 0 else f"rgba(204,0,0,{intensity})"
-        bb_width_val = r['bb_width_pct'] if r['bb_width_pct'] is not None else 100
-        price_display = f"${r['price']:.2f}" if (r.get('price') is not None and pd.notna(r.get('price'))) else 'N/A'
-
-        # Prefer Market Cap, fallback to AUM when market cap missing
-        mcap_val = r.get('market_cap')
-        aum_val = r.get('aum')
-        display_val = None
-        display_label = 'Market Cap'
-        if mcap_val is not None and pd.notna(mcap_val):
-            display_val = mcap_val
-            display_label = 'Market Cap'
-        elif aum_val is not None and pd.notna(aum_val):
-            display_val = aum_val
-            display_label = 'AUM'
-        try:
-            base_val = float(display_val) if display_val is not None else None
-        except Exception:
-            base_val = None
-        try:
-            mcap_cls = 'strong-bull' if base_val is not None and base_val >= 200e9 else 'bull' if base_val is not None and base_val >= 10e9 else 'neutral'
-        except Exception:
-            mcap_cls = 'neutral'
-
-        # 52W range
-        y52_low = r.get('52w_low')
-        y52_high = r.get('52w_high')
-        if pd.notna(y52_low) and pd.notna(y52_high):
-            y52_display = f"${y52_low:.2f} - ${y52_high:.2f}"
-        else:
-            y52_display = 'N/A'
-
-        # include dividend dataset for heat tiles
-        heat_div_ds = r.get('dividend_yield') if r.get('dividend_yield') is not None else (r.get('dividend_rate') if r.get('dividend_rate') is not None else '')
-        bb_icon = ''
-        if r.get('bb_signal') == 'BUY':
-            bb_icon = '<span style="font-size:0.5em">🟢</span> '
-        elif r.get('bb_signal') == 'SHORT':
-            bb_icon = '<span style="font-size:0.5em">🔴</span> '
-        html += f'''<div class="heat-tile stock-row" style="background:{bg}" 
-        data-ticker="{r['ticker']}" 
-        data-change="{r['change_pct']}" 
-        data-change-5d="{r.get('change_5d') or ''}"
-        data-earnings="{r.get('earnings_date_iso') or ''}"
-        data-rsi="{r['rsi'] or 50}" 
-        data-vol="{r['volume_raw']}" 
-        data-meme="{r['is_meme_stock']}" 
-        data-squeeze="{r['squeeze_level']}" 
-        data-bb-width="{bb_width_val}" data-dividend="{heat_div_ds}" data-category="{r.get('category') or ''}">
-    <strong><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.85em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.85em">F</a>) {price_display}</strong>
-    <div style="margin-top:6px">{fmt_change(r['change_pct'], r.get('change_abs_day'))}</div>
-    <div style="font-size:0.85em">5D: {fmt_change(r.get('change_5d'), r.get('change_abs_5d'))}</div>
-    <div style="font-size:0.9em">{display_label}: <span class="{mcap_cls}"><strong>{fmt_mcap(display_val)}</strong></span></div>
-    <div style="font-size:0.9em;margin-top:6px"><strong>52W: {y52_display}</strong></div>
-    </div>'''
-    
-    html += "</div></div></div>"
-
-    html += """
+        ch = r["change_pct"]
+        cls = "vol-hot" if r["volume_spike"] else "neutral"
+        html += f"""
+<div class="heat-tile" data-ticker="{r['ticker']}" data-change="{ch}" style="background:{bg}">
+<div style="font-weight:bold">{r['ticker']}</div>
+<div style="font-size:0.9em;color:#666">
+<span style="display:inline-block;width:60px">${r['price']:.2f}</span>
+<span class="{cls}" style="display:inline-block;width:60px;text-align:right">{fmt_change(ch)}</span>
+</div>
+<div class="range-container" style="margin-top:5px">
+<div class="range-title">Day</div>
+<div class="range-bar" style="background:{day_color}"><div class="range-bar-marker" style="left:{day_pos}%"></div></div>
+<div class="range-labels"><span>${r['day_low']:.2f}</span><span>${r['day_high']:.2f}</span></div>
+</div>
+<div class="range-container" style="margin-top:5px">
+<div class="range-title">52W</div>
+<div class="range-bar" style="background:{y52_color}"><div class="range-bar-marker" style="left:{y52_pos}%"></div></div>
+<div class="range-labels"><span>${r['52w_low']:.2f}</span><span>${r['52w_high']:.2f}</span></div>
+</div>
+</div>
+</div>
+"""
+    html += """</div>
+</div>
 <script>
-const prefsKey = 'dash_prefs';
-let prefs = JSON.parse(localStorage.getItem(prefsKey) || '{"theme":"light","view":"table"}');
-document.documentElement.setAttribute('data-theme', prefs.theme);
-
-function setView(btn, view) {
-    document.getElementById('tableView').style.display = view==='table' ? 'block' : 'none';
-    document.getElementById('cardView').style.display = view==='card' ? 'block' : 'none';
-    document.getElementById('heatView').style.display = view==='heat' ? 'block' : 'none';
-    document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    prefs.view = view;
-    localStorage.setItem(prefsKey, JSON.stringify(prefs));
-    applyFilter();
+function toggleHours(checked) {
+var labels = document.querySelectorAll('.hours-toggle span');
+var ext = checked ? '1' : '0';
+labels[0].style.color = checked ? '#888' : '';
+labels[1].style.color = checked ? '' : '#888';
+document.querySelectorAll('.stock-row,.stock-card').forEach(function(el) {
+var cls = el.classList;
+if (checked) {
+cls.add('ext');
+cls.remove('reg');
+} else {
+cls.add('reg');
+cls.remove('ext');
 }
-
-function toggleHours(extended) {
-    const newFile = extended ? 'extnd_dashboard.html' : 'reg_dashboard.html';
-    if (window.location.pathname.endsWith(newFile)) return;
-    window.location.href = newFile;
-}
-
-let currentFilter = 'all';
-function applyFilter() {
-    const rows = document.querySelectorAll('.stock-row');
-    const tickerVal = (document.getElementById('tickerFilter') && document.getElementById('tickerFilter').value) ? document.getElementById('tickerFilter').value.trim().toLowerCase() : '';
-    rows.forEach(r => {
-        let show = true;
-        const ch = parseFloat(r.dataset.change || 0);
-        const ch5 = parseFloat(r.dataset.change5d || 0);
-        const rsi = parseFloat(r.dataset.rsi || 50);
-        const vol = parseFloat(r.dataset.vol || 0);
-        const meme = r.dataset.meme === 'True';
-        const cat = (r.dataset.category || '').toLowerCase();
-        const sq = r.dataset.squeeze || 'None';
-        const bbw = parseFloat(r.dataset.bbWidth || 100);
-        if (currentFilter === 'oversold') show = rsi < 30;
-        else if (currentFilter === 'overbought') show = rsi > 70;
-        else if (currentFilter === 'surge') show = (ch > 10) || (ch5 > 10);
-        else if (currentFilter === 'crash') show = (ch < -10) || (ch5 < -10);
-        else if (currentFilter === 'meme') show = meme;
-        else if (currentFilter === 'volume') show = vol > 5e7;
-        else if (currentFilter === 'squeeze') show = sq !== 'None';
-        else if (currentFilter === 'earnings-week') show = (function(){
-            const ed = r.dataset.earnings;
-            if (!ed) return false;
-            try {
-                const edDate = new Date(ed + 'T00:00:00');
-                edDate.setHours(0,0,0,0);
-                const now = new Date();
-                const day = now.getDay();
-                const start = new Date(now);
-                start.setHours(0,0,0,0);
-                start.setDate(now.getDate() - day); // week starts Sunday
-                const end = new Date(start);
-                end.setDate(start.getDate() + 6);
-                return edDate >= start && edDate <= end;
-            } catch (e) {
-                return false;
-            }
-        })();
-        else if (currentFilter === 'bb-squeeze') show = bbw < 6;
-        else if (currentFilter === 'dividend') show = parseFloat(r.dataset.dividend || 0) > 0;
-        else if (currentFilter.startsWith('cat-')) show = cat === currentFilter.replace('cat-','');
-        if (tickerVal) {
-            const tk = (r.dataset.ticker || '').toString().toLowerCase();
-            show = show && tk.includes(tickerVal);
-        }
-        r.style.display = show ? '' : 'none';
-    });
-}
-
-document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', function() {
-    document.querySelectorAll('.chip').forEach(x => x.classList.remove('active'));
-    this.classList.add('active');
-    currentFilter = this.dataset.filter;
-    applyFilter();
-}));
-
-document.querySelectorAll('th[data-sort]').forEach((th, col) => {
-    th.onclick = () => {
-        const table = document.getElementById('stockTable');
-        const rows = Array.from(table.querySelectorAll('tr:nth-child(n+2)'));
-        const dir = th.dataset.dir = (th.dataset.dir === 'asc' ? 'desc' : 'asc');
-        rows.sort((a, b) => {
-            let av = a.cells[col].querySelector('[data-sort]')?.dataset.sort || a.cells[col].textContent.trim();
-            let bv = b.cells[col].querySelector('[data-sort]')?.dataset.sort || b.cells[col].textContent.trim();
-            av = isNaN(parseFloat(av)) ? av : parseFloat(av);
-            bv = isNaN(parseFloat(bv)) ? bv : parseFloat(bv);
-            if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * (dir === 'asc' ? 1 : -1);
-            return av.localeCompare(bv, undefined, {numeric: true}) * (dir === 'asc' ? 1 : -1);
-        });
-        rows.forEach(r => table.appendChild(r));
-    };
 });
-
-applyFilter();
-if (prefs.view !== 'table') {
-    const btn = document.querySelector(`.view-btn:nth-child(${prefs.view==='card'?2:3})`);
-    if (btn) setView(btn, prefs.view);
 }
-
 function toggleTheme() {
-    prefs.theme = prefs.theme === 'light' ? 'dark' : 'light';
-    document.documentElement.setAttribute('data-theme', prefs.theme);
-    localStorage.setItem(prefsKey, JSON.stringify(prefs));
+var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+document.documentElement.setAttribute('data-theme', isDark ? 'light' : 'dark');
+localStorage.setItem('theme', isDark ? 'light' : 'dark');
+}
+function setView(btn,view) {
+document.querySelectorAll('.view-btn').forEach(function(b) { b.classList.remove('active')});
+btn.classList.add('active');
+document.querySelectorAll('#tableView,#cardView,#heatView').forEach(function(v) {
+v.style.display = 'none';
+});
+document.getElementById(view+'View').style.display = 'block';
+}
+function applyFilter() {
+var input = document.getElementById('tickerFilter');
+var filter = input.value.toUpperCase();
+document.querySelectorAll('.stock-row,.stock-card').forEach(function(row) {
+var ticker = row.getAttribute('data-ticker') || '';
+if (ticker.indexOf(filter) > -1) {
+row.style.display = '';
+} else {
+row.style.display = 'none';
+}
+});
 }
 </script>
-</body></html>"""
-
-    with open(file, 'w', encoding='utf-8') as f:
+</body></html>
+"""
+    with open(file, "w", encoding="utf-8") as f:
         f.write(html)
+    # Return the update timestamp so caller can log elapsed time
+    return update
+
 
 if __name__ == "__main__":
-    os.makedirs('data', exist_ok=True)
+    os.makedirs("data", exist_ok=True)
     parser = argparse.ArgumentParser()
-    parser.add_argument('csv_file', nargs='?', default='data/tickers.csv')
+    parser.add_argument("csv_file", nargs="?", default="data/tickers.csv")
     args = parser.parse_args()
 
-    for ext, file, name in [(False, 'data/reg_dashboard.html', 'Regular'), (True, 'data/extnd_dashboard.html', 'Extended')]:
+    for ext, file, name in [
+        (False, "data/reg_dashboard.html", "Regular"),
+        (True, "data/extnd_dashboard.html", "Extended"),
+    ]:
         try:
+            print(f"[main] Generating {name} dashboard -> {file} (ext={ext})")
+            start_t = time.time()
             df = dashboard(args.csv_file, ext)
-            alerts = check_alerts(df.to_dict('records'))
-            html(df, get_vix_data(), get_fear_greed_data(), get_aaii_sentiment(), file, ext, alerts=alerts)
+            alerts = check_alerts(df.to_dict("records"))
+            html(
+                df,
+                get_vix_data(),
+                get_fear_greed_data(),
+                get_aaii_sentiment(),
+                file,
+                ext,
+                alerts=alerts,
+            )
+            elapsed_min = (time.time() - start_t) / 60.0
+            print(f"Dashboard generated: {file} (elapsed: {elapsed_min:.1f} min)")
             print(f"✓ {name} Hours Dashboard generated: {file}")
         except Exception as e:
             print(f"✗ {name} failed: {e}")
