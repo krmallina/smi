@@ -886,7 +886,7 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
                 else (
                     "neutral"
                     if fg["score"] <= 55
-                    else ("bullish" if fg["score"] <= 74 else "positive")
+                    else "bullish" if fg["score"] <= 74 else "positive"
                 )
             )
         )
@@ -957,7 +957,7 @@ td{{padding:12px;border-bottom:1px solid var(--border);vertical-align:top}}
 .toggle-switch{{position:relative;display:inline-block;width:60px;height:34px}}
 .toggle-switch input{{opacity:0;width:0;height:0}}
 .toggle-slider{{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#ccc;transition:.4s;border-radius:34px}}
-.toggle-slider:before{{position:absolute;content:"";height:26px;width:26px;left=4px;bottom:4px;background:#fff;transition:.4s;border-radius:50%}}
+.toggle-slider:before{{position:absolute;content:"";height:26px;width:26px;left:4px;bottom:4px;background:#fff;transition:.4s;border-radius:50%}}
 input:checked + .toggle-slider{{background:var(--accent)}}
 input:checked + .toggle-slider:before{{transform:translateX(26px)}}
 .hours-toggle{{display:flex;align-items:center;gap:10px;font-weight:600;margin-left:20px}}
@@ -1005,9 +1005,9 @@ input:checked + .toggle-slider:before{{transform:translateX(26px)}}
 </div>
 
 <div class="views">
-<button class="view-btn active" data-view="table" onclick="setView(this,'table')">📋 Table</button>
-<button class="view-btn" data-view="card" onclick="setView(this,'card')">🗂️ Cards</button>
-<button class="view-btn" data-view="heat" onclick="setView(this,'heat')">🔥 Heatmap</button>
+<button class="view-btn active" onclick="setView(this,'table')">📋 Table</button>
+<button class="view-btn" onclick="setView(this,'card')">🗂️ Cards</button>
+<button class="view-btn" onclick="setView(this,'heat')">🔥 Heatmap</button>
 <input id="tickerFilter" placeholder="Filter tickers..." oninput="applyFilter()" style="padding:8px;border-radius:6px;border:1px solid var(--border);margin-left:12px;min-width:160px">
 </div>
 
@@ -1409,22 +1409,15 @@ function setView(btn, view) {
 
 function toggleHours(extended) {
     const newFile = extended ? 'extnd_dashboard.html' : 'reg_dashboard.html';
-    try {
-        const path = window.location.pathname || window.location.href;
-        if (path.endsWith(newFile)) return;
-        const dir = path.replace(/\/[^\/]*$/, '/');
-        window.location.href = dir + newFile;
-    } catch (e) {
-        // fallback to relative link
-        window.location.href = newFile;
-    }
+    if (window.location.pathname.endsWith(newFile)) return;
+    window.location.href = newFile;
 }
 
 let currentFilter = 'all';
 function applyFilter() {
     const rows = document.querySelectorAll('.stock-row');
     const tickerVal = (document.getElementById('tickerFilter') && document.getElementById('tickerFilter').value) ? document.getElementById('tickerFilter').value.trim().toLowerCase() : '';
-    rows.forEach r => {
+    rows.forEach(r => {
         let show = true;
         const ch = parseFloat(r.dataset.change || 0);
         const ch5 = parseFloat(r.dataset.change5d || 0);
@@ -1483,7 +1476,6 @@ document.querySelectorAll('th[data-sort]').forEach((th, col) => {
         const rows = Array.from(table.querySelectorAll('tr:nth-child(n+2)'));
         const dir = th.dataset.dir = (th.dataset.dir === 'asc' ? 'desc' : 'asc');
         rows.sort((a, b) => {
-           
             let av = a.cells[col].querySelector('[data-sort]')?.dataset.sort || a.cells[col].textContent.trim();
             let bv = b.cells[col].querySelector('[data-sort]')?.dataset.sort || b.cells[col].textContent.trim();
             av = isNaN(parseFloat(av)) ? av : parseFloat(av);
@@ -1497,7 +1489,7 @@ document.querySelectorAll('th[data-sort]').forEach((th, col) => {
 
 applyFilter();
 if (prefs.view !== 'table') {
-    const btn = document.querySelector(`.view-btn[data-view="${prefs.view}"]`);
+    const btn = document.querySelector(`.view-btn:nth-child(${prefs.view==='card'?2:3})`);
     if (btn) setView(btn, prefs.view);
 }
 
