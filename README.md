@@ -23,12 +23,51 @@ A comprehensive Python-based stock market dashboard with advanced trading signal
 
 ### 🎯 Trading Signal Framework
 Six sophisticated trading strategies with visual indicators (🟢 BUY, 🟠 SELL, 🔴 SHORT, ⚪ HOLD):
-- **Bollinger Bands (BB)**: Price channel breakout detection with configurable thresholds
-- **RSI**: Oversold/overbought momentum analysis with extreme level detection
-- **MACD**: Trend following with crossover signals and configurable lookback period
-- **Ichimoku Cloud**: Multi-component trend and support/resistance with optional filters
-- **Combined Strategy**: Weighted voting system across multiple strategies
-- **BB + Ichimoku (Default)**: CONFIRM mode - BB primary with Ichimoku confirmation
+
+- **Bollinger Bands (BB)**: Price channel breakout detection
+  - BUY: Price ≤10% of BB range (oversold)
+  - SHORT: Price ≥90% of BB range (overbought)
+  - SELL: Price ≥85% AND reversing down (exit longs)
+  - HOLD: 10-85% range (normal)
+  - Configurable thresholds via `BB_BUY_THRESHOLD`, `BB_SHORT_THRESHOLD`, `BB_SELL_THRESHOLD`
+
+- **RSI**: Oversold/overbought momentum analysis
+  - BUY: RSI ≤30 (oversold)
+  - SHORT: RSI ≥70 (overbought)
+  - SELL: Dropping from overbought OR failing to bounce from oversold
+  - HOLD: 30-70 range (normal)
+  - Configurable via `RSI_OVERSOLD`, `RSI_OVERBOUGHT`, `RSI_SELL_THRESHOLD`
+
+- **MACD**: Trend following with crossover signals
+  - BUY: Bullish crossover (MACD > Signal)
+  - SHORT: Bearish crossover (MACD < Signal)
+  - SELL: Crossing from bullish to bearish
+  - HOLD: No recent crossover
+  - Configurable lookback period: `MACD_PERIOD` (50-150 days, default: 150)
+
+- **Ichimoku Cloud**: Multi-component trend and support/resistance
+  - BUY: Price crosses above base line in bullish cloud
+  - SHORT: Price crosses below base line in bearish cloud
+  - SELL: Price crosses below in bearish cloud
+  - HOLD: Price above/below base line maintaining bullish/bearish position
+  - Optional filters: `ICHIMOKU_VOL_FILTER`, `ICHIMOKU_PRICE_FILTER` (set to 0 to disable)
+
+- **Combined Strategy**: Weighted voting with conflict resolution
+  - Aggregates signals from BB, RSI, MACD, Ichimoku with configurable weights
+  - Default weights: Ichimoku (1.5), MACD (1.2), BB (1.0), RSI (0.8)
+  - BUY/SHORT: Requires weighted score ≥2.0 with no conflicting signals
+  - SELL: Only if not conflicting with entry signals
+  - HOLD: Only if no strong entry signals exist
+  - Configurable via `WEIGHT_*` and `COMBINED_THRESHOLD` variables
+
+- **BB + Ichimoku (Default)**: Multi-mode confirmation strategy
+  - **CONFIRM mode** (default): Balanced approach
+    - BUY/SHORT: Both BB and Ichimoku must agree
+    - SELL: Either can trigger (risk management priority)
+    - HOLD: Both must agree
+  - **AND mode**: Most conservative - all signals require both strategies
+  - **OR mode**: Most aggressive - either strategy can trigger any signal
+  - Set via `BB_ICHIMOKU_MODE=CONFIRM|AND|OR`
 
 **Signal Types:**
 - 🟢 **BUY** - Strong bullish signal, entry opportunity
@@ -62,12 +101,13 @@ ATR-based stop loss system with position sizing:
 - **Maximum Position**: 25% account limit to prevent over-concentration
 
 ### 🎯 Signal Confidence Scoring
-Inter-strategy agreement analysis:
-- **STRONG (≥60%)**: High agreement across strategies
-- **MODERATE (30-60%)**: Partial consensus
-- **WEAK (<30%)**: Low agreement or conflicting signals
+Inter-strategy agreement analysis for actionable signals:
+- **STRONG (≥75%)**: High agreement across strategies (3+ strategies agreeing)
+- **MODERATE (50-75%)**: Partial consensus (2 strategies agreeing)
+- **WEAK (<50%)**: Low agreement or conflicting signals
+- **Note**: HOLD signals don't receive confidence scores (neutral positions)
 
-Helps filter low-quality signals and focus on high-probability setups.
+Helps filter low-quality signals and focus on high-probability setups. Only BUY, SHORT, and SELL signals are scored.
 
 Set strategy via environment variable:
 ```bash
