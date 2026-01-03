@@ -323,7 +323,7 @@ def get_active_strategy():
 
 # PERFORMANCE OPTIMIZATION: Cache VIX data globally to avoid fetching for every ticker
 _vix_cache = {'data': None, 'time': 0}
-VIX_CACHE_TTL = 300  # 5 minutes
+VIX_CACHE_TTL = 1800  # 30 minutes
 
 def get_vix_cached():
     """Get VIX data with caching to avoid redundant API calls"""
@@ -344,7 +344,7 @@ def get_vix_cached():
 
 # PERFORMANCE OPTIMIZATION: Cache alerts with TTL to avoid constant file reads
 _alerts_cache = {"data": None, "time": 0}
-CACHE_TTL = 300  # 5 minutes
+CACHE_TTL = 1800  # 30 minutes
 
 
 def load_alerts():
@@ -458,7 +458,7 @@ def check_alerts(data):
     if buy_signals:
         grouped.append(fmt(buy_signals, "💚", "Buy"))
     if sell_signals:
-        grouped.append(fmt(sell_signals, "💛", "Sell"))
+        grouped.append(fmt(sell_signals, "🧡", "Sell"))
     if short_signals:
         grouped.append(fmt(short_signals, "❤️", "Short"))
     if surge:
@@ -721,6 +721,8 @@ def fetch(ticker, ext=False, retry=0):
         target = info.get("targetMeanPrice")
         upside = ((target - price) / price) * 100 if target and price > 0 else None
         spk = sparkline(h30["Close"].tolist() if not h30.empty else [])
+        spk_5d = sparkline(reg["Close"].tolist() if not reg.empty else [])
+        spk_1m = sparkline(h1m["Close"].tolist() if not h1m.empty else [])
 
         bb_period = 20
         bb_upper = bb_lower = bb_middle = bb_width_pct = bb_position_pct = bb_status = (
@@ -923,6 +925,8 @@ def fetch(ticker, ext=False, retry=0):
             "implied_low": impl_lo,
             "down_volume_bias": down_bias,
             "sparkline": spk,
+            "sparkline_5d": spk_5d,
+            "sparkline_1m": spk_1m,
             "bb_upper": bb_upper,
             "bb_lower": bb_lower,
             "bb_middle": bb_middle,
@@ -1084,9 +1088,9 @@ def get_vix_data():
     return get_index_data("^VIX")
 
 
-# OPTIMIZED: Cache F&G data with 1 hour TTL
+# OPTIMIZED: Cache F&G data with 30 minute TTL
 _fg_cache = {"data": None, "time": 0}
-FG_CACHE_TTL = 3600
+FG_CACHE_TTL = 1800
 
 # Shared requests session for fewer TCP handshakes
 SESSION = requests.Session()
@@ -1175,9 +1179,9 @@ def get_fear_greed_data():
     return {"score": None, "rating": "N/A", "raw_score": None}
 
 
-# OPTIMIZED: Cache AAII data with 1 hour TTL
+# OPTIMIZED: Cache AAII data with 30 minute TTL
 _aaii_cache = {"data": None, "time": 0}
-AAII_CACHE_TTL = 3600
+AAII_CACHE_TTL = 1800
 
 
 def get_aaii_sentiment():
@@ -1315,11 +1319,13 @@ body{{font-family:'Oracle Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Robo
 .btn:hover{{background:var(--accent-hover);box-shadow:var(--shadow-hover);transform:translateY(-1px)}}
 .btn:active{{transform:translateY(0);box-shadow:var(--shadow)}}
 .alert-banner{{background:var(--card);color:var(--text);padding:16px 24px;border-radius:var(--radius-lg);margin-bottom:24px;text-align:center;font-weight:600;box-shadow:var(--shadow);border:3px solid #c74634}}
-.quick-filters{{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:24px;background:var(--card);padding:20px;border-radius:var(--radius-lg);box-shadow:var(--shadow);border:1px solid var(--border)}}
+.controls-container{{background:var(--card);padding:20px;border-radius:var(--radius-lg);margin-bottom:24px;box-shadow:var(--shadow);border:3px solid #a8b2bd}}
+.hours-toggle-container{{display:flex;gap:15px;flex-wrap:wrap;align-items:center;justify-content:space-between;padding-bottom:20px;border-bottom:1px solid var(--border);margin-bottom:20px}}
+.quick-filters{{display:flex;flex-wrap:wrap;gap:10px;padding-bottom:20px;border-bottom:1px solid var(--border);margin-bottom:20px}}
 .chip{{padding:8px 18px;background:var(--surface);border:1.5px solid var(--border);border-radius:20px;cursor:pointer;font-weight:600;font-size:13px;transition:all 0.2s;color:var(--text)}}
 .chip.active{{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:var(--shadow)}}
 .chip:hover{{background:var(--accent-hover);border-color:var(--accent-hover);color:#fff;transform:translateY(-1px)}}
-.views{{display:flex;gap:12px;margin-bottom:24px}}
+.views{{display:flex;gap:12px}}
 .view-btn{{padding:12px 24px;background:var(--card);border:1.5px solid var(--border);border-radius:var(--radius-md);cursor:pointer;transition:all 0.2s;font-weight:600;font-size:14px;color:var(--text)}}
 .view-btn.active{{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:var(--shadow)}}
 .view-btn:hover{{border-color:var(--accent);color:var(--accent);transform:translateY(-1px)}}
@@ -1372,12 +1378,13 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
 {banner}
 <div class="top-bar">
 <div><h1>📊 Dashboard</h1><small>{update}</small></div>
-<div style="display:flex;gap:15px;flex-wrap:wrap;align-items:center">
-<span>{indices_h}</span><span style="color:#888"> | </span><span>{fg_h}</span><span style="color:#888"> | </span><span>{aaii_h}</span>
+<div style="display:flex;gap:15px;align-items:center;white-space:nowrap">
+<span>{indices_h}</span><span style="color:#888">|</span><span>{fg_h}</span><span style="color:#888">|</span><span>{aaii_h}</span>
 </div>
 </div>
 
-<div style="display:flex;gap:15px;flex-wrap:wrap;align-items:center;background:var(--card);padding:15px 20px;border-radius:12px;margin-bottom:20px;justify-content:space-between">
+<div class="controls-container">
+<div class="hours-toggle-container" style="display:flex;gap:15px;flex-wrap:wrap;align-items:center;justify-content:space-between">
 <div class="hours-toggle">
 <span>Regular</span>
 <label class="toggle-switch">
@@ -1418,6 +1425,7 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
 <button class="view-btn" onclick="setView(this,'card')">🗂️ Cards</button>
 <button class="view-btn" onclick="setView(this,'heat')">🔥 Heatmap</button>
 <input id="tickerFilter" placeholder="Filter tickers..." oninput="applyFilter()">
+</div>
 </div>
 
 <div id="tableView">
@@ -1607,8 +1615,8 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
     <td><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.9em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.9em">F</a>, <a href="{zacks_url}" target="_blank" style="font-size:0.9em">Z</a>, <a href="{stock_analysis_url}" target="_blank" style="font-size:0.9em">S</a>)</td>
 <td data-sort="{r['price']:.2f}">${r['price']:.2f} {r['sparkline']}</td>
 <td>{fmt_change(r['change_pct'], r['change_abs_day'])}</td>
-<td>{fmt_change(r.get('change_5d'), r.get('change_abs_5d'))}</td>
-<td>{fmt_change(r['change_1m'], r['change_abs_1m'])}</td>
+<td>{fmt_change(r.get('change_5d'), r.get('change_abs_5d'))} {r.get('sparkline_5d', '')}</td>
+<td>{fmt_change(r['change_1m'], r['change_abs_1m'])} {r.get('sparkline_1m', '')}</td>
 <td>{fmt_change(r['change_6m'], r['change_abs_6m'])}</td>
 <td>{fmt_change(r['change_ytd'], r['change_abs_ytd'])}</td>
 <td data-sort="{r['volume_raw']}">{fmt_vol(r['volume'])}</td>
@@ -1766,19 +1774,19 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
     <h2><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.8em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.8em">F</a>, <a href="{zacks_url}" target="_blank" style="font-size:0.8em">Z</a>, <a href="{stock_analysis_url}" target="_blank" style="font-size:0.8em">S</a>) ${r['price']:.2f}</h2>
 <div style="font-size:1.5em">{fmt_change(r['change_pct'], r['change_abs_day'])}</div>
 {r['sparkline']}
-<div>1M: {fmt_change(r['change_1m'], r['change_abs_1m'])}</div>
-<div>5D: {fmt_change(r.get('change_5d'), r.get('change_abs_5d'))}</div>
+<div>5D: {fmt_change(r.get('change_5d'), r.get('change_abs_5d'))} {r.get('sparkline_5d', '')}</div>
+<div>1M: {fmt_change(r['change_1m'], r['change_abs_1m'])} {r.get('sparkline_1m', '')}</div>
 <div>6M: {fmt_change(r['change_6m'], r['change_abs_6m'])}</div>
 <div>YTD: {fmt_change(r['change_ytd'], r['change_abs_ytd'])}</div>
 <div><strong>52W: {y52_display}</strong></div>
-<div><span class="{hv_cls}">Volatility: {hv_str}</span></div>
-<div>BB: {r['bb_status']} ({na(r['bb_width_pct'], '{:.1f}%')})</div>
-<div>MACD: <span class="{macd_num_cls}">{na(r.get('macd_line'), '{:+.3f}')}</span> | <span class="{macd_num_cls}">{na(r.get('macd_signal'), '{:+.3f}')}</span> (<span class="{ 'bullish' if r.get('macd_label')=='Bullish' else 'bearish' if r.get('macd_label')=='Bearish' else 'neutral' }">{r.get('macd_label','N/A')}</span>)</div>
+<div>{display_label}: <span class="{mcap_cls}"><strong>{fmt_mcap(display_val)}</strong></span></div>
 <div>P/E: <span class="{pe_cls}">{na(r.get('pe'), '{:.2f}')}</span></div>
 <div>EPS: <span class="{pe_cls}">{na(r.get('eps'), '{:.2f}')}</span></div>
 <div>Div: <span class="{div_cls}">{na(r.get('dividend_rate'), '${:.2f}')}</span> (<span class="{div_cls}">{div_yield_display}</span>)</div>
-<div>{display_label}: <span class="{mcap_cls}"><strong>{fmt_mcap(display_val)}</strong></span></div>
 <div>Earnings: <strong>{r.get('earnings_date') or 'N/A'}</strong></div>
+<div><span class="{hv_cls}">Volatility: {hv_str}</span></div>
+<div>BB: {r['bb_status']} ({na(r['bb_width_pct'], '{:.1f}%')})</div>
+<div>MACD: <span class="{macd_num_cls}">{na(r.get('macd_line'), '{:+.3f}')}</span> | <span class="{macd_num_cls}">{na(r.get('macd_signal'), '{:+.3f}')}</span> (<span class="{ 'bullish' if r.get('macd_label')=='Bullish' else 'bearish' if r.get('macd_label')=='Bearish' else 'neutral' }">{r.get('macd_label','N/A')}</span>)</div>
 <div>P/C Vol Ratio: <span class="{pc_cls}">{na(r.get('pc_ratio'), '{:.2f}')}</span></div>
 <div><strong>Opt Dir: <span class="{opt_dir_cls}">{opt_dir_val}</span> &nbsp; Short: <span class="{short_cls}">{na(short_pct, '{:.1f}%')}</span> ({na(days_cover, '{:.1f}d')})</strong></div>
 </div>"""
@@ -1871,9 +1879,10 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         data-bb-width="{bb_width_val}" data-dividend="{heat_div_ds}" data-category="{r.get('category') or ''}" data-signal="{active_sig_heat}">
     <strong><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.85em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.85em">F</a>, <a href="{zacks_url}" target="_blank" style="font-size:0.85em">Z</a>, <a href="{stock_analysis_url}" target="_blank" style="font-size:0.85em">S</a>) {price_display}</strong>
     <div style="margin-top:6px">{fmt_change(r['change_pct'], r.get('change_abs_day'))}</div>
-    <div style="font-size:0.85em">5D: {fmt_change(r.get('change_5d'), r.get('change_abs_5d'))}</div>
-    <div style="font-size:0.9em">{display_label}: <span class="{mcap_cls}"><strong>{fmt_mcap(display_val)}</strong></span></div>
+    <div style="font-size:0.85em">5D: {fmt_change(r.get('change_5d'), r.get('change_abs_5d'))} {r.get('sparkline_5d', '')}</div>
+    <div style="font-size:0.85em">1M: {fmt_change(r['change_1m'], r['change_abs_1m'])} {r.get('sparkline_1m', '')}</div>
     <div style="font-size:0.9em;margin-top:6px"><strong>52W: {y52_display}</strong></div>
+    <div style="font-size:0.9em">{display_label}: <span class="{mcap_cls}"><strong>{fmt_mcap(display_val)}</strong></span></div>
     </div>"""
 
     html += "</div></div></div>"
