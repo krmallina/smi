@@ -11,7 +11,7 @@
 
 # Stock Market Intelligence Dashboard
 
-A comprehensive Python-based stock market dashboard with advanced trading signals, real-time data, and interactive visualizations.
+A comprehensive stock market dashboard with advanced trading signals, real-time data, and interactive visualizations.
 
 ## Features
 
