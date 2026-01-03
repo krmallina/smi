@@ -299,6 +299,9 @@ def generate_trading_signals(stock_data):
         elif rsi >= RSI_SELL_THRESHOLD and rsi_prev is not None and rsi_prev > rsi and rsi_prev >= RSI_OVERBOUGHT:
             # Dropping from overbought: Exit longs
             signals['rsi'] = 'SELL'
+        elif rsi <= 35 and rsi_prev is not None and rsi < rsi_prev and rsi_prev <= RSI_OVERSOLD:
+            # Failing to bounce from oversold (bearish continuation): Exit longs/shorts
+            signals['rsi'] = 'SELL'
         elif RSI_OVERSOLD < rsi < RSI_OVERBOUGHT:
             signals['rsi'] = 'HOLD'  # Normal range
         else:
@@ -361,7 +364,10 @@ def generate_trading_signals(stock_data):
             elif price > base_line and cloud_bullish:
                 # In bullish position: Hold
                 signals['ichimoku'] = 'HOLD'
-            elif price < base_line and cloud_bearish and price_prev is not None and price_prev >= base_line:
+            elif price < base_line and cloud_bearish:
+                # In bearish position (holding SHORT): Hold
+                signals['ichimoku'] = 'HOLD'
+            elif cloud_bearish and price_prev is not None and price_prev >= base_line:
                 # Crossed below in bearish cloud: Exit longs
                 signals['ichimoku'] = 'SELL'
             else:
@@ -402,12 +408,14 @@ def generate_trading_signals(stock_data):
             signals['combined'] = 'BUY'
         elif short_score == max_score and short_score > buy_score:
             signals['combined'] = 'SHORT'
-        elif sell_score == max_score:
+        elif sell_score == max_score and sell_score > buy_score and sell_score > short_score:
+            # SELL only if not conflicting with entry signals
             signals['combined'] = 'SELL'
-        elif hold_score == max_score:
+        elif hold_score == max_score and buy_score < COMBINED_THRESHOLD and short_score < COMBINED_THRESHOLD:
+            # HOLD only if no strong entry signals
             signals['combined'] = 'HOLD'
         else:
-            # Conflicting signals (e.g., buy_score == short_score)
+            # Conflicting signals (e.g., buy_score == short_score, or sell/hold conflicts with entries)
             signals['combined'] = None
     else:
         signals['combined'] = None
@@ -433,18 +441,19 @@ def generate_trading_signals(stock_data):
             signals['bb_ichimoku'] = None
     
     elif BB_ICHIMOKU_MODE == 'confirm':
-        # CONFIRM mode: Require both for entries (BUY/SHORT), either for exits (SELL) and HOLD
+        # CONFIRM mode: Require both for entries (BUY/SHORT), either for exits (SELL)
         if bb_sig == 'BUY' and ich_sig == 'BUY':
             signals['bb_ichimoku'] = 'BUY'
         elif bb_sig == 'SHORT' and ich_sig == 'SHORT':
             signals['bb_ichimoku'] = 'SHORT'
         elif bb_sig == 'SELL' or ich_sig == 'SELL':
-            # Exit quickly if either signals danger
+            # Exit quickly if either signals danger (risk management priority)
             signals['bb_ichimoku'] = 'SELL'
-        elif bb_sig == 'HOLD' or ich_sig == 'HOLD':
-            # Hold if either suggests maintaining position
+        elif bb_sig == 'HOLD' and ich_sig == 'HOLD':
+            # Hold only if both suggest maintaining position (not conflicting)
             signals['bb_ichimoku'] = 'HOLD'
         else:
+            # One says BUY/SHORT, other says HOLD/None → Insufficient confirmation
             signals['bb_ichimoku'] = None
     
     else:  # Default 'or' mode
@@ -489,7 +498,13 @@ def calculate_signal_confidence(all_signals, active_strategy):
     """
     # Count signals by type (excluding None and active strategy itself)
     active_sig = all_signals.get(active_strategy)
-    if not active_sig or active_sig not in ('BUY', 'SHORT', 'SELL'):
+    
+    # HOLD signals don't need confidence scoring (neutral positions)
+    if not active_sig or active_sig == 'HOLD':
+        return None, None
+    
+    # Only actionable signals (BUY/SHORT/SELL) get confidence scores
+    if active_sig not in ('BUY', 'SHORT', 'SELL'):
         return 0.0, 'WEAK'
     
     # Check agreement from other strategies
