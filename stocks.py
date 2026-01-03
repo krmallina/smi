@@ -1,3 +1,21 @@
+"""
+Stock Market Intelligence Dashboard
+
+Trading Strategies:
+  The system supports multiple trading signal strategies. Set via TRADING_STRATEGY environment variable:
+  
+  - 'bb_ichimoku' (default): BB or Ichimoku - Signal if either BB or Ichimoku triggers
+  - 'bb': Bollinger Bands - Buy at lower band, Short at upper band
+  - 'rsi': RSI - Buy when oversold (<30), Short when overbought (>70)
+  - 'macd': MACD - Buy on bullish crossover, Short on bearish crossover
+  - 'ichimoku': Ichimoku Cloud - Buy on bullish cloud break, Sell on bearish cloud break
+  - 'combined': Combined - Requires 2+ strategies to agree
+  
+  Example usage:
+    export TRADING_STRATEGY=ichimoku
+    python3 stocks.py data/tickers.csv
+"""
+
 import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
@@ -112,6 +130,218 @@ def infer_category_from_info(ticker, info):
     return ""
 
 
+# ============================================================================
+# TRADING SIGNAL STRATEGIES
+# ============================================================================
+
+def calculate_ichimoku(high, low, close, conversion_period=9, base_period=26, span_b_period=52):
+    """
+    Calculate Ichimoku Cloud indicators.
+    
+    Args:
+        high: Series of high prices
+        low: Series of low prices
+        close: Series of close prices
+        conversion_period: Period for Conversion Line (default 9)
+        base_period: Period for Base Line (default 26)
+        span_b_period: Period for Span B (default 52)
+    
+    Returns:
+        Dictionary with Ichimoku components or None if insufficient data
+    """
+    if len(high) < span_b_period:
+        return None
+    
+    # Optimize: Calculate rolling max/min once per period
+    high_rolling = {
+        conversion_period: high.rolling(window=conversion_period).max(),
+        base_period: high.rolling(window=base_period).max(),
+        span_b_period: high.rolling(window=span_b_period).max()
+    }
+    low_rolling = {
+        conversion_period: low.rolling(window=conversion_period).min(),
+        base_period: low.rolling(window=base_period).min(),
+        span_b_period: low.rolling(window=span_b_period).min()
+    }
+    
+    # Conversion Line (Tenkan-sen): (9-period high + 9-period low) / 2
+    conversion_line = (high_rolling[conversion_period] + low_rolling[conversion_period]) / 2
+    
+    # Base Line (Kijun-sen): (26-period high + 26-period low) / 2
+    base_line = (high_rolling[base_period] + low_rolling[base_period]) / 2
+    
+    # Span A (Senkou Span A): (Conversion Line + Base Line) / 2
+    span_a = (conversion_line + base_line) / 2
+    
+    # Span B (Senkou Span B): (52-period high + 52-period low) / 2
+    span_b = (high_rolling[span_b_period] + low_rolling[span_b_period]) / 2
+    
+    return {
+        'conversion_line': conversion_line.iloc[-1] if len(conversion_line) > 0 else None,
+        'base_line': base_line.iloc[-1] if len(base_line) > 0 else None,
+        'span_a': span_a.iloc[-1] if len(span_a) > 0 else None,
+        'span_b': span_b.iloc[-1] if len(span_b) > 0 else None,
+        'conversion_line_prev': conversion_line.iloc[-2] if len(conversion_line) > 1 else None,
+        'base_line_prev': base_line.iloc[-2] if len(base_line) > 1 else None,
+    }
+
+
+def generate_trading_signals(stock_data):
+    """
+    Generate buy/sell/short signals based on multiple strategies.
+    
+    Args:
+        stock_data: Dictionary containing stock metrics (bb_position_pct, rsi, macd_label, ichimoku, etc.)
+    
+    Returns:
+        Dictionary with signals from different strategies:
+        {
+            'bb': 'BUY' | 'SELL' | 'SHORT' | None,
+            'rsi': 'BUY' | 'SELL' | 'SHORT' | None,
+            'macd': 'BUY' | 'SELL' | 'SHORT' | None,
+            'ichimoku': 'BUY' | 'SELL' | 'SHORT' | None,
+            'combined': 'BUY' | 'SELL' | 'SHORT' | None,
+            'bb_ichimoku': 'BUY' | 'SELL' | 'SHORT' | None
+        }
+    """
+    signals = {}
+    
+    # Strategy 1: Bollinger Bands
+    bb_position_pct = stock_data.get('bb_position_pct')
+    if bb_position_pct is not None:
+        if bb_position_pct <= 0:
+            signals['bb'] = 'BUY'
+        elif bb_position_pct >= 100:
+            signals['bb'] = 'SHORT'
+        elif 40 <= bb_position_pct <= 60:
+            signals['bb'] = 'SELL'  # Mean reversion / neutral zone
+        else:
+            signals['bb'] = None
+    else:
+        signals['bb'] = None
+    
+    # Strategy 2: RSI
+    rsi = stock_data.get('rsi')
+    if rsi is not None:
+        if rsi <= 30:
+            signals['rsi'] = 'BUY'  # Oversold
+        elif rsi >= 70:
+            signals['rsi'] = 'SHORT'  # Overbought
+        else:
+            signals['rsi'] = None
+    else:
+        signals['rsi'] = None
+    
+    # Strategy 3: MACD
+    macd_label = stock_data.get('macd_label')
+    if macd_label == 'Bullish':
+        signals['macd'] = 'BUY'
+    elif macd_label == 'Bearish':
+        signals['macd'] = 'SHORT'
+    else:
+        signals['macd'] = None
+    
+    # Strategy 4: Ichimoku Cloud
+    ichimoku = stock_data.get('ichimoku')
+    price = stock_data.get('price')
+    price_prev = stock_data.get('price_prev')
+    vol_sma_20 = stock_data.get('vol_sma_20')
+    price_sma_60 = stock_data.get('price_sma_60')
+    
+    if ichimoku and price is not None and all(v is not None for v in ichimoku.values()):
+        base_line = ichimoku.get('base_line')
+        base_line_prev = ichimoku.get('base_line_prev')
+        span_a = ichimoku.get('span_a')
+        span_b = ichimoku.get('span_b')
+        
+        # Common filters for both signals
+        vol_filter = vol_sma_20 is None or vol_sma_20 > 100000
+        price_filter = price_sma_60 is None or price_sma_60 > 20
+        
+        # Buy Signal: close > span_b AND span_a > span_b AND close crosses above base_line
+        if vol_filter and price_filter:
+            cloud_bullish = price > span_b and span_a > span_b
+            crosses_above = price_prev is not None and base_line_prev is not None and \
+                           price_prev <= base_line_prev and price > base_line
+            
+            # Sell Signal: close < span_a AND span_a < span_b AND base_line crosses above close
+            cloud_bearish = price < span_a and span_a < span_b
+            crosses_below = price_prev is not None and base_line_prev is not None and \
+                           price_prev >= base_line_prev and price < base_line
+            
+            if cloud_bullish and crosses_above:
+                signals['ichimoku'] = 'BUY'
+            elif cloud_bearish and crosses_below:
+                signals['ichimoku'] = 'SELL'
+            else:
+                signals['ichimoku'] = None
+        else:
+            signals['ichimoku'] = None
+    else:
+        signals['ichimoku'] = None
+    
+    # Combined Strategy: Require at least 2 signals to agree
+    buy_count = sum(1 for s in signals.values() if s == 'BUY')
+    short_count = sum(1 for s in signals.values() if s == 'SHORT')
+    sell_count = sum(1 for s in signals.values() if s == 'SELL')
+    
+    if buy_count >= 2:
+        signals['combined'] = 'BUY'
+    elif short_count >= 2:
+        signals['combined'] = 'SHORT'
+    elif sell_count >= 1:
+        signals['combined'] = 'SELL'
+    else:
+        signals['combined'] = None
+    
+    # BB or Ichimoku Strategy: Either BB or Ichimoku signals trigger (default)
+    bb_sig = signals.get('bb')
+    ich_sig = signals.get('ichimoku')
+    
+    if bb_sig == 'BUY' or ich_sig == 'BUY':
+        signals['bb_ichimoku'] = 'BUY'
+    elif bb_sig == 'SHORT' or ich_sig == 'SHORT':
+        signals['bb_ichimoku'] = 'SHORT'
+    elif bb_sig == 'SELL' or ich_sig == 'SELL':
+        signals['bb_ichimoku'] = 'SELL'
+    else:
+        signals['bb_ichimoku'] = None
+    
+    return signals
+
+
+def get_active_strategy():
+    """
+    Returns the currently active trading strategy.
+    Can be configured via environment variable or settings file.
+    
+    Options: 'bb', 'rsi', 'macd', 'ichimoku', 'combined', 'bb_ichimoku'
+    Default: 'bb_ichimoku' (either BB or Ichimoku triggers)
+    """
+    return os.getenv('TRADING_STRATEGY', 'bb_ichimoku')
+
+
+# PERFORMANCE OPTIMIZATION: Cache VIX data globally to avoid fetching for every ticker
+_vix_cache = {'data': None, 'time': 0}
+VIX_CACHE_TTL = 300  # 5 minutes
+
+def get_vix_cached():
+    """Get VIX data with caching to avoid redundant API calls"""
+    global _vix_cache
+    now = time.time()
+    if _vix_cache['data'] is None or (now - _vix_cache['time']) > VIX_CACHE_TTL:
+        try:
+            vix_data = safe_history(yf.Ticker("^VIX"), period="60d")
+            if len(vix_data) >= 10:
+                _vix_cache['data'] = vix_data
+                _vix_cache['time'] = now
+            else:
+                return None
+        except Exception:
+            return None
+    return _vix_cache['data']
+
+
 # PERFORMANCE OPTIMIZATION: Cache alerts with TTL to avoid constant file reads
 _alerts_cache = {"data": None, "time": 0}
 CACHE_TTL = 300  # 5 minutes
@@ -167,17 +397,18 @@ def check_alerts(data):
             msg = f"RSI OVERBOUGHT → {s['rsi']:.1f}"
         elif cond == "volume_spike" and s["volume_spike"]:
             msg = "VOLUME SPIKE"
-        elif cond == "buy" and s.get("bb_signal") == "BUY":
-            buy_signals.append({"ticker": s["ticker"]})
-        elif (
-            cond == "sell"
-            and s.get("bb_signal") is None
-            and s.get("bb_position_pct") is not None
-            and 0 < s.get("bb_position_pct", -1) < 100
-        ):
-            sell_signals.append({"ticker": s["ticker"]})
-        elif cond == "short" and s.get("bb_signal") == "SHORT":
-            short_signals.append({"ticker": s["ticker"]})
+        elif cond == "buy":
+            active_sig = s.get("active_signal") or s.get("bb_signal")
+            if active_sig == "BUY":
+                buy_signals.append({"ticker": s["ticker"], "msg": f"Custom: BUY signal"})
+        elif cond == "sell":
+            active_sig = s.get("active_signal") or s.get("bb_signal")
+            if active_sig == "SELL":
+                sell_signals.append({"ticker": s["ticker"], "msg": f"Custom: SELL signal"})
+        elif cond == "short":
+            active_sig = s.get("active_signal") or s.get("bb_signal")
+            if active_sig == "SHORT":
+                short_signals.append({"ticker": s["ticker"], "msg": f"Custom: SHORT signal"})
         if msg:
             custom.append({"ticker": s["ticker"], "msg": msg})
 
@@ -189,6 +420,19 @@ def check_alerts(data):
             crash.append({"ticker": s["ticker"], "msg": f"CRASHED < -15% → {ch:+.2f}%"})
         if s["volume_spike"]:
             volume_spike.append({"ticker": s["ticker"], "msg": "VOLUME SPIKE"})
+        
+        # Trading Signal alerts (using active strategy)
+        active_sig = s.get("active_signal") or s.get("bb_signal")
+        if active_sig == "BUY":
+            strategy_name = get_active_strategy().upper()
+            buy_signals.append({"ticker": s["ticker"], "msg": f"{strategy_name} BUY signal"})
+        elif active_sig == "SHORT":
+            strategy_name = get_active_strategy().upper()
+            short_signals.append({"ticker": s["ticker"], "msg": f"{strategy_name} SHORT signal"})
+        elif active_sig == "SELL":
+            strategy_name = get_active_strategy().upper()
+            sell_signals.append({"ticker": s["ticker"], "msg": f"{strategy_name} SELL signal"})
+        
         range_52w = s["52w_high"] - s["52w_low"]
         if range_52w > 0:
             pos_pct = (s["price"] - s["52w_low"]) / range_52w * 100
@@ -289,8 +533,9 @@ def fetch(ticker, ext=False, retry=0):
 
         t = yf.Ticker(ticker)
         # Small base delay with jitter to spread requests a bit
-        base_sleep = 0.25
-        jitter = random.uniform(0, 0.25)
+        # Reduced from 0.25 to 0.1 for faster execution with rate limiter protection
+        base_sleep = 0.1
+        jitter = random.uniform(0, 0.15)
         time.sleep(base_sleep + jitter + (retry * 0.15))
 
         info = get_ticker_info_cached(ticker)
@@ -323,9 +568,22 @@ def fetch(ticker, ext=False, retry=0):
             change_abs_5d = None
 
         h1m, h6m = safe_history(t, period="2mo"), safe_history(t, period="7mo")
-        ytd = safe_history(
-            t, start=datetime(datetime.now().year, 1, 1).strftime("%Y-%m-%d")
-        )
+        
+        # YTD calculation: Use previous year's last trading day as baseline
+        # Get sufficient history to ensure we have prev year's data
+        ytd_history = safe_history(t, period="3mo")
+        ytd = pd.DataFrame()
+        if not ytd_history.empty:
+            current_year = datetime.now().year
+            # Filter for current year data
+            ytd = ytd_history[ytd_history.index.year == current_year]
+            # If we have current year data but need baseline from previous year
+            if len(ytd) >= 1:
+                prev_year_data = ytd_history[ytd_history.index.year == current_year - 1]
+                if not prev_year_data.empty:
+                    # Add last day of previous year as first row for comparison
+                    ytd = pd.concat([prev_year_data.tail(1), ytd])
+        
         y, h30 = safe_history(t, period="1y"), safe_history(t, period="60d")
 
         def calc_ch(h):
@@ -485,21 +743,51 @@ def fetch(ticker, ext=False, retry=0):
                 else "Below Lower" if price < bb_lower else "Inside"
             )
 
-        # BB %B Signal: Buy when %B <= 0 (at/below lower band), Short when %B >= 100 (at/above upper band)
-        bb_signal = None
-        if bb_position_pct is not None:
-            if bb_position_pct <= 0:
-                bb_signal = "BUY"
-            elif bb_position_pct >= 100:
-                bb_signal = "SHORT"
+        # Calculate Ichimoku Cloud indicators
+        ichimoku_data = None
+        vol_sma_20 = None
+        price_sma_60 = None
+        price_prev = None
+        
+        if len(y) >= 60:
+            ichimoku_data = calculate_ichimoku(y["High"], y["Low"], y["Close"])
+            
+            # Calculate volume SMA(20)
+            if len(h30) >= 20:
+                vol_sma_20 = h30["Volume"].rolling(window=20).mean().iloc[-1]
+            
+            # Calculate price SMA(60)
+            price_sma_60 = y["Close"].rolling(window=60).mean().iloc[-1]
+            
+            # Get previous close for crossover detection
+            if len(y) >= 2:
+                price_prev = y["Close"].iloc[-2]
+
+        # Generate trading signals using strategy framework
+        signal_data = {
+            'bb_position_pct': bb_position_pct,
+            'rsi': rsi_val,
+            'macd_label': macd_lbl,
+            'ichimoku': ichimoku_data,
+            'price': price,
+            'price_prev': price_prev,
+            'vol_sma_20': vol_sma_20,
+            'price_sma_60': price_sma_60,
+        }
+        all_signals = generate_trading_signals(signal_data)
+        active_strategy = get_active_strategy()
+        primary_signal = all_signals.get(active_strategy)
+        
+        # Legacy bb_signal for backward compatibility (uses active strategy)
+        bb_signal = primary_signal
 
         # CVR3 VIX Signal: Generate BUY/SELL/SHORT based on VIX (market, not individual ticker)
         cvr3_vix_signal = None
         cvr3_vix_pct = None
         cvr3_vix_value = None
         try:
-            vix_data = safe_history(yf.Ticker("^VIX"), period="60d")
-            if len(vix_data) >= 10:
+            vix_data = get_vix_cached()
+            if vix_data is not None and len(vix_data) >= 10:
                 vix_close_prices = vix_data["Close"]
                 vix_sma = vix_close_prices.rolling(window=10).mean().iloc[-1]
                 if vix_sma > 0:
@@ -598,8 +886,10 @@ def fetch(ticker, ext=False, retry=0):
 
         tu = ticker.upper()
         category = infer_category_from_info(tu, info) or get_category(tu)
+        quote_type = (info.get("quoteType") or "").upper()
         return {
             "ticker": tu,
+            "quote_type": quote_type,
             "price": price,
             "change_pct": change_pct,
             "change_abs_day": change_abs_day,
@@ -640,6 +930,17 @@ def fetch(ticker, ext=False, retry=0):
             "bb_position_pct": bb_position_pct,
             "bb_status": bb_status,
             "bb_signal": bb_signal,
+            "signal_bb": all_signals.get('bb'),
+            "signal_rsi": all_signals.get('rsi'),
+            "signal_macd": all_signals.get('macd'),
+            "signal_ichimoku": all_signals.get('ichimoku'),
+            "signal_combined": all_signals.get('combined'),
+            "signal_bb_ichimoku": all_signals.get('bb_ichimoku'),
+            "active_signal": primary_signal,
+            "ichimoku_conversion": ichimoku_data.get('conversion_line') if ichimoku_data else None,
+            "ichimoku_base": ichimoku_data.get('base_line') if ichimoku_data else None,
+            "ichimoku_span_a": ichimoku_data.get('span_a') if ichimoku_data else None,
+            "ichimoku_span_b": ichimoku_data.get('span_b') if ichimoku_data else None,
             "cvr3_vix_signal": cvr3_vix_signal,
             "cvr3_vix_pct": cvr3_vix_pct,
             "cvr3_vix_value": cvr3_vix_value,
@@ -714,7 +1015,7 @@ def fmt_mcap(v):
 
 def fmt_change(p, a=None):
     if p is None:
-        return '<span class="neutral">N/A</span>'
+        return '<span class="neutral" data-sort="-999999">N/A</span>'
     sign, cls = ("▲", "positive") if p >= 0 else ("▼", "negative")
     abs_str = ""
     if a is not None:
@@ -767,9 +1068,9 @@ def dashboard(csv="data/tickers.csv", ext=False):
         tickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "SPY"]
 
     data = []
-    # Adaptive worker count: scale with number of tickers but cap to avoid rate limits
-    # cap workers to 3 to avoid excessive parallel requests
-    worker_count = min(3, max(1, len(tickers) // 8 + 1))
+    # Adaptive worker count: Increased from 3 to 5 for better parallelization
+    # Rate limiter prevents overwhelming the API
+    worker_count = min(5, max(2, len(tickers) // 6 + 1))
     with ThreadPoolExecutor(max_workers=worker_count) as ex:
         futures = [ex.submit(fetch, t, ext) for t in tickers]
         for r in as_completed(futures):
@@ -1081,18 +1382,21 @@ input:checked + .toggle-slider:before{{transform:translateX(26px)}}
 <div class="chip active" data-filter="all">All</div>
 <div class="chip" data-filter="volume">📊 High Vol</div>
 <div class="chip" data-filter="earnings-week">📅 Earnings</div>
+<div class="chip" data-filter="signal-buy">🟢 Buy Signal</div>
+<div class="chip" data-filter="signal-sell">🟠 Sell Signal</div>
+<div class="chip" data-filter="signal-short">🔴 Short Signal</div>
 <div class="chip" data-filter="oversold">📉 Oversold</div>
 <div class="chip" data-filter="overbought">📈 Overbought</div>
 <div class="chip" data-filter="surge">🚀 Surge</div>
 <div class="chip" data-filter="crash">💥 Crash</div>
-<div class="chip" data-filter="squeeze">🔥 Squeeze</div>
-<div class="chip" data-filter="bb-squeeze">📏 BB Squeeze</div>
-<div class="chip" data-filter="cat-spec-meme">🎲 Speculative</div>
 <div class="chip" data-filter="dividend">💰 Dividend</div>
 <div class="chip" data-filter="cat-major-tech">🌐 Major Tech/Growth</div>
 <div class="chip" data-filter="cat-leveraged-etf">⚡ Leveraged/Inverse ETFs</div>
 <div class="chip" data-filter="cat-sector-etf">🏦 Sector & Index ETFs</div>
 <div class="chip" data-filter="cat-emerging-tech">🚧 Emerging Tech (AI/Energy)</div>
+<div class="chip" data-filter="cat-spec-meme">🎲 Speculative</div>
+<div class="chip" data-filter="squeeze">🔥 Squeeze</div>
+<div class="chip" data-filter="bb-squeeze">📏 BB Squeeze</div>
 </div>
 
 <div class="views">
@@ -1120,15 +1424,20 @@ input:checked + .toggle-slider:before{{transform:translateX(26px)}}
 """
     for _, r in df.iterrows():
         bb_width_val = r["bb_width_pct"] if r["bb_width_pct"] is not None else 100
-        bb_icon = ""
-        if r.get("bb_signal") == "BUY":
-            bb_icon = '<span style="font-size:0.5em">🟢</span> '
-        elif r.get("bb_signal") == "SHORT":
-            bb_icon = '<span style="font-size:0.5em">🔴</span> '
+        # Get signal icon from active strategy
+        signal_icon = ""
+        active_sig = r.get("active_signal") or r.get("bb_signal")
+        if active_sig == "BUY":
+            signal_icon = '<span style="font-size:0.5em">🟢</span> '
+        elif active_sig == "SHORT":
+            signal_icon = '<span style="font-size:0.5em">🔴</span> '
+        elif active_sig == "SELL":
+            signal_icon = '<span style="font-size:0.5em">🟠</span> '
         elif r.get("cvr3_vix_signal") == "BUY":
-            bb_icon = '<span style="font-size:0.5em">🟢</span> '
+            signal_icon = '<span style="font-size:0.5em">🟢</span> '
         elif r.get("cvr3_vix_signal") == "SHORT":
-            bb_icon = '<span style="font-size:0.5em">🔴</span> '
+            signal_icon = '<span style="font-size:0.5em">🔴</span> '
+        bb_icon = signal_icon  # Alias for backward compatibility
         hv = r["hv_30_annualized"]
         hv_cls = "negative" if hv and hv > 50 else "neutral"
         hv_str = na(hv, "{:.1f}%")
@@ -1267,8 +1576,22 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         )
         # sentiment text (exclude analyst rating)
         sent_text = r["sentiment"]
-        html += f"""<tr class="stock-row" data-ticker="{r['ticker']}" data-change="{r['change_pct']}" data-change-5d="{r.get('change_5d') or ''}" data-earnings="{r.get('earnings_date_iso') or ''}" data-rsi="{r['rsi'] or 50}" data-vol="{r['volume_raw']}" data-meme="{r['is_meme_stock']}" data-squeeze="{r['squeeze_level']}" data-bb-width="{bb_width_val}" data-dividend="{div_ds}" data-category="{r.get('category') or ''}">
-    <td><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.9em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.9em">F</a>, <a href="https://www.zacks.com/stock/research/{r['ticker']}/" target="_blank" style="font-size:0.9em">Z</a>)</td>
+        # Get active signal for filtering
+        active_sig = r.get("active_signal") or r.get("bb_signal") or ""
+        # Build Zacks URL based on quote type
+        ticker_l = r['ticker'].lower()
+        qt = r.get('quote_type', '').upper()
+        if qt == 'ETF':
+            zacks_url = f"https://www.zacks.com/funds/etf/{r['ticker']}/profile?q={ticker_l}"
+            stock_analysis_url = f"https://stockanalysis.com/etf/{ticker_l}/"
+        elif qt == 'MUTUALFUND':
+            zacks_url = f"https://www.zacks.com/funds/mutual-fund/quote/{r['ticker']}?q={ticker_l}"
+            stock_analysis_url = f"https://stockanalysis.com/quote/mutf/{r['ticker']}/"
+        else:
+            zacks_url = f"https://www.zacks.com/stock/quote/{r['ticker']}?q={ticker_l}"
+            stock_analysis_url = f"https://stockanalysis.com/stocks/{ticker_l}/"
+        html += f"""<tr class="stock-row" data-ticker="{r['ticker']}" data-change="{r['change_pct']}" data-change-5d="{r.get('change_5d') or ''}" data-earnings="{r.get('earnings_date_iso') or ''}" data-rsi="{r['rsi'] or 50}" data-vol="{r['volume_raw']}" data-meme="{r['is_meme_stock']}" data-squeeze="{r['squeeze_level']}" data-bb-width="{bb_width_val}" data-dividend="{div_ds}" data-category="{r.get('category') or ''}" data-signal="{active_sig}">
+    <td><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.9em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.9em">F</a>, <a href="{zacks_url}" target="_blank" style="font-size:0.9em">Z</a>, <a href="{stock_analysis_url}" target="_blank" style="font-size:0.9em">S</a>)</td>
 <td data-sort="{r['price']:.2f}">${r['price']:.2f} {r['sparkline']}</td>
 <td>{fmt_change(r['change_pct'], r['change_abs_day'])}</td>
 <td>{fmt_change(r.get('change_5d'), r.get('change_abs_5d'))}</td>
@@ -1285,11 +1608,16 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
     for _, r in df.iterrows():
         bg = "rgba(0,170,0,0.1)" if r["change_pct"] > 0 else "rgba(204,0,0,0.1)"
         bb_width_val = r["bb_width_pct"] if r["bb_width_pct"] is not None else 100
-        bb_icon = ""
-        if r.get("bb_signal") == "BUY":
-            bb_icon = '<span style="font-size:0.5em">🟢</span> '
-        elif r.get("bb_signal") == "SHORT":
-            bb_icon = '<span style="font-size:0.5em">🔴</span> '
+        # Get signal icon from active strategy
+        signal_icon = ""
+        active_sig = r.get("active_signal") or r.get("bb_signal")
+        if active_sig == "BUY":
+            signal_icon = '<span style="font-size:0.5em">🟢</span> '
+        elif active_sig == "SHORT":
+            signal_icon = '<span style="font-size:0.5em">🔴</span> '
+        elif active_sig == "SELL":
+            signal_icon = '<span style="font-size:0.5em">🟠</span> '
+        bb_icon = signal_icon  # Alias for backward compatibility
         hv = r["hv_30_annualized"]
         hv_cls = "negative" if hv and hv > 50 else "neutral"
         hv_str = na(hv, "{:.1f}%")
@@ -1399,6 +1727,19 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
             short_cls = "vol-hot"
         else:
             short_cls = "neutral"
+        # Build Zacks URL based on quote type
+        ticker_l = r['ticker'].lower()
+        qt = r.get('quote_type', '').upper()
+        if qt == 'ETF':
+            zacks_url = f"https://www.zacks.com/funds/etf/{r['ticker']}/profile?q={ticker_l}"
+            stock_analysis_url = f"https://stockanalysis.com/etf/{ticker_l}/"
+        elif qt == 'MUTUALFUND':
+            zacks_url = f"https://www.zacks.com/funds/mutual-fund/quote/{r['ticker']}?q={ticker_l}"
+            stock_analysis_url = f"https://stockanalysis.com/quote/mutf/{r['ticker']}/"
+        else:
+            zacks_url = f"https://www.zacks.com/stock/quote/{r['ticker']}?q={ticker_l}"
+            stock_analysis_url = f"https://stockanalysis.com/stocks/{ticker_l}/"
+        active_sig = r.get("active_signal") or r.get("bb_signal") or ""
         html += f"""<div class="stock-card stock-row" style="background:{bg}" 
             data-ticker="{r['ticker']}" 
             data-change="{r['change_pct']}" 
@@ -1408,8 +1749,8 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
             data-vol="{r['volume_raw']}" 
             data-meme="{r['is_meme_stock']}" 
             data-squeeze="{r['squeeze_level']}" 
-            data-bb-width="{bb_width_val}" data-dividend="{card_div_ds}" data-category="{r.get('category') or ''}">
-    <h2><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.8em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.8em">F</a>, <a href="https://www.zacks.com/stock/research/{r['ticker']}/" target="_blank" style="font-size:0.8em">Z</a>) ${r['price']:.2f}</h2>
+            data-bb-width="{bb_width_val}" data-dividend="{card_div_ds}" data-category="{r.get('category') or ''}" data-signal="{active_sig}">
+    <h2><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.8em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.8em">F</a>, <a href="{zacks_url}" target="_blank" style="font-size:0.8em">Z</a>, <a href="{stock_analysis_url}" target="_blank" style="font-size:0.8em">S</a>) ${r['price']:.2f}</h2>
 <div style="font-size:1.5em">{fmt_change(r['change_pct'], r['change_abs_day'])}</div>
 {r['sparkline']}
 <div>1M: {fmt_change(r['change_1m'], r['change_abs_1m'])}</div>
@@ -1482,11 +1823,29 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
             if r.get("dividend_yield") is not None
             else (r.get("dividend_rate") if r.get("dividend_rate") is not None else "")
         )
-        bb_icon = ""
-        if r.get("bb_signal") == "BUY":
-            bb_icon = '<span style="font-size:0.5em">🟢</span> '
-        elif r.get("bb_signal") == "SHORT":
-            bb_icon = '<span style="font-size:0.5em">🔴</span> '
+        # Get signal icon from active strategy
+        signal_icon = ""
+        active_sig = r.get("active_signal") or r.get("bb_signal")
+        if active_sig == "BUY":
+            signal_icon = '<span style="font-size:0.5em">🟢</span> '
+        elif active_sig == "SHORT":
+            signal_icon = '<span style="font-size:0.5em">🔴</span> '
+        elif active_sig == "SELL":
+            signal_icon = '<span style="font-size:0.5em">🟠</span> '
+        bb_icon = signal_icon  # Alias for backward compatibility
+        # Build Zacks URL based on quote type
+        ticker_l = r['ticker'].lower()
+        qt = r.get('quote_type', '').upper()
+        if qt == 'ETF':
+            zacks_url = f"https://www.zacks.com/funds/etf/{r['ticker']}/profile?q={ticker_l}"
+            stock_analysis_url = f"https://stockanalysis.com/etf/{ticker_l}/"
+        elif qt == 'MUTUALFUND':
+            zacks_url = f"https://www.zacks.com/funds/mutual-fund/quote/{r['ticker']}?q={ticker_l}"
+            stock_analysis_url = f"https://stockanalysis.com/quote/mutf/{r['ticker']}/"
+        else:
+            zacks_url = f"https://www.zacks.com/stock/quote/{r['ticker']}?q={ticker_l}"
+            stock_analysis_url = f"https://stockanalysis.com/stocks/{ticker_l}/"
+        active_sig_heat = r.get("active_signal") or r.get("bb_signal") or ""
         html += f"""<div class="heat-tile stock-row" style="background:{bg}" 
         data-ticker="{r['ticker']}" 
         data-change="{r['change_pct']}" 
@@ -1496,8 +1855,8 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         data-vol="{r['volume_raw']}" 
         data-meme="{r['is_meme_stock']}" 
         data-squeeze="{r['squeeze_level']}" 
-        data-bb-width="{bb_width_val}" data-dividend="{heat_div_ds}" data-category="{r.get('category') or ''}">
-    <strong><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.85em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.85em">F</a>, <a href="https://www.zacks.com/stock/research/{r['ticker']}/" target="_blank" style="font-size:0.85em">Z</a>) {price_display}</strong>
+        data-bb-width="{bb_width_val}" data-dividend="{heat_div_ds}" data-category="{r.get('category') or ''}" data-signal="{active_sig_heat}">
+    <strong><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.85em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.85em">F</a>, <a href="{zacks_url}" target="_blank" style="font-size:0.85em">Z</a>, <a href="{stock_analysis_url}" target="_blank" style="font-size:0.85em">S</a>) {price_display}</strong>
     <div style="margin-top:6px">{fmt_change(r['change_pct'], r.get('change_abs_day'))}</div>
     <div style="font-size:0.85em">5D: {fmt_change(r.get('change_5d'), r.get('change_abs_5d'))}</div>
     <div style="font-size:0.9em">{display_label}: <span class="{mcap_cls}"><strong>{fmt_mcap(display_val)}</strong></span></div>
@@ -1543,6 +1902,7 @@ function applyFilter() {
         const cat = (r.dataset.category || '').toLowerCase();
         const sq = r.dataset.squeeze || 'None';
         const bbw = parseFloat(r.dataset.bbWidth || 100);
+        const sig = (r.dataset.signal || '').toUpperCase();
         if (currentFilter === 'oversold') show = rsi < 30;
         else if (currentFilter === 'overbought') show = rsi > 70;
         else if (currentFilter === 'surge') show = (ch > 10) || (ch5 > 10);
@@ -1570,6 +1930,9 @@ function applyFilter() {
         })();
         else if (currentFilter === 'bb-squeeze') show = bbw < 6;
         else if (currentFilter === 'dividend') show = parseFloat(r.dataset.dividend || 0) > 0;
+        else if (currentFilter === 'signal-buy') show = sig === 'BUY';
+        else if (currentFilter === 'signal-sell') show = sig === 'SELL';
+        else if (currentFilter === 'signal-short') show = sig === 'SHORT';
         else if (currentFilter.startsWith('cat-')) show = cat === currentFilter.replace('cat-','');
         if (tickerVal) {
             const tk = (r.dataset.ticker || '').toString().toLowerCase();
@@ -1622,6 +1985,9 @@ function toggleTheme() {
 
 
 if __name__ == "__main__":
+    import time as time_module
+    start_time = time_module.time()
+    
     os.makedirs("data", exist_ok=True)
     # Pre-load alerts cache at startup
     load_alerts()
@@ -1634,6 +2000,7 @@ if __name__ == "__main__":
         (True, "data/extnd_dashboard.html", "Extended"),
     ]:
         try:
+            dashboard_start = time_module.time()
             df = dashboard(args.csv_file, ext)
             alerts = check_alerts(df.to_dict("records"))
             html(
@@ -1645,6 +2012,10 @@ if __name__ == "__main__":
                 ext,
                 alerts=alerts,
             )
-            print(f"✓ {name} Hours Dashboard generated: {file}")
+            dashboard_elapsed = time_module.time() - dashboard_start
+            print(f"✓ {name} Hours Dashboard generated: {file} (took {dashboard_elapsed / 60:.2f} minutes)")
         except Exception as e:
             print(f"✗ {name} failed: {e}")
+    
+    total_elapsed = time_module.time() - start_time
+    print(f"\n⏱️  Total time: {total_elapsed / 60:.2f} minutes")
