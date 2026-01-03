@@ -108,6 +108,7 @@ CARD_PADDING_TOP_PX = 45  # Top padding for stock cards
 CARD_PADDING_SIDE_PX = 24  # Side and bottom padding for stock cards
 CARD_ARROW_SIZE_PX = 24  # Size of navigation arrow buttons
 CARD_MIN_WIDTH_PX = 300  # Minimum width for card grid items
+HEAT_TILE_HEIGHT_PX = 250  # Fixed height for heatmap tiles in pixels
 
 MEME_STOCKS = frozenset(
     {
@@ -1546,10 +1547,20 @@ def fmt_change(p, a=None):
 def get_index_data(symbol):
     try:
         t = yf.Ticker(symbol)
+        
+        # Try getting current data from info
         info = t.info
-        price = info.get("regularMarketPrice") or info.get("previousClose")
+        price = info.get("regularMarketPrice") or info.get("currentPrice") or info.get("previousClose")
         ch_pct = info.get("regularMarketChangePercent")
         prev = info.get("regularMarketPreviousClose") or info.get("previousClose")
+        
+        # Fallback to historical data if info doesn't have what we need
+        if price is None or prev is None:
+            hist = safe_history(t, period="5d")
+            if len(hist) >= 2:
+                price = hist["Close"].iloc[-1]
+                prev = hist["Close"].iloc[-2]
+        
         ch_abs = None
         if price is not None and prev is not None:
             try:
@@ -1565,7 +1576,8 @@ def get_index_data(symbol):
             except (ValueError, TypeError):
                 ch_pct = None
         return {"price": price, "change_pct": ch_pct, "change_abs": ch_abs}
-    except:
+    except Exception as e:
+        print(f"Error fetching {symbol}: {e}")
         return {"price": None, "change_pct": None, "change_abs": None}
 
 
@@ -1747,6 +1759,7 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
     dow = get_index_data("^DJI")
     sp = get_index_data("^GSPC")
     nas = get_index_data("^IXIC")
+    vix = get_index_data("^VIX")
 
     # Calculate CVR3 Signal
     cvr3_signal = "NEUTRAL"
@@ -1832,10 +1845,10 @@ body{{font-family:'Oracle Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Robo
 .btn{{padding:10px 20px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-md);cursor:pointer;font-weight:600;font-size:14px;transition:all 0.2s;box-shadow:var(--shadow)}}
 .btn:hover{{background:var(--accent-hover);box-shadow:var(--shadow-hover);transform:translateY(-1px)}}
 .btn:active{{transform:translateY(0);box-shadow:var(--shadow)}}
-.alert-banner{{background:var(--card);color:var(--text);padding:16px 24px;border-radius:var(--radius-lg);margin-bottom:24px;text-align:center;font-weight:600;box-shadow:var(--shadow);border:3px solid #c74634;position:relative;display:flex;align-items:center;justify-content:center}}
+.alert-banner{{background:var(--card);color:var(--text);padding:16px 60px 16px 24px;border-radius:var(--radius-lg);margin-bottom:24px;text-align:center;font-weight:600;box-shadow:var(--shadow);border:3px solid #c74634;position:relative;display:flex;align-items:center;justify-content:center}}
 .alert-content{{flex:1;text-align:center}}
-.alert-dismiss{{position:absolute;right:16px;top:50%;transform:translateY(-50%);background:transparent;border:none;color:var(--text);font-size:24px;font-weight:bold;cursor:pointer;opacity:0.7;transition:all 0.2s;padding:4px 8px;line-height:1;border-radius:var(--radius-sm)}}
-.alert-dismiss:hover{{opacity:1;background:rgba(0,0,0,0.1);transform:translateY(-50%) scale(1.1)}}
+.alert-dismiss{{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:var(--neg);border:2px solid var(--card);color:#fff;font-size:28px;font-weight:bold;cursor:pointer;opacity:0.95;transition:all 0.2s;padding:2px 10px;line-height:1;border-radius:var(--radius-md);box-shadow:var(--shadow)}}
+.alert-dismiss:hover{{opacity:1;background:#8b2d23;transform:translateY(-50%) scale(1.15);box-shadow:var(--shadow-hover)}}
 .controls-container{{background:var(--card);padding:20px;border-radius:var(--radius-lg);margin-bottom:24px;box-shadow:var(--shadow);border:3px solid #a8b2bd}}
 .hours-toggle-container{{display:flex;gap:15px;flex-wrap:wrap;align-items:center;justify-content:space-between;padding-bottom:20px;border-bottom:1px solid var(--border);margin-bottom:20px}}
 .quick-filters{{display:flex;flex-wrap:wrap;gap:10px;padding-bottom:20px;border-bottom:1px solid var(--border);margin-bottom:20px}}
@@ -1865,7 +1878,7 @@ body{{font-family:'Oracle Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Robo
 .card-scroll-left{{left:8px}}
 .card-scroll-right{{left:36px}}
 .heat-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}}
-.heat-tile{{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:var(--radius-md);padding:12px;cursor:pointer;transition:all 0.2s;border:1px solid transparent}}
+.heat-tile{{height:{HEAT_TILE_HEIGHT_PX}px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:var(--radius-md);padding:12px;cursor:pointer;transition:all 0.2s;border:1px solid transparent;overflow-y:auto}}
 .heat-tile:hover{{transform:scale(1.03);box-shadow:var(--shadow-lg);border-color:var(--accent)}}
 table{{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);box-shadow:var(--shadow);border-radius:var(--radius-lg);overflow:hidden;border:1px solid var(--border)}}
 th{{background:linear-gradient(180deg,var(--accent),var(--accent-dark));color:#fff;padding:16px;cursor:pointer;position:sticky;top:0;z-index:10;font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid var(--accent-dark)}}
@@ -2632,7 +2645,7 @@ function applyFilter() {
         else if (currentFilter === 'crash') show = (ch < -10) || (ch5 < -10);
         else if (currentFilter === 'meme') show = meme;
         else if (currentFilter === 'volume') show = vol > 5e7;
-        else if (currentFilter === 'm7') show = ['AAPL','AMZN','GOOGL','META','MSFT','NVDA','TSLA','AVGO','ORCL','NFLX'].includes(ticker);
+        else if (currentFilter === 'm7') show = ['AAPL','AMZN','GOOGL','META','MSFT','NVDA','TSLA','AVGO','ORCL','NFLX','TQQQ','SSO','SOXL','BULZ','SHOP','SSO','UPRO','TNA','MIDU','SPYU','XLK','TECL','IGV','IWY','BNKU','CURE','LABU'].includes(ticker);
         else if (currentFilter === 'squeeze') show = sq !== 'None';
         else if (currentFilter === 'earnings-week') show = (function(){
             const ed = r.dataset.earnings;
