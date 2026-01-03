@@ -22,23 +22,52 @@ A comprehensive Python-based stock market dashboard with advanced trading signal
 - **Heatmap View**: Color-coded performance visualization with compact metrics
 
 ### 🎯 Trading Signal Framework
-Six sophisticated trading strategies with visual indicators (🟢 BUY, 🟠 SELL, 🔴 SHORT):
-- **Bollinger Bands (BB)**: Price channel breakout detection
-- **RSI**: Oversold/overbought momentum analysis
-- **MACD**: Trend following with crossover signals
-- **Ichimoku Cloud**: Multi-component trend and support/resistance
-- **Combined Strategy**: Requires 2+ strategies to agree
-- **BB + Ichimoku (Default)**: OR logic between BB and Ichimoku signals
+Six sophisticated trading strategies with visual indicators (🟢 BUY, 🟠 SELL, 🔴 SHORT, ⚪ HOLD):
+- **Bollinger Bands (BB)**: Price channel breakout detection with configurable thresholds
+- **RSI**: Oversold/overbought momentum analysis with extreme level detection
+- **MACD**: Trend following with crossover signals and configurable lookback period
+- **Ichimoku Cloud**: Multi-component trend and support/resistance with optional filters
+- **Combined Strategy**: Weighted voting system across multiple strategies
+- **BB + Ichimoku (Default)**: CONFIRM mode - BB primary with Ichimoku confirmation
+
+**Signal Types:**
+- 🟢 **BUY** - Strong bullish signal, entry opportunity
+- 🔴 **SHORT** - Strong bearish signal, short entry opportunity
+- 🟠 **SELL** - Exit signal for existing positions
+- ⚪ **HOLD** - Neutral position, no action recommended
 
 ### 📈 Predicted Trend Indicators
 Color-coded trend arrows based on multi-factor technical analysis:
-- **↑** Strong uptrend (green) - Multiple bullish indicators aligned
-- **↗** Moderate uptrend (green) - Bullish bias detected
-- **→** Neutral/sideways (gray) - Mixed or weak signals
-- **↘** Moderate downtrend (red) - Bearish bias detected
-- **↓** Strong downtrend (red) - Multiple bearish indicators aligned
+- **↑** Strong uptrend (green) - Multiple bullish indicators aligned (score ≥4.0)
+- **↗** Moderate uptrend (green) - Bullish bias detected (score ≥1.5)
+- **→** Neutral/sideways (gray) - Mixed or weak signals (-1.5 to 1.5)
+- **↘** Moderate downtrend (red) - Bearish bias detected (score ≤-1.5)
+- **↓** Strong downtrend (red) - Multiple bearish indicators aligned (score ≤-4.0)
 
-Trend prediction weighs: MACD, RSI, Bollinger Bands position, active signals, and price momentum
+**Trend Scoring Logic:**
+- **MACD** (±2.0): Bullish/Bearish signal (excluded if MACD is active strategy)
+- **RSI** (±0.5 to ±1.0): Current momentum direction (>50 = bullish, <50 = bearish)
+- **BB Position** (±0.5 to ±1.0): Current trend (>60% = bullish, <40% = bearish)
+- **Ichimoku Cloud** (±2.0 to ±2.5): Price above/below cloud with TK cross confirmation
+- **Active Signal** (±1.0 to ±2.5): Dynamic weight based on strategy reliability
+- **Price Momentum** (±1.0): Daily change threshold (default ±2.0%)
+
+Strategy weights: Ichimoku (2.5), Combined (2.0), BB+Ichimoku (1.8), MACD (1.5), BB (1.2), RSI (1.0)
+
+### 🛡️ Risk Management
+ATR-based stop loss system with position sizing:
+- **ATR Stop Loss**: Dynamic stops based on 14-period Average True Range
+- **Position Sizing**: Calculates optimal position size to risk 2% per trade (configurable)
+- **Risk/Reward Ratios**: Expected R:R calculation using 2:1 targets
+- **Maximum Position**: 25% account limit to prevent over-concentration
+
+### 🎯 Signal Confidence Scoring
+Inter-strategy agreement analysis:
+- **STRONG (≥60%)**: High agreement across strategies
+- **MODERATE (30-60%)**: Partial consensus
+- **WEAK (<30%)**: Low agreement or conflicting signals
+
+Helps filter low-quality signals and focus on high-probability setups.
 
 Set strategy via environment variable:
 ```bash
@@ -50,6 +79,7 @@ Interactive filter chips for quick analysis:
 - 🟢 **Buy Signal** - Stocks with active buy signals
 - 🟠 **Sell Signal** - Stocks with active sell signals  
 - 🔴 **Short Signal** - Stocks with active short signals
+- ⚪ **Hold Signal** - Stocks with neutral/hold signals
 - **Oversold** (RSI < 30) / **Overbought** (RSI > 70)
 - **Surge** (>10% gain) / **Crash** (>10% loss)
 - **Meme Stocks** / **High Volume** (>50M)
@@ -92,10 +122,11 @@ Alert banner displays at top with color-coded hearts:
 
 ### 📊 Technical Indicators & Visualizations
 - **Sparklines**: Visual price trends for 30-day, 5-day, 1-month periods, and volume
-- **Bollinger Bands**: MA20 ± 2σ with squeeze detection
-- **RSI**: 14-period momentum oscillator
-- **MACD**: 12/26/9 EMA trend following
-- **Ichimoku Cloud**: Tenkan/Kijun/Senkou/Chikou analysis
+- **Bollinger Bands**: MA20 ± 2σ with configurable thresholds and squeeze detection
+- **RSI**: 14-period EWM momentum oscillator with extreme level detection
+- **MACD**: 12/26/9 EMA trend following with configurable lookback period (50-150 days)
+- **Ichimoku Cloud**: Tenkan/Kijun/Senkou/Chikou analysis with optional volume/price filters
+- **ATR**: 14-period Average True Range for volatility-based stop losses
 - **Moving Averages**: 50-day and 200-day (death cross detection)
 - **Volume Analysis**: Up/down volume bias with sparkline trends
 - **Historical Volatility**: 30-day annualized
@@ -187,6 +218,69 @@ MSFT
 GOOGL
 ```
 
+### Configuration
+
+Customize trading strategies and risk management via environment variables:
+
+#### Trading Strategy Selection
+```bash
+export TRADING_STRATEGY=bb_ichimoku  # bb, rsi, macd, ichimoku, combined, bb_ichimoku
+```
+
+#### Bollinger Bands Configuration
+```bash
+export BB_BUY_THRESHOLD=10          # Buy below this BB% (default: 10)
+export BB_SHORT_THRESHOLD=90        # Short above this BB% (default: 90)
+export BB_SELL_THRESHOLD=85         # Sell threshold for reversal detection (default: 85)
+```
+
+#### RSI Configuration
+```bash
+export RSI_OVERSOLD=30              # Oversold threshold (default: 30)
+export RSI_OVERBOUGHT=70            # Overbought threshold (default: 70)
+export RSI_EXTREME_OVERSOLD=20      # Extreme oversold (default: 20)
+export RSI_EXTREME_OVERBOUGHT=80    # Extreme overbought (default: 80)
+```
+
+#### MACD Configuration
+```bash
+export MACD_PERIOD=150              # Historical data period in days (default: 150, range: 50-150)
+```
+
+#### Ichimoku Configuration
+```bash
+export ICHIMOKU_VOL_FILTER=0        # Min volume filter (default: 0 = disabled)
+export ICHIMOKU_PRICE_FILTER=0      # Min price filter (default: 0 = disabled)
+```
+
+#### Combined Strategy Weights
+```bash
+export WEIGHT_ICHIMOKU=1.5          # Ichimoku weight (default: 1.5)
+export WEIGHT_MACD=1.2              # MACD weight (default: 1.2)
+export WEIGHT_BB=1.0                # Bollinger Bands weight (default: 1.0)
+export WEIGHT_RSI=0.8               # RSI weight (default: 0.8)
+export COMBINED_THRESHOLD=2.0       # Threshold for signals (default: 2.0)
+```
+
+#### BB+Ichimoku Mode
+```bash
+export BB_ICHIMOKU_MODE=CONFIRM     # OR | AND | CONFIRM (default: CONFIRM)
+# OR: Either BB or Ichimoku (aggressive)
+# AND: Both must agree (conservative)
+# CONFIRM: BB primary with Ichimoku confirmation (balanced)
+```
+
+#### Trend Prediction
+```bash
+export TREND_MOMENTUM_THRESHOLD=2.5  # Threshold for trend signal (default: 2.5)
+```
+
+#### Risk Management
+```bash
+export ATR_STOP_MULTIPLIER=2.0      # ATR multiplier for stop loss (default: 2.0)
+export RISK_PER_TRADE=2.0           # Risk per trade as % of account (default: 2.0)
+```
+
 ### Custom Alerts
 Create `data/alerts.json` for custom alert conditions:
 ```json
@@ -208,6 +302,8 @@ Create `data/alerts.json` for custom alert conditions:
 - **Valuation**: P/E ratio, EPS, Market Cap/AUM, Dividend yield
 - **Sentiment**: Analyst ratings, upside potential, options direction
 - **Risk Metrics**: Beta, volatility score, short interest, days to cover
+- **Risk Management**: ATR-14, stop loss levels, risk/reward ratios, position sizing
+- **Signal Confidence**: Confidence score (0-100%) and strength (WEAK/MODERATE/STRONG)
 - **Earnings**: Next earnings date with week highlighting
 
 ### Interactive Features
