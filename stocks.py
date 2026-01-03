@@ -85,6 +85,30 @@ import threading
 ALERTS_FILE = "data/alerts.json"
 UTC = pytz.utc
 PST = pytz.timezone("America/Los_Angeles")
+
+# Performance and API Configuration Constants
+MAX_WORKERS = 5  # Maximum thread pool workers for parallel ticker fetching
+MIN_WORKERS = 2  # Minimum thread pool workers
+TICKER_BATCH_DIVISOR = 6  # Divisor for calculating worker count from ticker count
+RATE_LIMIT_INTERVAL = 0.9  # Minimum seconds between API requests
+MAX_RETRIES = 3  # Maximum retry attempts for failed API calls
+FETCH_BASE_DELAY = 0.1  # Base delay in seconds for fetch requests
+FETCH_JITTER_MAX = 0.15  # Maximum random jitter to add to delays
+RETRY_DELAY_MULTIPLIER = 0.15  # Multiplier for retry delays
+EXPONENTIAL_BACKOFF_BASE = 5  # Base seconds for exponential backoff
+BACKOFF_JITTER_MAX = 3  # Maximum random jitter for backoff
+
+# Cache Configuration
+TICKER_INFO_CACHE_SIZE = 512  # LRU cache size for ticker info
+FG_CACHE_TTL_SECONDS = 1800  # Fear & Greed cache TTL (30 minutes)
+
+# UI Configuration Constants
+CARD_HEIGHT_PX = 450  # Fixed height for stock cards in pixels
+CARD_PADDING_TOP_PX = 45  # Top padding for stock cards
+CARD_PADDING_SIDE_PX = 24  # Side and bottom padding for stock cards
+CARD_ARROW_SIZE_PX = 24  # Size of navigation arrow buttons
+CARD_MIN_WIDTH_PX = 300  # Minimum width for card grid items
+
 MEME_STOCKS = frozenset(
     {
         "GME",
@@ -668,11 +692,11 @@ def check_alerts(data):
     if low_52w:
         grouped.append(fmt(low_52w, "📉", "52W Low"))
     if buy_signals:
-        grouped.append(fmt(buy_signals, "💚", "Buy"))
+        grouped.append(fmt(buy_signals, "�", "Buy"))
     if sell_signals:
-        grouped.append(fmt(sell_signals, "🧡", "Sell"))
+        grouped.append(fmt(sell_signals, "🟠", "Sell"))
     if short_signals:
-        grouped.append(fmt(short_signals, "❤️", "Short"))
+        grouped.append(fmt(short_signals, "🔴", "Short"))
     if surge:
         grouped.append(fmt(surge, "🚀", "Surge"))
     if crash:
@@ -769,7 +793,6 @@ def safe_history(ticker_obj, **kwargs):
 
 
 def fetch(ticker, ext=False, retry=0):
-    max_retries = 3
     try:
         # enforce global rate limit before starting network activity
         RATE_LIMITER.wait()
@@ -777,9 +800,8 @@ def fetch(ticker, ext=False, retry=0):
         t = yf.Ticker(ticker)
         # Small base delay with jitter to spread requests a bit
         # Reduced from 0.25 to 0.1 for faster execution with rate limiter protection
-        base_sleep = 0.1
-        jitter = random.uniform(0, 0.15)
-        time.sleep(base_sleep + jitter + (retry * 0.15))
+        jitter = random.uniform(0, FETCH_JITTER_MAX)
+        time.sleep(FETCH_BASE_DELAY + jitter + (retry * RETRY_DELAY_MULTIPLIER))
 
         info = get_ticker_info_cached(ticker)
         h_day = safe_history(t, period="1d", interval="1m", prepost=ext)
@@ -970,6 +992,8 @@ def fetch(ticker, ext=False, retry=0):
         spk = sparkline(h30["Close"].tolist() if not h30.empty else [])
         spk_5d = sparkline(reg["Close"].tolist() if not reg.empty else [])
         spk_1m = sparkline(h1m["Close"].tolist() if not h1m.empty else [])
+        spk_6m = sparkline(h6m["Close"].tolist() if not h6m.empty else [])
+        spk_ytd = sparkline(ytd["Close"].tolist() if not ytd.empty else [])
         spk_vol = sparkline(h30["Volume"].tolist() if not h30.empty else [])
 
         bb_period = 20
@@ -1010,6 +1034,10 @@ def fetch(ticker, ext=False, retry=0):
         vol_sma_20 = None
         price_sma_60 = None
         price_prev = None
+        sma_50 = None
+        sma_200 = None
+        death_cross = False
+        golden_cross = False
         
         if len(y) >= 60:
             ichimoku_data = calculate_ichimoku(y["High"], y["Low"], y["Close"])
@@ -1024,6 +1052,24 @@ def fetch(ticker, ext=False, retry=0):
             # Get previous close for crossover detection
             if len(y) >= 2:
                 price_prev = y["Close"].iloc[-2]
+        
+        # Calculate SMA 50 and SMA 200 for moving average analysis
+        if len(y) >= 50:
+            sma_50 = y["Close"].rolling(window=50).mean().iloc[-1]
+        
+        if len(y) >= 200:
+            sma_200 = y["Close"].rolling(window=200).mean().iloc[-1]
+            
+            # Death cross: SMA 50 crosses below SMA 200 (bearish)
+            # Golden cross: SMA 50 crosses above SMA 200 (bullish)
+            if sma_50 is not None and len(y) >= 201:
+                sma_50_prev = y["Close"].rolling(window=50).mean().iloc[-2]
+                sma_200_prev = y["Close"].rolling(window=200).mean().iloc[-2]
+                
+                if sma_50_prev >= sma_200_prev and sma_50 < sma_200:
+                    death_cross = True
+                elif sma_50_prev <= sma_200_prev and sma_50 > sma_200:
+                    golden_cross = True
 
         # Generate trading signals using strategy framework
         signal_data = {
@@ -1239,6 +1285,30 @@ def fetch(ticker, ext=False, retry=0):
 
         div_rate = info.get("dividendRate")
         div_yield = info.get("dividendYield")
+        ex_dividend_date = info.get("exDividendDate")
+        payout_ratio = info.get("payoutRatio")
+        dividend_growth = info.get("dividendGrowthRate")
+        
+        # Format ex-dividend date
+        ex_div_date_str = None
+        if ex_dividend_date:
+            try:
+                if isinstance(ex_dividend_date, (int, float)):
+                    dt = datetime.fromtimestamp(int(ex_dividend_date), UTC).astimezone(PST)
+                    ex_div_date_str = dt.strftime("%b %d, %Y")
+            except Exception:
+                ex_div_date_str = None
+        
+        # Determine payout frequency from info
+        payout_frequency = None
+        if info.get("dividendYield") and div_rate:
+            # Common frequencies: Annual, Quarterly, Monthly, Semi-Annual
+            # Try to get from info first
+            payout_frequency = info.get("dividendsPerShare") or info.get("payoutFrequency")
+            if not payout_frequency:
+                # Estimate from available data if not provided
+                # This is a rough estimate - actual data may vary
+                payout_frequency = "Quarterly"  # Most common for US stocks
 
         # Do not normalize dividend yield — render the raw value as provided
         # by the data source. Keep `div_yield` unchanged.
@@ -1339,6 +1409,7 @@ def fetch(ticker, ext=False, retry=0):
             "is_meme_stock": tu in MEME_STOCKS,
             "sentiment": sentiment,
             "analyst_rating": rating,
+            "target_price": target,
             "upside_potential": upside,
             "options_direction": opt_dir,
             "implied_move_pct": impl_move,
@@ -1348,6 +1419,8 @@ def fetch(ticker, ext=False, retry=0):
             "sparkline": spk,
             "sparkline_5d": spk_5d,
             "sparkline_1m": spk_1m,
+            "sparkline_6m": spk_6m,
+            "sparkline_ytd": spk_ytd,
             "sparkline_vol": spk_vol,
             "bb_upper": bb_upper,
             "bb_lower": bb_lower,
@@ -1381,6 +1454,10 @@ def fetch(ticker, ext=False, retry=0):
             "eps": eps,
             "dividend_rate": div_rate,
             "dividend_yield": div_yield,
+            "ex_dividend_date": ex_div_date_str,
+            "payout_ratio": payout_ratio,
+            "payout_frequency": payout_frequency,
+            "dividend_growth": dividend_growth,
             "earnings_date": earnings_date,
             "earnings_date_iso": earnings_date_iso,
             "market_cap": market_cap,
@@ -1393,6 +1470,10 @@ def fetch(ticker, ext=False, retry=0):
             "position_size_pct": position_size_pct,
             "signal_confidence": signal_confidence,
             "signal_strength": signal_strength,
+            "sma_50": sma_50,
+            "sma_200": sma_200,
+            "death_cross": death_cross,
+            "golden_cross": golden_cross,
         }
     except Exception as e:
         error_msg = str(e)
@@ -1505,7 +1586,7 @@ def dashboard(csv="data/tickers.csv", ext=False):
     data = []
     # Adaptive worker count: Increased from 3 to 5 for better parallelization
     # Rate limiter prevents overwhelming the API
-    worker_count = min(5, max(2, len(tickers) // 6 + 1))
+    worker_count = min(MAX_WORKERS, max(MIN_WORKERS, len(tickers) // TICKER_BATCH_DIVISOR + 1))
     with ThreadPoolExecutor(max_workers=worker_count) as ex:
         futures = [ex.submit(fetch, t, ext) for t in tickers]
         for r in as_completed(futures):
@@ -1521,14 +1602,13 @@ def get_vix_data():
 
 # OPTIMIZED: Cache F&G data with 30 minute TTL
 _fg_cache = {"data": None, "time": 0}
-FG_CACHE_TTL = 1800
 
 # Shared requests session for fewer TCP handshakes
 SESSION = requests.Session()
 
 
 # Cache ticker info to avoid repeated yf.Ticker(...).info calls
-@lru_cache(maxsize=512)
+@lru_cache(maxsize=TICKER_INFO_CACHE_SIZE)
 def get_ticker_info_cached(ticker):
     try:
         t = yf.Ticker(ticker)
@@ -1539,7 +1619,7 @@ def get_ticker_info_cached(ticker):
 
 # Simple global rate limiter (ensure at least `min_interval` seconds between network starts)
 class RateLimiter:
-    def __init__(self, min_interval=0.9):
+    def __init__(self, min_interval=RATE_LIMIT_INTERVAL):
         self.min_interval = min_interval
         self.lock = threading.Lock()
         self.next_time = 0.0
@@ -1554,13 +1634,13 @@ class RateLimiter:
             self.next_time = now + self.min_interval
 
 
-RATE_LIMITER = RateLimiter(min_interval=0.9)
+RATE_LIMITER = RateLimiter(min_interval=RATE_LIMIT_INTERVAL)
 
 
 def get_fear_greed_data():
     global _fg_cache
     now = time.time()
-    if _fg_cache["data"] is not None and (now - _fg_cache["time"]) < FG_CACHE_TTL:
+    if _fg_cache["data"] is not None and (now - _fg_cache["time"]) < FG_CACHE_TTL_SECONDS:
         return _fg_cache["data"]
 
     try:
@@ -1653,9 +1733,12 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
     update = datetime.now(UTC).astimezone(PST).strftime("%I:%M:%S %p PST on %B %d, %Y")
 
     banner = (
-        '<div class="alert-banner">🚨 <strong>ALERTS</strong> '
+        '<div class="alert-banner" id="alertBanner">'
+        '<span class="alert-content">🚨 <strong>ALERTS</strong> '
         + " | ".join(alerts["grouped"])
-        + "</div>"
+        + '</span>'
+        '<button class="alert-dismiss" onclick="dismissAlerts()" title="Dismiss alerts">✕</button>'
+        "</div>"
         if alerts["grouped"]
         else ""
     )
@@ -1749,7 +1832,10 @@ body{{font-family:'Oracle Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Robo
 .btn{{padding:10px 20px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-md);cursor:pointer;font-weight:600;font-size:14px;transition:all 0.2s;box-shadow:var(--shadow)}}
 .btn:hover{{background:var(--accent-hover);box-shadow:var(--shadow-hover);transform:translateY(-1px)}}
 .btn:active{{transform:translateY(0);box-shadow:var(--shadow)}}
-.alert-banner{{background:var(--card);color:var(--text);padding:16px 24px;border-radius:var(--radius-lg);margin-bottom:24px;text-align:center;font-weight:600;box-shadow:var(--shadow);border:3px solid #c74634}}
+.alert-banner{{background:var(--card);color:var(--text);padding:16px 24px;border-radius:var(--radius-lg);margin-bottom:24px;text-align:center;font-weight:600;box-shadow:var(--shadow);border:3px solid #c74634;position:relative;display:flex;align-items:center;justify-content:center}}
+.alert-content{{flex:1;text-align:center}}
+.alert-dismiss{{position:absolute;right:16px;top:50%;transform:translateY(-50%);background:transparent;border:none;color:var(--text);font-size:24px;font-weight:bold;cursor:pointer;opacity:0.7;transition:all 0.2s;padding:4px 8px;line-height:1;border-radius:var(--radius-sm)}}
+.alert-dismiss:hover{{opacity:1;background:rgba(0,0,0,0.1);transform:translateY(-50%) scale(1.1)}}
 .controls-container{{background:var(--card);padding:20px;border-radius:var(--radius-lg);margin-bottom:24px;box-shadow:var(--shadow);border:3px solid #a8b2bd}}
 .hours-toggle-container{{display:flex;gap:15px;flex-wrap:wrap;align-items:center;justify-content:space-between;padding-bottom:20px;border-bottom:1px solid var(--border);margin-bottom:20px}}
 .quick-filters{{display:flex;flex-wrap:wrap;gap:10px;padding-bottom:20px;border-bottom:1px solid var(--border);margin-bottom:20px}}
@@ -1763,9 +1849,21 @@ body{{font-family:'Oracle Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Robo
 .view-btn.active:hover{{color:#fff}}
 #tableView{{display:block}}
 #cardView,#heatView{{display:none}}
-.card-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px}}
-.stock-card{{background:var(--card);border-radius:var(--radius-lg);padding:24px;box-shadow:var(--shadow);transition:all 0.2s;border:1px solid var(--border)}}
+.card-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax({CARD_MIN_WIDTH_PX}px,1fr));gap:20px}}
+.stock-card{{background:var(--card);border-radius:var(--radius-lg);padding:{CARD_PADDING_TOP_PX}px {CARD_PADDING_SIDE_PX}px {CARD_PADDING_SIDE_PX}px {CARD_PADDING_SIDE_PX}px;box-shadow:var(--shadow);transition:all 0.2s;border:1px solid var(--border);position:relative;height:{CARD_HEIGHT_PX}px;overflow:hidden;display:flex;flex-direction:column}}
 .stock-card:hover{{transform:translateY(-2px);box-shadow:var(--shadow-lg);border-color:var(--accent)}}
+.card-content-scroll{{display:flex;overflow-x:scroll;overflow-y:hidden;scrollbar-width:none;-ms-overflow-style:none;scroll-snap-type:x mandatory;scroll-behavior:smooth;flex:1;width:100%;height:100%}}
+.card-content-scroll::-webkit-scrollbar{{display:none}}
+.card-page{{flex:0 0 100%;width:100%;min-width:100%;max-width:100%;scroll-snap-align:start;scroll-snap-stop:always;box-sizing:border-box;overflow-y:auto;padding-right:5px;height:100%}}
+.card-page::-webkit-scrollbar{{width:6px}}
+.card-page::-webkit-scrollbar-track{{background:var(--surface);border-radius:3px}}
+.card-page::-webkit-scrollbar-thumb{{background:var(--border);border-radius:3px}}
+.card-page::-webkit-scrollbar-thumb:hover{{background:var(--accent)}}
+.card-scroll-btn{{position:absolute;top:8px;background:var(--accent);color:#fff;border:none;border-radius:50%;width:{CARD_ARROW_SIZE_PX}px;height:{CARD_ARROW_SIZE_PX}px;font-size:14px;cursor:pointer;z-index:10;box-shadow:var(--shadow);transition:all 0.2s;display:flex;align-items:center;justify-content:center;opacity:0.85;padding:0;line-height:1}}
+.card-scroll-btn:hover{{opacity:1;transform:scale(1.15)}}
+.card-scroll-btn:disabled{{opacity:0.3;cursor:not-allowed;pointer-events:none}}
+.card-scroll-left{{left:8px}}
+.card-scroll-right{{left:36px}}
 .heat-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}}
 .heat-tile{{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:var(--radius-md);padding:12px;cursor:pointer;transition:all 0.2s;border:1px solid transparent}}
 .heat-tile:hover{{transform:scale(1.03);box-shadow:var(--shadow-lg);border-color:var(--accent)}}
@@ -1826,18 +1924,19 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
 </div>
 <div style="display:flex;gap:10px">
 <button class="btn" onclick="toggleTheme()">🌓</button>
-<button class="btn" onclick="location.reload()">🔄</button>
+<button class="btn" onclick="refreshPage()">🔄</button>
 </div>
 </div>
 
 <div class="quick-filters">
 <div class="chip active" data-filter="all">All</div>
+<div class="chip" data-filter="m7">⭐ Starred</div>
 <div class="chip" data-filter="volume">📊 High Vol</div>
 <div class="chip" data-filter="earnings-week">📅 Earnings</div>
-<div class="chip" data-filter="signal-buy">🟢 Buy Signal</div>
-<div class="chip" data-filter="signal-sell">🟠 Sell Signal</div>
-<div class="chip" data-filter="signal-short">🔴 Short Signal</div>
-<div class="chip" data-filter="signal-hold">⚪ Hold Signal</div>
+<div class="chip" data-filter="signal-buy">🟢 Buy</div>
+<div class="chip" data-filter="signal-sell">🟠 Sell</div>
+<div class="chip" data-filter="signal-short">🔴 Short</div>
+<div class="chip" data-filter="signal-hold">⏸️ Hold</div>
 <div class="chip" data-filter="oversold">📉 Oversold</div>
 <div class="chip" data-filter="overbought">📈 Overbought</div>
 <div class="chip" data-filter="surge">🚀 Surge</div>
@@ -1887,6 +1986,8 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
             signal_icon = '<span style="font-size:0.5em">🔴</span> '
         elif active_sig == "SELL":
             signal_icon = '<span style="font-size:0.5em">🟠</span> '
+        elif active_sig == "HOLD":
+            signal_icon = '<span style="font-size:0.5em">⏸️</span> '
         
         # Get color-coded trend arrow
         trend_arrow = ""
@@ -1899,11 +2000,7 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
         else:
             trend_arrow = f'<span style="color:var(--neutral);font-weight:bold"> {predicted_trend}</span>'
         
-        if r.get("cvr3_vix_signal") == "BUY":
-            signal_icon = '<span style="font-size:0.5em">🟢</span> '
-        elif r.get("cvr3_vix_signal") == "SHORT":
-            signal_icon = '<span style="font-size:0.5em">🔴</span> '
-        bb_icon = signal_icon  # Alias for backward compatibility
+        bb_icon = signal_icon  # Use active signal icon
         hv = r["hv_30_annualized"]
         hv_cls = "negative" if hv and hv > 50 else "neutral"
         hv_str = na(hv, "{:.1f}%")
@@ -2100,8 +2197,8 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 <td>{fmt_change(r['change_pct'], r['change_abs_day'])}</td>
 <td>{fmt_change(r.get('change_5d'), r.get('change_abs_5d'))} {r.get('sparkline_5d', '')}</td>
 <td>{fmt_change(r['change_1m'], r['change_abs_1m'])} {r.get('sparkline_1m', '')}</td>
-<td>{fmt_change(r['change_6m'], r['change_abs_6m'])}</td>
-<td>{fmt_change(r['change_ytd'], r['change_abs_ytd'])}</td>
+<td>{fmt_change(r['change_6m'], r['change_abs_6m'])} {r.get('sparkline_6m', '')}</td>
+<td>{fmt_change(r['change_ytd'], r['change_abs_ytd'])} {r.get('sparkline_ytd', '')}</td>
 <td data-sort="{r['volume_raw']}">{fmt_vol(r['volume'])} {r.get('sparkline_vol', '')}</td>
 <td>{ranges_html}</td>
 <td>{indicators_html}</td>
@@ -2292,6 +2389,34 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
             card_risk_html += ' | '.join(card_risk_parts)
             card_risk_html += '</div>'
         
+        # Upside color coding
+        card_upside_cls = (
+            "bullish"
+            if r.get("upside_potential") and r.get("upside_potential") > 0
+            else (
+                "bearish"
+                if r.get("upside_potential") and r.get("upside_potential") < 0
+                else "neutral"
+            )
+        )
+        
+        # Build moving averages display with cross detection
+        card_ma_html = ''
+        if r.get('sma_50') or r.get('sma_200'):
+            ma_parts = []
+            if r.get('sma_50'):
+                ma_parts.append(f'<span class="neutral">50d: ${r.get("sma_50"):.2f}</span>')
+            if r.get('sma_200'):
+                ma_parts.append(f'<span class="neutral">200d: ${r.get("sma_200"):.2f}</span>')
+            
+            cross_indicator = ''
+            if r.get('death_cross'):
+                cross_indicator = ' <strong class="bearish">⚠ DEATH CROSS</strong>'
+            elif r.get('golden_cross'):
+                cross_indicator = ' <strong class="bullish">✓ GOLDEN CROSS</strong>'
+            
+            card_ma_html = f'<div>MA: {" | ".join(ma_parts)}{cross_indicator}</div>'
+        
         html += f"""<div class="stock-card stock-row" style="background:{bg}" 
             data-ticker="{r['ticker']}" 
             data-change="{r['change_pct']}" 
@@ -2302,27 +2427,46 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
             data-meme="{r['is_meme_stock']}" 
             data-squeeze="{r['squeeze_level']}" 
             data-bb-width="{bb_width_val}" data-dividend="{card_div_ds}" data-category="{r.get('category') or ''}" data-signal="{active_sig}">
+    <button class="card-scroll-btn card-scroll-left" onclick="scrollCardContent(this, -1)">&#8249;</button>
+    <button class="card-scroll-btn card-scroll-right" onclick="scrollCardContent(this, 1)">&#8250;</button>
+    <div class="card-content-scroll">
+        <div class="card-page">
     <h2><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}{trend_arrow}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.8em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.8em">F</a>, <a href="{zacks_url}" target="_blank" style="font-size:0.8em">Z</a>, <a href="{stock_analysis_url}" target="_blank" style="font-size:0.8em">S</a>) ${r['price']:.2f}</h2>
 <div style="font-size:1.5em">{fmt_change(r['change_pct'], r['change_abs_day'])}</div>
 {r['sparkline']}
 <div>5D: {fmt_change(r.get('change_5d'), r.get('change_abs_5d'))} {r.get('sparkline_5d', '')}</div>
 <div>1M: {fmt_change(r['change_1m'], r['change_abs_1m'])} {r.get('sparkline_1m', '')}</div>
-<div>6M: {fmt_change(r['change_6m'], r['change_abs_6m'])}</div>
-<div>YTD: {fmt_change(r['change_ytd'], r['change_abs_ytd'])}</div>
+<div>6M: {fmt_change(r['change_6m'], r['change_abs_6m'])} {r.get('sparkline_6m', '')}</div>
+<div>YTD: {fmt_change(r['change_ytd'], r['change_abs_ytd'])} {r.get('sparkline_ytd', '')}</div>
 <div>Volume: {fmt_vol(r['volume'])} {r.get('sparkline_vol', '')}</div>
 <div><strong>52W: {y52_display}</strong></div>
 <div>{display_label}: <span class="{mcap_cls}"><strong>{fmt_mcap(display_val)}</strong></span></div>
-<div>P/E: <span class="{pe_cls}">{na(r.get('pe'), '{:.2f}')}</span></div>
-<div>EPS: <span class="{pe_cls}">{na(r.get('eps'), '{:.2f}')}</span></div>
-<div>Div: <span class="{div_cls}">{na(r.get('dividend_rate'), '${:.2f}')}</span> (<span class="{div_cls}">{div_yield_display}</span>)</div>
-<div>Earnings: <strong>{r.get('earnings_date') or 'N/A'}</strong></div>
 <div><span class="{hv_cls}">Volatility: {hv_str}</span></div>
 <div>BB: {r['bb_status']} ({na(r['bb_width_pct'], '{:.1f}%')})</div>
 <div>MACD: <span class="{macd_num_cls}">{na(r.get('macd_line'), '{:+.3f}')}</span> | <span class="{macd_num_cls}">{na(r.get('macd_signal'), '{:+.3f}')}</span> (<span class="{ 'bullish' if r.get('macd_label')=='Bullish' else 'bearish' if r.get('macd_label')=='Bearish' else 'neutral' }">{r.get('macd_label','N/A')}</span>)</div>
+{card_ma_html}
 <div>P/C Vol Ratio: <span class="{pc_cls}">{na(r.get('pc_ratio'), '{:.2f}')}</span></div>
 <div><strong>Opt Dir: <span class="{opt_dir_cls}">{opt_dir_val}</span> &nbsp; Short: <span class="{short_cls}">{na(short_pct, '{:.1f}%')}</span> ({na(days_cover, '{:.1f}d')})</strong></div>
+        </div>
+        <div class="card-page">
+<div>P/E: <span class="{pe_cls}">{na(r.get('pe'), '{:.2f}')}</span></div>
+<div>EPS: <span class="{pe_cls}">{na(r.get('eps'), '{:.2f}')}</span></div>
+<div>1y Target Est: <span class="{card_upside_cls}">{na(r.get('target_price'), '${:.2f}')}</span></div>
+<div>Upside %: <span class="{card_upside_cls}">{na(r.get('upside_potential'), '{:+.1f}%')}</span></div>
+<div>Div: <span class="{div_cls}">{na(r.get('dividend_rate'), '${:.2f}')}</span> (<span class="{div_cls}">{div_yield_display}</span>)</div>
+<div>Annual Dividend: <span class="{div_cls}">{na(r.get('dividend_rate'), '${:.2f}')}</span></div>
+<div>Ex-Dividend Date: {r.get('ex_dividend_date') or 'N/A'}</div>
+<div>Payout Frequency: {r.get('payout_frequency') or 'N/A'}</div>
+<div>Payout Ratio: <span class="{div_cls}">{na(r.get('payout_ratio'), '{:.2f}%')}</span></div>
+<div>Dividend Growth: <span class="{div_cls}">{na(r.get('dividend_growth'), '{:.2f}%')}</span></div>
+<div>Earnings: <strong>{r.get('earnings_date') or 'N/A'}</strong></div>
 {card_conf_html}
 {card_risk_html}
+        </div>
+        <div class="card-page">
+{ranges_html}
+        </div>
+    </div>
 </div>"""
 
     html += "</div></div><div id='heatView'><div class='heat-grid'>"
@@ -2449,6 +2593,15 @@ function setView(btn, view) {
     prefs.view = view;
     localStorage.setItem(prefsKey, JSON.stringify(prefs));
     applyFilter();
+    
+    // Update card arrows when switching to card view
+    if (view === 'card') {
+        setTimeout(() => {
+            document.querySelectorAll('.stock-card').forEach(card => {
+                updateCardArrows(card);
+            });
+        }, 50);
+    }
 }
 
 function toggleHours(extended) {
@@ -2472,12 +2625,14 @@ function applyFilter() {
         const sq = r.dataset.squeeze || 'None';
         const bbw = parseFloat(r.dataset.bbWidth || 100);
         const sig = (r.dataset.signal || '').toUpperCase();
+        const ticker = (r.dataset.ticker || '').toUpperCase();
         if (currentFilter === 'oversold') show = rsi < 30;
         else if (currentFilter === 'overbought') show = rsi > 70;
         else if (currentFilter === 'surge') show = (ch > 10) || (ch5 > 10);
         else if (currentFilter === 'crash') show = (ch < -10) || (ch5 < -10);
         else if (currentFilter === 'meme') show = meme;
         else if (currentFilter === 'volume') show = vol > 5e7;
+        else if (currentFilter === 'm7') show = ['AAPL','AMZN','GOOGL','META','MSFT','NVDA','TSLA','AVGO','ORCL','NFLX'].includes(ticker);
         else if (currentFilter === 'squeeze') show = sq !== 'None';
         else if (currentFilter === 'earnings-week') show = (function(){
             const ed = r.dataset.earnings;
@@ -2547,6 +2702,87 @@ function toggleTheme() {
     document.documentElement.setAttribute('data-theme', prefs.theme);
     localStorage.setItem(prefsKey, JSON.stringify(prefs));
 }
+
+function scrollCardContent(btn, direction) {
+    const card = btn.closest('.stock-card');
+    const content = card.querySelector('.card-content-scroll');
+    if (content) {
+        const currentScroll = content.scrollLeft;
+        const cardWidth = content.clientWidth;
+        const targetScroll = direction > 0 
+            ? Math.ceil(currentScroll / cardWidth) * cardWidth + cardWidth
+            : Math.floor(currentScroll / cardWidth) * cardWidth - cardWidth;
+        
+        content.scrollTo({
+            left: Math.max(0, targetScroll),
+            behavior: 'smooth'
+        });
+        
+        // Update arrow states after scroll completes
+        setTimeout(() => updateCardArrows(card), 300);
+    }
+}
+
+function updateCardArrows(card) {
+    const content = card.querySelector('.card-content-scroll');
+    const leftBtn = card.querySelector('.card-scroll-left');
+    const rightBtn = card.querySelector('.card-scroll-right');
+    
+    if (content && leftBtn && rightBtn) {
+        const scrollLeft = content.scrollLeft;
+        const maxScroll = content.scrollWidth - content.clientWidth;
+        
+        // Disable left arrow on first page
+        leftBtn.disabled = scrollLeft <= 1;
+        
+        // Disable right arrow on last page
+        rightBtn.disabled = scrollLeft >= maxScroll - 1;
+    }
+}
+
+// Initialize arrow states on page load and add scroll listeners
+window.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.stock-card').forEach(card => {
+        updateCardArrows(card);
+        
+        const content = card.querySelector('.card-content-scroll');
+        if (content) {
+            content.addEventListener('scroll', () => updateCardArrows(card));
+        }
+    });
+});
+
+function refreshPage() {
+    // Clear dismissed alerts state so they show on refresh
+    localStorage.removeItem('alertsDismissed');
+    location.reload();
+}
+
+function dismissAlerts() {
+    const banner = document.getElementById('alertBanner');
+    if (banner) {
+        banner.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+        banner.style.opacity = '0';
+        banner.style.transform = 'translateY(-10px)';
+        setTimeout(() => {
+            banner.style.display = 'none';
+        }, 300);
+        // Store dismissed state with timestamp
+        localStorage.setItem('alertsDismissed', Date.now());
+    }
+}
+
+// Check if alerts were recently dismissed (within last 5 minutes)
+window.addEventListener('DOMContentLoaded', () => {
+    const dismissedTime = localStorage.getItem('alertsDismissed');
+    const banner = document.getElementById('alertBanner');
+    if (banner && dismissedTime) {
+        const fiveMinutes = 5 * 60 * 1000;
+        if (Date.now() - parseInt(dismissedTime) < fiveMinutes) {
+            banner.style.display = 'none';
+        }
+    }
+});
 </script>
 </body></html>"""
 
