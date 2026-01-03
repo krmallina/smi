@@ -1559,14 +1559,13 @@ input:checked + .toggle-slider:before{{transform:translateX(26px)}}
                 vix_change_color = "var(--pos)"
 
         cvr3_html = ""
-        if r.get("cvr3_vix_value") is not None:
-            cvr3_html = f"""<br><span style="color: {cvr3_color}">CVR3: {r.get('cvr3_vix_signal') or 'NEUTRAL'}</span> <span style="color: {vix_change_color}">VIX: {na(r['cvr3_vix_value'], '{:.2f}')} ({('+' if (r.get('cvr3_vix_pct') or 0) >= 0 else '')}{na(r['cvr3_vix_pct'], '{:.2f}')})</span>"""
-
+        # CVR3/VIX removed from table view - retained at page level only
+        
         indicators_html = f"""<span class="{macd_cls}">MACD: {r['macd_label']}</span><br>
 Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<br>
 <span class="{hv_cls}">Volatility: {hv_str}</span><br>
 <span class="{opt_dir_cls}">Opt Dir: {r['options_direction']}</span><br>
-<span class="{bias_cls}">Bias: {'Down' if r['down_volume_bias'] else 'Up'}</span>{cvr3_html}"""
+<span class="{bias_cls}">Bias: {'Down' if r['down_volume_bias'] else 'Up'}</span>"""
 
         # include dividend dataset (percent) for filtering
         div_ds = (
