@@ -723,6 +723,7 @@ def fetch(ticker, ext=False, retry=0):
         spk = sparkline(h30["Close"].tolist() if not h30.empty else [])
         spk_5d = sparkline(reg["Close"].tolist() if not reg.empty else [])
         spk_1m = sparkline(h1m["Close"].tolist() if not h1m.empty else [])
+        spk_vol = sparkline(h30["Volume"].tolist() if not h30.empty else [])
 
         bb_period = 20
         bb_upper = bb_lower = bb_middle = bb_width_pct = bb_position_pct = bb_status = (
@@ -782,6 +783,53 @@ def fetch(ticker, ext=False, retry=0):
         
         # Legacy bb_signal for backward compatibility (uses active strategy)
         bb_signal = primary_signal
+
+        # Predict trend based on technical indicators
+        trend_score = 0
+        # MACD signal (weight: 2)
+        if macd_lbl == 'Bullish':
+            trend_score += 2
+        elif macd_lbl == 'Bearish':
+            trend_score -= 2
+        # RSI signal (weight: 1)
+        if rsi_val is not None:
+            if rsi_val < 30:  # Oversold - potential uptrend
+                trend_score += 1
+            elif rsi_val > 70:  # Overbought - potential downtrend
+                trend_score -= 1
+        # BB Position (weight: 1)
+        if bb_status == "Below Lower":
+            trend_score += 1
+        elif bb_status == "Above Upper":
+            trend_score -= 1
+        # Active Signal (weight: 2)
+        if primary_signal == 'BUY':
+            trend_score += 2
+        elif primary_signal in ('SELL', 'SHORT'):
+            trend_score -= 2
+        # Price momentum (weight: 1)
+        if change_pct is not None:
+            if change_pct > 2:
+                trend_score += 1
+            elif change_pct < -2:
+                trend_score -= 1
+        
+        # Determine trend based on score
+        if trend_score >= 3:
+            predicted_trend = "↑"  # Strong uptrend
+            trend_label = "UP"
+        elif trend_score >= 1:
+            predicted_trend = "↗"  # Moderate uptrend
+            trend_label = "UP"
+        elif trend_score <= -3:
+            predicted_trend = "↓"  # Strong downtrend
+            trend_label = "DOWN"
+        elif trend_score <= -1:
+            predicted_trend = "↘"  # Moderate downtrend
+            trend_label = "DOWN"
+        else:
+            predicted_trend = "→"  # Neutral/sideways
+            trend_label = "NEUTRAL"
 
         # CVR3 VIX Signal: Generate BUY/SELL/SHORT based on VIX (market, not individual ticker)
         cvr3_vix_signal = None
@@ -927,6 +975,7 @@ def fetch(ticker, ext=False, retry=0):
             "sparkline": spk,
             "sparkline_5d": spk_5d,
             "sparkline_1m": spk_1m,
+            "sparkline_vol": spk_vol,
             "bb_upper": bb_upper,
             "bb_lower": bb_lower,
             "bb_middle": bb_middle,
@@ -941,6 +990,8 @@ def fetch(ticker, ext=False, retry=0):
             "signal_combined": all_signals.get('combined'),
             "signal_bb_ichimoku": all_signals.get('bb_ichimoku'),
             "active_signal": primary_signal,
+            "predicted_trend": predicted_trend,
+            "trend_label": trend_label,
             "ichimoku_conversion": ichimoku_data.get('conversion_line') if ichimoku_data else None,
             "ichimoku_base": ichimoku_data.get('base_line') if ichimoku_data else None,
             "ichimoku_span_a": ichimoku_data.get('span_a') if ichimoku_data else None,
@@ -1455,7 +1506,19 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
             signal_icon = '<span style="font-size:0.5em">🔴</span> '
         elif active_sig == "SELL":
             signal_icon = '<span style="font-size:0.5em">🟠</span> '
-        elif r.get("cvr3_vix_signal") == "BUY":
+        
+        # Get color-coded trend arrow
+        trend_arrow = ""
+        trend_label = r.get('trend_label', 'NEUTRAL')
+        predicted_trend = r.get('predicted_trend', '→')
+        if trend_label == 'UP':
+            trend_arrow = f'<span style="color:var(--pos);font-weight:bold"> {predicted_trend}</span>'
+        elif trend_label == 'DOWN':
+            trend_arrow = f'<span style="color:var(--neg);font-weight:bold"> {predicted_trend}</span>'
+        else:
+            trend_arrow = f'<span style="color:var(--neutral);font-weight:bold"> {predicted_trend}</span>'
+        
+        if r.get("cvr3_vix_signal") == "BUY":
             signal_icon = '<span style="font-size:0.5em">🟢</span> '
         elif r.get("cvr3_vix_signal") == "SHORT":
             signal_icon = '<span style="font-size:0.5em">🔴</span> '
@@ -1612,14 +1675,14 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
             zacks_url = f"https://www.zacks.com/stock/quote/{r['ticker']}?q={ticker_l}"
             stock_analysis_url = f"https://stockanalysis.com/stocks/{ticker_l}/"
         html += f"""<tr class="stock-row" data-ticker="{r['ticker']}" data-change="{r['change_pct']}" data-change-5d="{r.get('change_5d') or ''}" data-earnings="{r.get('earnings_date_iso') or ''}" data-rsi="{r['rsi'] or 50}" data-vol="{r['volume_raw']}" data-meme="{r['is_meme_stock']}" data-squeeze="{r['squeeze_level']}" data-bb-width="{bb_width_val}" data-dividend="{div_ds}" data-category="{r.get('category') or ''}" data-signal="{active_sig}">
-    <td><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.9em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.9em">F</a>, <a href="{zacks_url}" target="_blank" style="font-size:0.9em">Z</a>, <a href="{stock_analysis_url}" target="_blank" style="font-size:0.9em">S</a>)</td>
+    <td><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}{trend_arrow}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.9em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.9em">F</a>, <a href="{zacks_url}" target="_blank" style="font-size:0.9em">Z</a>, <a href="{stock_analysis_url}" target="_blank" style="font-size:0.9em">S</a>)</td>
 <td data-sort="{r['price']:.2f}">${r['price']:.2f} {r['sparkline']}</td>
 <td>{fmt_change(r['change_pct'], r['change_abs_day'])}</td>
 <td>{fmt_change(r.get('change_5d'), r.get('change_abs_5d'))} {r.get('sparkline_5d', '')}</td>
 <td>{fmt_change(r['change_1m'], r['change_abs_1m'])} {r.get('sparkline_1m', '')}</td>
 <td>{fmt_change(r['change_6m'], r['change_abs_6m'])}</td>
 <td>{fmt_change(r['change_ytd'], r['change_abs_ytd'])}</td>
-<td data-sort="{r['volume_raw']}">{fmt_vol(r['volume'])}</td>
+<td data-sort="{r['volume_raw']}">{fmt_vol(r['volume'])} {r.get('sparkline_vol', '')}</td>
 <td>{ranges_html}</td>
 <td>{indicators_html}</td>
 <td><span class="{sent_cls}">{sent_text}</span><br><span class="{upside_cls}">Upside: {na(r['upside_potential'],"{:+.1f}%")}</span></td>
@@ -1639,6 +1702,18 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         elif active_sig == "SELL":
             signal_icon = '<span style="font-size:0.5em">🟠</span> '
         bb_icon = signal_icon  # Alias for backward compatibility
+        
+        # Get color-coded trend arrow
+        trend_arrow = ""
+        trend_label = r.get('trend_label', 'NEUTRAL')
+        predicted_trend = r.get('predicted_trend', '→')
+        if trend_label == 'UP':
+            trend_arrow = f'<span style="color:var(--pos);font-weight:bold"> {predicted_trend}</span>'
+        elif trend_label == 'DOWN':
+            trend_arrow = f'<span style="color:var(--neg);font-weight:bold"> {predicted_trend}</span>'
+        else:
+            trend_arrow = f'<span style="color:var(--neutral);font-weight:bold"> {predicted_trend}</span>'
+        
         hv = r["hv_30_annualized"]
         hv_cls = "negative" if hv and hv > 50 else "neutral"
         hv_str = na(hv, "{:.1f}%")
@@ -1771,13 +1846,14 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
             data-meme="{r['is_meme_stock']}" 
             data-squeeze="{r['squeeze_level']}" 
             data-bb-width="{bb_width_val}" data-dividend="{card_div_ds}" data-category="{r.get('category') or ''}" data-signal="{active_sig}">
-    <h2><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.8em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.8em">F</a>, <a href="{zacks_url}" target="_blank" style="font-size:0.8em">Z</a>, <a href="{stock_analysis_url}" target="_blank" style="font-size:0.8em">S</a>) ${r['price']:.2f}</h2>
+    <h2><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}{trend_arrow}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.8em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.8em">F</a>, <a href="{zacks_url}" target="_blank" style="font-size:0.8em">Z</a>, <a href="{stock_analysis_url}" target="_blank" style="font-size:0.8em">S</a>) ${r['price']:.2f}</h2>
 <div style="font-size:1.5em">{fmt_change(r['change_pct'], r['change_abs_day'])}</div>
 {r['sparkline']}
 <div>5D: {fmt_change(r.get('change_5d'), r.get('change_abs_5d'))} {r.get('sparkline_5d', '')}</div>
 <div>1M: {fmt_change(r['change_1m'], r['change_abs_1m'])} {r.get('sparkline_1m', '')}</div>
 <div>6M: {fmt_change(r['change_6m'], r['change_abs_6m'])}</div>
 <div>YTD: {fmt_change(r['change_ytd'], r['change_abs_ytd'])}</div>
+<div>Volume: {fmt_vol(r['volume'])} {r.get('sparkline_vol', '')}</div>
 <div><strong>52W: {y52_display}</strong></div>
 <div>{display_label}: <span class="{mcap_cls}"><strong>{fmt_mcap(display_val)}</strong></span></div>
 <div>P/E: <span class="{pe_cls}">{na(r.get('pe'), '{:.2f}')}</span></div>
@@ -1854,6 +1930,18 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         elif active_sig == "SELL":
             signal_icon = '<span style="font-size:0.5em">🟠</span> '
         bb_icon = signal_icon  # Alias for backward compatibility
+        
+        # Get color-coded trend arrow
+        trend_arrow = ""
+        trend_label = r.get('trend_label', 'NEUTRAL')
+        predicted_trend = r.get('predicted_trend', '→')
+        if trend_label == 'UP':
+            trend_arrow = f'<span style="color:var(--pos);font-weight:bold"> {predicted_trend}</span>'
+        elif trend_label == 'DOWN':
+            trend_arrow = f'<span style="color:var(--neg);font-weight:bold"> {predicted_trend}</span>'
+        else:
+            trend_arrow = f'<span style="color:var(--neutral);font-weight:bold"> {predicted_trend}</span>'
+        
         # Build Zacks URL based on quote type
         ticker_l = r['ticker'].lower()
         qt = r.get('quote_type', '').upper()
@@ -1877,10 +1965,11 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         data-meme="{r['is_meme_stock']}" 
         data-squeeze="{r['squeeze_level']}" 
         data-bb-width="{bb_width_val}" data-dividend="{heat_div_ds}" data-category="{r.get('category') or ''}" data-signal="{active_sig_heat}">
-    <strong><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.85em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.85em">F</a>, <a href="{zacks_url}" target="_blank" style="font-size:0.85em">Z</a>, <a href="{stock_analysis_url}" target="_blank" style="font-size:0.85em">S</a>) {price_display}</strong>
+    <strong><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}{trend_arrow}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.85em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.85em">F</a>, <a href="{zacks_url}" target="_blank" style="font-size:0.85em">Z</a>, <a href="{stock_analysis_url}" target="_blank" style="font-size:0.85em">S</a>) {price_display}</strong>
     <div style="margin-top:6px">{fmt_change(r['change_pct'], r.get('change_abs_day'))}</div>
     <div style="font-size:0.85em">5D: {fmt_change(r.get('change_5d'), r.get('change_abs_5d'))} {r.get('sparkline_5d', '')}</div>
     <div style="font-size:0.85em">1M: {fmt_change(r['change_1m'], r['change_abs_1m'])} {r.get('sparkline_1m', '')}</div>
+    <div style="font-size:0.85em">Vol: {fmt_vol(r['volume'])} {r.get('sparkline_vol', '')}</div>
     <div style="font-size:0.9em;margin-top:6px"><strong>52W: {y52_display}</strong></div>
     <div style="font-size:0.9em">{display_label}: <span class="{mcap_cls}"><strong>{fmt_mcap(display_val)}</strong></span></div>
     </div>"""
