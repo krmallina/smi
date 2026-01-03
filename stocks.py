@@ -1304,55 +1304,69 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
 
     html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Dashboard</title>
 <meta name="viewport" content="width=device-width,initial-scale=1"><style>
-:root{{ --bg:#f5f5f5; --card:#fff; --text:#333; --border:#ddd; --accent:#0066cc; --pos:#00aa00; --neg:#cc0000; --bullish:#00aa00; --bearish:#cc0000 }}
-[data-theme="dark"]{{ --bg:#1a1a1a; --card:#2d2d2d; --text:#e0e0e0; --border:#444; --accent:#3d8bfd; --pos:#4caf50; --neg:#f44336; --bullish:#4caf50; --bearish:#f44336 }}
-body{{font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);padding:20px;transition:.3s}}
+@import url('https://fonts.googleapis.com/css2?family=Oracle+Sans:wght@400;500;600;700&display=swap');
+:root{{ --bg:#f5f7fa; --card:#ffffff; --text:#312d2a; --border:#d6dbe0; --accent:#0572ce; --accent-hover:#0460b2; --accent-dark:#024a87; --pos:#20813e; --neg:#c74634; --bullish:#20813e; --bearish:#c74634; --surface:#fafbfc; --shadow:0 1px 3px 0 rgba(0,0,0,0.08), 0 1px 2px 0 rgba(0,0,0,0.06); --shadow-hover:0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); --shadow-lg:0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); --radius-sm:4px; --radius-md:6px; --radius-lg:8px }}
+[data-theme="dark"]{{ --bg:#1b1f24; --card:#272c33; --text:#e8ecef; --border:#3d4349; --accent:#1f8ffa; --accent-hover:#4da3fb; --accent-dark:#0572ce; --pos:#3eb878; --neg:#e0604f; --bullish:#3eb878; --bearish:#e0604f; --surface:#21262b; --shadow:0 1px 3px 0 rgba(0,0,0,0.2), 0 1px 2px 0 rgba(0,0,0,0.12) }}
+*{{box-sizing:border-box}}
+body{{font-family:'Oracle Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:var(--bg);color:var(--text);padding:24px;margin:0;transition:background 0.2s,color 0.2s;font-size:14px;line-height:1.5}}
 .container{{max-width:1600px;margin:auto}}
-.top-bar{{display:flex;justify-content:space-between;flex-wrap:wrap;gap:15px;background:var(--card);padding:15px 20px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.1)}}
-.btn{{padding:8px 16px;background:var(--accent);color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600}}
-.alert-banner{{background:#ff4444;color:#fff;padding:12px;border-radius:8px;margin-bottom:20px;text-align:center;font-weight:bold}}
-.quick-filters{{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;background:var(--card);padding:15px;border-radius:12px}}
-.chip{{padding:8px 16px;background:var(--bg);border:2px solid var(--border);border-radius:20px;cursor:pointer;font-weight:600;transition:.2s}}
-.chip.active,.chip:hover{{background:var(--accent);border-color:var(--accent);color:#fff}}
-.views{{display:flex;gap:10px;margin-bottom:20px}}
-.view-btn{{padding:10px 20px;background:var(--card);border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:.2s}}
-.view-btn.active{{background:var(--accent);color:#fff;border-color:var(--accent)}}
+.top-bar{{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;background:var(--card);padding:20px 24px;border-radius:var(--radius-lg);box-shadow:var(--shadow);border:1px solid var(--border)}}
+.btn{{padding:10px 20px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-md);cursor:pointer;font-weight:600;font-size:14px;transition:all 0.2s;box-shadow:var(--shadow)}}
+.btn:hover{{background:var(--accent-hover);box-shadow:var(--shadow-hover);transform:translateY(-1px)}}
+.btn:active{{transform:translateY(0);box-shadow:var(--shadow)}}
+.alert-banner{{background:var(--card);color:var(--text);padding:16px 24px;border-radius:var(--radius-lg);margin-bottom:24px;text-align:center;font-weight:600;box-shadow:var(--shadow);border:3px solid #c74634}}
+.quick-filters{{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:24px;background:var(--card);padding:20px;border-radius:var(--radius-lg);box-shadow:var(--shadow);border:1px solid var(--border)}}
+.chip{{padding:8px 18px;background:var(--surface);border:1.5px solid var(--border);border-radius:20px;cursor:pointer;font-weight:600;font-size:13px;transition:all 0.2s;color:var(--text)}}
+.chip.active{{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:var(--shadow)}}
+.chip:hover{{background:var(--accent-hover);border-color:var(--accent-hover);color:#fff;transform:translateY(-1px)}}
+.views{{display:flex;gap:12px;margin-bottom:24px}}
+.view-btn{{padding:12px 24px;background:var(--card);border:1.5px solid var(--border);border-radius:var(--radius-md);cursor:pointer;transition:all 0.2s;font-weight:600;font-size:14px;color:var(--text)}}
+.view-btn.active{{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:var(--shadow)}}
+.view-btn:hover{{border-color:var(--accent);color:var(--accent);transform:translateY(-1px)}}
+.view-btn.active:hover{{color:#fff}}
 #tableView{{display:block}}
 #cardView,#heatView{{display:none}}
 .card-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px}}
-.stock-card{{background:var(--card);border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.1);transition:.3s}}
-.stock-card:hover{{transform:translateY(-4px);box-shadow:0 8px 16px rgba(0,0,0,.2)}}
-.heat-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}}
-.heat-tile{{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:8px;padding:10px;cursor:pointer;transition:.3s}}
-.heat-tile:hover{{transform:scale(1.05);box-shadow:0 4px 12px rgba(0,0,0,.3)}}
-table{{width:100%;border-collapse:collapse;background:var(--card);box-shadow:0 2px 8px rgba(0,0,0,.1)}}
-th{{background:var(--accent);color:#fff;padding:14px;cursor:pointer;position:sticky;top:0;z-index:10}}
-td{{padding:12px;border-bottom:1px solid var(--border);vertical-align:top}}
-.positive{{color:var(--pos);font-weight:bold}}
-.negative{{color:var(--neg);font-weight:bold}}
-.neutral{{color:#888}}
-.bullish{{color:var(--bullish);font-weight:bold}}
-.bearish{{color:#ff0000;font-weight:bold}}
-.extreme-fear{{color:#ff0000;font-weight:bold}}
-.fear{{color:#ff8800}}
-.greed{{color:#88ff88}}
-.extreme-greed{{color:#00bb00;font-weight:bold}}
-.strong-bull{{color:#008800;font-weight:bold}}
-.bull{{color:#00bb00}}
-.strong-bear{{color:#ff0000;font-weight:bold}}
-.bear{{color:#ff0000;font-weight:bold}}
-.vol-hot{{color:#ff0000;font-weight:bold}}
-.range-bar{{width:100%;height:8px;background:#e0e0e0;border-radius:4px;position:relative;margin:4px 0}}
-.range-bar-marker{{position:absolute;width:3px;height:12px;background:#000;top:-2px}}
-.range-labels{{display:flex;justify-content:space-between;font-size:0.75em;margin-top:2px}}
-.range-container{{margin:8px 0}}
-.toggle-switch{{position:relative;display:inline-block;width:60px;height:34px}}
+.stock-card{{background:var(--card);border-radius:var(--radius-lg);padding:24px;box-shadow:var(--shadow);transition:all 0.2s;border:1px solid var(--border)}}
+.stock-card:hover{{transform:translateY(-2px);box-shadow:var(--shadow-lg);border-color:var(--accent)}}
+.heat-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}}
+.heat-tile{{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:var(--radius-md);padding:12px;cursor:pointer;transition:all 0.2s;border:1px solid transparent}}
+.heat-tile:hover{{transform:scale(1.03);box-shadow:var(--shadow-lg);border-color:var(--accent)}}
+table{{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);box-shadow:var(--shadow);border-radius:var(--radius-lg);overflow:hidden;border:1px solid var(--border)}}
+th{{background:linear-gradient(180deg,var(--accent),var(--accent-dark));color:#fff;padding:16px;cursor:pointer;position:sticky;top:0;z-index:10;font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid var(--accent-dark)}}
+th:hover{{background:linear-gradient(180deg,var(--accent-hover),var(--accent))}}
+td{{padding:14px 16px;border-bottom:1px solid var(--border);vertical-align:top;font-size:13px}}
+tr:last-child td{{border-bottom:none}}
+tr:hover td{{background:var(--surface)}}
+.positive{{color:var(--pos);font-weight:600}}
+.negative{{color:var(--neg);font-weight:600}}
+.neutral{{color:#697883}}
+.bullish{{color:var(--bullish);font-weight:600}}
+.bearish{{color:var(--bearish);font-weight:600}}
+.extreme-fear{{color:var(--neg);font-weight:700}}
+.fear{{color:#d97706}}
+.greed{{color:#65a30d}}
+.extreme-greed{{color:var(--pos);font-weight:700}}
+.strong-bull{{color:#166534;font-weight:700}}
+.bull{{color:var(--pos)}}
+.strong-bear{{color:var(--neg);font-weight:700}}
+.bear{{color:var(--neg);font-weight:600}}
+.vol-hot{{color:var(--neg);font-weight:700}}
+.range-bar{{width:100%;height:10px;background:var(--surface);border-radius:var(--radius-sm);position:relative;margin:6px 0;border:1px solid var(--border)}}
+.range-bar-marker{{position:absolute;width:3px;height:14px;background:var(--accent);top:-2px;border-radius:2px}}
+.range-labels{{display:flex;justify-content:space-between;font-size:0.75em;margin-top:4px;color:var(--text);opacity:0.8}}
+.range-container{{margin:10px 0}}
+.range-title{{font-size:0.75em;font-weight:600;margin-bottom:4px;color:var(--text);opacity:0.9}}
+.toggle-switch{{position:relative;display:inline-block;width:56px;height:32px}}
 .toggle-switch input{{opacity:0;width:0;height:0}}
-.toggle-slider{{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#ccc;transition:.4s;border-radius:34px}}
-.toggle-slider:before{{position:absolute;content:"";height:26px;width:26px;left:4px;bottom:4px;background:#fff;transition:.4s;border-radius:50%}}
+.toggle-slider{{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:var(--border);transition:all 0.3s;border-radius:32px;box-shadow:inset 0 1px 2px rgba(0,0,0,0.1)}}
+.toggle-slider:before{{position:absolute;content:"";height:24px;width:24px;left:4px;bottom:4px;background:#fff;transition:all 0.3s;border-radius:50%;box-shadow:0 2px 4px rgba(0,0,0,0.2)}}
 input:checked + .toggle-slider{{background:var(--accent)}}
-input:checked + .toggle-slider:before{{transform:translateX(26px)}}
-.hours-toggle{{display:flex;align-items:center;gap:10px;font-weight:600;margin-left:20px}}
+input:checked + .toggle-slider:before{{transform:translateX(24px)}}
+.hours-toggle{{display:flex;align-items:center;gap:12px;font-weight:600;margin-left:20px}}
+input#tickerFilter{{padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius-md);background:var(--card);color:var(--text);font-size:14px;font-family:'Oracle Sans',-apple-system,sans-serif;transition:all 0.2s;outline:none;margin-left:auto;min-width:200px}}
+input#tickerFilter:hover{{border-color:var(--accent)}}
+input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5,114,206,0.1)}}
 </style></head><body>
 <div class="container">
 {banner}
@@ -1403,7 +1417,7 @@ input:checked + .toggle-slider:before{{transform:translateX(26px)}}
 <button class="view-btn active" onclick="setView(this,'table')">📋 Table</button>
 <button class="view-btn" onclick="setView(this,'card')">🗂️ Cards</button>
 <button class="view-btn" onclick="setView(this,'heat')">🔥 Heatmap</button>
-<input id="tickerFilter" placeholder="Filter tickers..." oninput="applyFilter()" style="padding:8px;border-radius:6px;border:1px solid var(--border);margin-left:12px;min-width:160px">
+<input id="tickerFilter" placeholder="Filter tickers..." oninput="applyFilter()">
 </div>
 
 <div id="tableView">
