@@ -4,15 +4,66 @@ Stock Market Intelligence Dashboard
 Trading Strategies:
   The system supports multiple trading signal strategies. Set via TRADING_STRATEGY environment variable:
   
-  - 'bb_ichimoku' (default): BB or Ichimoku - Signal if either BB or Ichimoku triggers
-  - 'bb': Bollinger Bands - Buy at lower band, Short at upper band
-  - 'rsi': RSI - Buy when oversold (<30), Short when overbought (>70)
-  - 'macd': MACD - Buy on bullish crossover, Short on bearish crossover
-  - 'ichimoku': Ichimoku Cloud - Buy on bullish cloud break, Sell on bearish cloud break
-  - 'combined': Combined - Requires 2+ strategies to agree
+  - 'bb_ichimoku' (default): BB or Ichimoku - Configurable OR/AND/CONFIRM modes
+  - 'bb': Bollinger Bands - Buy at lower band, Short at upper band, HOLD in normal range
+  - 'rsi': RSI - Buy when oversold (<30), Short when overbought (>70), HOLD in between
+  - 'macd': MACD - Buy on bullish crossover, Short on bearish crossover, SELL on reversal
+  - 'ichimoku': Ichimoku Cloud - Buy on bullish cloud break, Short on bearish, HOLD in trend
+  - 'combined': Weighted voting - Requires weighted score >= threshold (configurable weights)
+  
+  Signal Types:
+  - BUY: Enter long position
+  - SHORT: Enter short position
+  - SELL: Exit long position (stop/reversal)
+  - HOLD: Maintain current position
+  - None: Insufficient data or no clear signal
+  
+  Configurable Thresholds (via environment variables):
+  - BB_BUY_THRESHOLD=10 (default: buy when BB% <= 10)
+  - BB_SHORT_THRESHOLD=90 (default: short when BB% >= 90)
+  - BB_SELL_THRESHOLD=85 (default: exit longs when BB% >= 85 and reversing)
+  - RSI_OVERSOLD=30 (default: oversold threshold)
+  - RSI_OVERBOUGHT=70 (default: overbought threshold)
+  - RSI_SELL_THRESHOLD=65 (default: exit when dropping from overbought)
+  - MACD_PERIOD=100 (default: 100-day for stability, use 50 for momentum trading)
+  - ICHIMOKU_VOL_FILTER=100000 (default: min volume, set 0 to disable)
+  - ICHIMOKU_PRICE_FILTER=20 (default: min price, set 0 to disable)
+  - TREND_MOMENTUM_THRESHOLD=2.0 (default: ±2% for trend, use 1.0 for volatile stocks)
+  - VIX_EXTREME_FEAR=20 (VIX % above SMA for strong buy signal)
+  - VIX_MODERATE_FEAR=10 (VIX % above SMA for buy signal)
+  - VIX_COMPLACENCY=-10 (VIX % below SMA for sell signal)
+  - VIX_EXTREME_COMPLACENCY=-20 (VIX % below SMA for short signal)
+  
+  Strategy Weights (for 'combined' strategy):
+  - WEIGHT_BB=1.0 (Bollinger Bands weight)
+  - WEIGHT_RSI=0.8 (RSI weight - less reliable alone)
+  - WEIGHT_MACD=1.2 (MACD weight - strong trend indicator)
+  - WEIGHT_ICHIMOKU=1.5 (Ichimoku weight - most comprehensive)
+  - COMBINED_THRESHOLD=2.0 (min weighted score to trigger signal)
+  
+  BB+Ichimoku Strategy Mode (for 'bb_ichimoku' default strategy):
+  - BB_ICHIMOKU_MODE=confirm (default: both must agree for BUY/SHORT, either for SELL/HOLD)
+  - BB_ICHIMOKU_MODE=or (either BB OR Ichimoku triggers - most sensitive)
+  - BB_ICHIMOKU_MODE=and (both BB AND Ichimoku must agree - most conservative)
   
   Example usage:
     export TRADING_STRATEGY=ichimoku
+    export BB_BUY_THRESHOLD=5
+    export RSI_OVERSOLD=25
+    export MACD_PERIOD=50  # Faster MACD for momentum trades
+    export ICHIMOKU_VOL_FILTER=0  # Disable volume filter for small caps
+    export ICHIMOKU_PRICE_FILTER=5  # Allow stocks >= $5
+    export BB_ICHIMOKU_MODE=confirm  # Require confirmation for entries
+    python3 stocks.py data/tickers.csv
+    
+  Weighted voting example (combined strategy):
+    # Trust Ichimoku and MACD more than RSI
+    export TRADING_STRATEGY=combined
+    export WEIGHT_ICHIMOKU=2.0
+    export WEIGHT_MACD=1.5
+    export WEIGHT_BB=1.0
+    export WEIGHT_RSI=0.5
+    export COMBINED_THRESHOLD=2.5  # Require strong agreement
     python3 stocks.py data/tickers.csv
 """
 
@@ -188,7 +239,7 @@ def calculate_ichimoku(high, low, close, conversion_period=9, base_period=26, sp
 
 def generate_trading_signals(stock_data):
     """
-    Generate buy/sell/short signals based on multiple strategies.
+    Generate buy/sell/short/hold signals based on multiple strategies.
     
     Args:
         stock_data: Dictionary containing stock metrics (bb_position_pct, rsi, macd_label, ichimoku, etc.)
@@ -196,37 +247,60 @@ def generate_trading_signals(stock_data):
     Returns:
         Dictionary with signals from different strategies:
         {
-            'bb': 'BUY' | 'SELL' | 'SHORT' | None,
-            'rsi': 'BUY' | 'SELL' | 'SHORT' | None,
-            'macd': 'BUY' | 'SELL' | 'SHORT' | None,
-            'ichimoku': 'BUY' | 'SELL' | 'SHORT' | None,
-            'combined': 'BUY' | 'SELL' | 'SHORT' | None,
-            'bb_ichimoku': 'BUY' | 'SELL' | 'SHORT' | None
+            'bb': 'BUY' | 'SELL' | 'SHORT' | 'HOLD' | None,
+            'rsi': 'BUY' | 'SELL' | 'SHORT' | 'HOLD' | None,
+            'macd': 'BUY' | 'SELL' | 'SHORT' | 'HOLD' | None,
+            'ichimoku': 'BUY' | 'SELL' | 'SHORT' | 'HOLD' | None,
+            'combined': 'BUY' | 'SELL' | 'SHORT' | 'HOLD' | None,
+            'bb_ichimoku': 'BUY' | 'SELL' | 'SHORT' | 'HOLD' | None
         }
     """
     signals = {}
     
-    # Strategy 1: Bollinger Bands
+    # Strategy 1: Bollinger Bands (with configurable thresholds)
+    BB_BUY_THRESHOLD = float(os.getenv('BB_BUY_THRESHOLD', '10'))      # Buy when <= 10%
+    BB_SHORT_THRESHOLD = float(os.getenv('BB_SHORT_THRESHOLD', '90'))  # Short when >= 90%
+    BB_SELL_THRESHOLD = float(os.getenv('BB_SELL_THRESHOLD', '85'))    # Exit longs when >= 85%
+    
     bb_position_pct = stock_data.get('bb_position_pct')
+    bb_position_prev = stock_data.get('bb_position_prev')  # Previous position for trend detection
+    
     if bb_position_pct is not None:
-        if bb_position_pct <= 0:
+        if bb_position_pct <= BB_BUY_THRESHOLD:
+            # Oversold: Strong buy signal
             signals['bb'] = 'BUY'
-        elif bb_position_pct >= 100:
+        elif bb_position_pct >= BB_SHORT_THRESHOLD:
+            # Overbought: Strong short signal
             signals['bb'] = 'SHORT'
-        elif 40 <= bb_position_pct <= 60:
-            signals['bb'] = 'SELL'  # Mean reversion / neutral zone
+        elif bb_position_pct >= BB_SELL_THRESHOLD and bb_position_prev is not None and bb_position_prev > bb_position_pct:
+            # Price near upper band AND starting to reverse down: Exit long positions
+            signals['bb'] = 'SELL'
+        elif BB_BUY_THRESHOLD < bb_position_pct < BB_SELL_THRESHOLD:
+            # Normal range: Hold current position
+            signals['bb'] = 'HOLD'
         else:
             signals['bb'] = None
     else:
         signals['bb'] = None
     
-    # Strategy 2: RSI
+    # Strategy 2: RSI (with configurable thresholds)
+    RSI_OVERSOLD = float(os.getenv('RSI_OVERSOLD', '30'))
+    RSI_OVERBOUGHT = float(os.getenv('RSI_OVERBOUGHT', '70'))
+    RSI_SELL_THRESHOLD = float(os.getenv('RSI_SELL_THRESHOLD', '65'))  # Exit when dropping from overbought
+    
     rsi = stock_data.get('rsi')
+    rsi_prev = stock_data.get('rsi_prev')
+    
     if rsi is not None:
-        if rsi <= 30:
+        if rsi <= RSI_OVERSOLD:
             signals['rsi'] = 'BUY'  # Oversold
-        elif rsi >= 70:
+        elif rsi >= RSI_OVERBOUGHT:
             signals['rsi'] = 'SHORT'  # Overbought
+        elif rsi >= RSI_SELL_THRESHOLD and rsi_prev is not None and rsi_prev > rsi and rsi_prev >= RSI_OVERBOUGHT:
+            # Dropping from overbought: Exit longs
+            signals['rsi'] = 'SELL'
+        elif RSI_OVERSOLD < rsi < RSI_OVERBOUGHT:
+            signals['rsi'] = 'HOLD'  # Normal range
         else:
             signals['rsi'] = None
     else:
@@ -234,19 +308,30 @@ def generate_trading_signals(stock_data):
     
     # Strategy 3: MACD
     macd_label = stock_data.get('macd_label')
+    macd_prev_label = stock_data.get('macd_prev_label')
+    
     if macd_label == 'Bullish':
         signals['macd'] = 'BUY'
     elif macd_label == 'Bearish':
         signals['macd'] = 'SHORT'
+    elif macd_prev_label == 'Bullish' and macd_label != 'Bullish':
+        # Just crossed bearish: Exit longs
+        signals['macd'] = 'SELL'
+    elif macd_label is not None:
+        signals['macd'] = 'HOLD'
     else:
         signals['macd'] = None
     
-    # Strategy 4: Ichimoku Cloud
+    # Strategy 4: Ichimoku Cloud (with configurable filters)
     ichimoku = stock_data.get('ichimoku')
     price = stock_data.get('price')
     price_prev = stock_data.get('price_prev')
     vol_sma_20 = stock_data.get('vol_sma_20')
     price_sma_60 = stock_data.get('price_sma_60')
+    
+    # Configurable filters (set to 0 to disable)
+    ICHIMOKU_VOL_FILTER = float(os.getenv('ICHIMOKU_VOL_FILTER', '100000'))
+    ICHIMOKU_PRICE_FILTER = float(os.getenv('ICHIMOKU_PRICE_FILTER', '20'))
     
     if ichimoku and price is not None and all(v is not None for v in ichimoku.values()):
         base_line = ichimoku.get('base_line')
@@ -254,9 +339,9 @@ def generate_trading_signals(stock_data):
         span_a = ichimoku.get('span_a')
         span_b = ichimoku.get('span_b')
         
-        # Common filters for both signals
-        vol_filter = vol_sma_20 is None or vol_sma_20 > 100000
-        price_filter = price_sma_60 is None or price_sma_60 > 20
+        # Apply filters only if thresholds are set (> 0)
+        vol_filter = (ICHIMOKU_VOL_FILTER == 0) or (vol_sma_20 is None) or (vol_sma_20 > ICHIMOKU_VOL_FILTER)
+        price_filter = (ICHIMOKU_PRICE_FILTER == 0) or (price_sma_60 is None) or (price_sma_60 > ICHIMOKU_PRICE_FILTER)
         
         # Buy Signal: close > span_b AND span_a > span_b AND close crosses above base_line
         if vol_filter and price_filter:
@@ -272,6 +357,12 @@ def generate_trading_signals(stock_data):
             if cloud_bullish and crosses_above:
                 signals['ichimoku'] = 'BUY'
             elif cloud_bearish and crosses_below:
+                signals['ichimoku'] = 'SHORT'
+            elif price > base_line and cloud_bullish:
+                # In bullish position: Hold
+                signals['ichimoku'] = 'HOLD'
+            elif price < base_line and cloud_bearish and price_prev is not None and price_prev >= base_line:
+                # Crossed below in bearish cloud: Exit longs
                 signals['ichimoku'] = 'SELL'
             else:
                 signals['ichimoku'] = None
@@ -280,32 +371,94 @@ def generate_trading_signals(stock_data):
     else:
         signals['ichimoku'] = None
     
-    # Combined Strategy: Require at least 2 signals to agree
-    buy_count = sum(1 for s in signals.values() if s == 'BUY')
-    short_count = sum(1 for s in signals.values() if s == 'SHORT')
-    sell_count = sum(1 for s in signals.values() if s == 'SELL')
+    # Combined Strategy: Weighted voting with configurable thresholds
+    # Strategy weights (configurable via environment variables)
+    WEIGHT_BB = float(os.getenv('WEIGHT_BB', '1.0'))
+    WEIGHT_RSI = float(os.getenv('WEIGHT_RSI', '0.8'))
+    WEIGHT_MACD = float(os.getenv('WEIGHT_MACD', '1.2'))
+    WEIGHT_ICHIMOKU = float(os.getenv('WEIGHT_ICHIMOKU', '1.5'))
     
-    if buy_count >= 2:
-        signals['combined'] = 'BUY'
-    elif short_count >= 2:
-        signals['combined'] = 'SHORT'
-    elif sell_count >= 1:
-        signals['combined'] = 'SELL'
+    strategy_weights = {
+        'bb': WEIGHT_BB,
+        'rsi': WEIGHT_RSI,
+        'macd': WEIGHT_MACD,
+        'ichimoku': WEIGHT_ICHIMOKU
+    }
+    
+    # Calculate weighted scores
+    buy_score = sum(strategy_weights.get(k, 1.0) for k, v in signals.items() if v == 'BUY' and k in strategy_weights)
+    short_score = sum(strategy_weights.get(k, 1.0) for k, v in signals.items() if v == 'SHORT' and k in strategy_weights)
+    sell_score = sum(strategy_weights.get(k, 1.0) for k, v in signals.items() if v == 'SELL' and k in strategy_weights)
+    hold_score = sum(strategy_weights.get(k, 1.0) for k, v in signals.items() if v == 'HOLD' and k in strategy_weights)
+    
+    # Configurable threshold (default: 2.0 = approximately 2 strategies agreeing)
+    COMBINED_THRESHOLD = float(os.getenv('COMBINED_THRESHOLD', '2.0'))
+    
+    # Determine signal based on highest score above threshold
+    max_score = max(buy_score, short_score, sell_score, hold_score)
+    
+    if max_score >= COMBINED_THRESHOLD:
+        if buy_score == max_score and buy_score > short_score:
+            signals['combined'] = 'BUY'
+        elif short_score == max_score and short_score > buy_score:
+            signals['combined'] = 'SHORT'
+        elif sell_score == max_score:
+            signals['combined'] = 'SELL'
+        elif hold_score == max_score:
+            signals['combined'] = 'HOLD'
+        else:
+            # Conflicting signals (e.g., buy_score == short_score)
+            signals['combined'] = None
     else:
         signals['combined'] = None
     
-    # BB or Ichimoku Strategy: Either BB or Ichimoku signals trigger (default)
+    # BB or Ichimoku Strategy: Configurable logic mode (default)
+    # Modes: 'confirm' (default/balanced), 'or' (most sensitive), 'and' (most conservative)
+    BB_ICHIMOKU_MODE = os.getenv('BB_ICHIMOKU_MODE', 'confirm').lower()
+    
     bb_sig = signals.get('bb')
     ich_sig = signals.get('ichimoku')
     
-    if bb_sig == 'BUY' or ich_sig == 'BUY':
-        signals['bb_ichimoku'] = 'BUY'
-    elif bb_sig == 'SHORT' or ich_sig == 'SHORT':
-        signals['bb_ichimoku'] = 'SHORT'
-    elif bb_sig == 'SELL' or ich_sig == 'SELL':
-        signals['bb_ichimoku'] = 'SELL'
-    else:
-        signals['bb_ichimoku'] = None
+    if BB_ICHIMOKU_MODE == 'and':
+        # AND mode: Both must agree (lowest false positives)
+        if bb_sig == 'BUY' and ich_sig == 'BUY':
+            signals['bb_ichimoku'] = 'BUY'
+        elif bb_sig == 'SHORT' and ich_sig == 'SHORT':
+            signals['bb_ichimoku'] = 'SHORT'
+        elif bb_sig == 'SELL' and ich_sig == 'SELL':
+            signals['bb_ichimoku'] = 'SELL'
+        elif bb_sig == 'HOLD' and ich_sig == 'HOLD':
+            signals['bb_ichimoku'] = 'HOLD'
+        else:
+            signals['bb_ichimoku'] = None
+    
+    elif BB_ICHIMOKU_MODE == 'confirm':
+        # CONFIRM mode: Require both for entries (BUY/SHORT), either for exits (SELL) and HOLD
+        if bb_sig == 'BUY' and ich_sig == 'BUY':
+            signals['bb_ichimoku'] = 'BUY'
+        elif bb_sig == 'SHORT' and ich_sig == 'SHORT':
+            signals['bb_ichimoku'] = 'SHORT'
+        elif bb_sig == 'SELL' or ich_sig == 'SELL':
+            # Exit quickly if either signals danger
+            signals['bb_ichimoku'] = 'SELL'
+        elif bb_sig == 'HOLD' or ich_sig == 'HOLD':
+            # Hold if either suggests maintaining position
+            signals['bb_ichimoku'] = 'HOLD'
+        else:
+            signals['bb_ichimoku'] = None
+    
+    else:  # Default 'or' mode
+        # OR mode: Either BB or Ichimoku triggers (most sensitive, original behavior)
+        if bb_sig == 'BUY' or ich_sig == 'BUY':
+            signals['bb_ichimoku'] = 'BUY'
+        elif bb_sig == 'SHORT' or ich_sig == 'SHORT':
+            signals['bb_ichimoku'] = 'SHORT'
+        elif bb_sig == 'SELL' or ich_sig == 'SELL':
+            signals['bb_ichimoku'] = 'SELL'
+        elif bb_sig == 'HOLD' or ich_sig == 'HOLD':
+            signals['bb_ichimoku'] = 'HOLD'
+        else:
+            signals['bb_ichimoku'] = None
     
     return signals
 
@@ -319,6 +472,50 @@ def get_active_strategy():
     Default: 'bb_ichimoku' (either BB or Ichimoku triggers)
     """
     return os.getenv('TRADING_STRATEGY', 'bb_ichimoku')
+
+
+def calculate_signal_confidence(all_signals, active_strategy):
+    """
+    Calculate confidence score and strength label for trading signals.
+    
+    Args:
+        all_signals: Dictionary of all strategy signals
+        active_strategy: Currently active strategy name
+    
+    Returns:
+        tuple: (confidence_score, strength_label)
+            confidence_score: 0.0-1.0 based on agreement
+            strength_label: 'WEAK' | 'MODERATE' | 'STRONG'
+    """
+    # Count signals by type (excluding None and active strategy itself)
+    active_sig = all_signals.get(active_strategy)
+    if not active_sig or active_sig not in ('BUY', 'SHORT', 'SELL'):
+        return 0.0, 'WEAK'
+    
+    # Check agreement from other strategies
+    other_strategies = {k: v for k, v in all_signals.items() 
+                       if k != active_strategy and k not in ('bb_ichimoku', 'combined')}
+    
+    if not other_strategies:
+        return 0.6, 'MODERATE'  # Only one strategy available
+    
+    total_strategies = len(other_strategies)
+    agreeing = sum(1 for v in other_strategies.values() if v == active_sig)
+    conflicting = sum(1 for v in other_strategies.values() if v in ('BUY', 'SHORT', 'SELL') and v != active_sig)
+    
+    # Calculate confidence: (agreeing - conflicting) / total
+    raw_score = (agreeing - conflicting * 0.5) / total_strategies if total_strategies > 0 else 0.5
+    confidence = max(0.0, min(1.0, (raw_score + 1) / 2))  # Normalize to 0-1
+    
+    # Determine strength label
+    if confidence >= 0.75 or agreeing >= 3:
+        strength = 'STRONG'
+    elif confidence >= 0.5 or agreeing >= 2:
+        strength = 'MODERATE'
+    else:
+        strength = 'WEAK'
+    
+    return round(confidence, 2), strength
 
 
 # PERFORMANCE OPTIMIZATION: Cache VIX data globally to avoid fetching for every ticker
@@ -472,25 +669,56 @@ def check_alerts(data):
     return {"grouped": grouped, "time": now.strftime("%I:%M %p")}
 
 
-def rsi(s):
-    """OPTIMIZED: Use EWM instead of rolling mean for faster calculation"""
+def rsi(s, return_prev=False):
+    """OPTIMIZED: Use EWM instead of rolling mean for faster calculation
+    
+    Args:
+        s: Price series
+        return_prev: If True, returns (current_rsi, previous_rsi) tuple
+    
+    Returns:
+        float or tuple: RSI value or (current, previous) if return_prev=True
+    """
     if len(s) < 15:
-        return None
+        return (None, None) if return_prev else None
     d = s.diff()
     g = d.clip(lower=0).ewm(span=14, adjust=False).mean()
     l = (-d.clip(upper=0)).ewm(span=14, adjust=False).mean()
     rs = g / l
-    return 100 - 100 / (1 + rs.iloc[-1])
+    rsi_series = 100 - 100 / (1 + rs)
+    
+    if return_prev:
+        curr = rsi_series.iloc[-1]
+        prev = rsi_series.iloc[-2] if len(rsi_series) > 1 else None
+        return curr, prev
+    return rsi_series.iloc[-1]
 
 
-def macd(s):
+def macd(s, return_prev_label=False):
+    """Calculate MACD indicator
+    
+    Args:
+        s: Price series
+        return_prev_label: If True, returns previous label as 4th element
+    
+    Returns:
+        tuple: (macd_line, signal_line, label) or (macd_line, signal_line, label, prev_label)
+    """
     if len(s) < 26:
-        return None, None, "N/A"
+        return (None, None, "N/A", None) if return_prev_label else (None, None, "N/A")
     e12, e26 = s.ewm(span=12, adjust=False).mean(), s.ewm(span=26, adjust=False).mean()
     line = e12 - e26
     sig = line.ewm(span=9, adjust=False).mean()
     last_line, last_sig = line.iloc[-1], sig.iloc[-1]
-    return last_line, last_sig, "Bullish" if last_line > last_sig else "Bearish"
+    label = "Bullish" if last_line > last_sig else "Bearish"
+    
+    if return_prev_label and len(line) > 1:
+        prev_line, prev_sig = line.iloc[-2], sig.iloc[-2]
+        prev_label = "Bullish" if prev_line > prev_sig else "Bearish"
+        return last_line, last_sig, label, prev_label
+    elif return_prev_label:
+        return last_line, last_sig, label, None
+    return last_line, last_sig, label
 
 
 def na(v, f="{:.2f}"):
@@ -632,11 +860,15 @@ def fetch(ticker, ext=False, retry=0):
             elif short_pct > 15 and days_cover > 5:
                 squeeze = "Moderate"
 
-        rsi_val = rsi(h30["Close"])
-        h100 = safe_history(t, period="100d")
-        macd_val, macd_sig, macd_lbl = (
-            macd(h100["Close"]) if not h100.empty else (None, None, "N/A")
-        )
+        rsi_val, rsi_prev = rsi(h30["Close"], return_prev=True) if not h30.empty else (None, None)
+        
+        # Configurable MACD period: 100d (stable) or 50d (momentum)
+        macd_period = int(os.getenv('MACD_PERIOD', '100'))
+        h_macd = safe_history(t, period=f"{macd_period}d")
+        if not h_macd.empty:
+            macd_val, macd_sig, macd_lbl, macd_prev_lbl = macd(h_macd["Close"], return_prev_label=True)
+        else:
+            macd_val, macd_sig, macd_lbl, macd_prev_lbl = None, None, "N/A", None
 
         vol_spike = False
         if len(h30) > 1:
@@ -726,7 +958,7 @@ def fetch(ticker, ext=False, retry=0):
         spk_vol = sparkline(h30["Volume"].tolist() if not h30.empty else [])
 
         bb_period = 20
-        bb_upper = bb_lower = bb_middle = bb_width_pct = bb_position_pct = bb_status = (
+        bb_upper = bb_lower = bb_middle = bb_width_pct = bb_position_pct = bb_position_prev = bb_status = (
             None
         )
         if len(h30) >= bb_period:
@@ -740,6 +972,18 @@ def fetch(ticker, ext=False, retry=0):
             if (bb_upper - bb_lower) > 0:
                 bb_position_pct = ((price - bb_lower) / (bb_upper - bb_lower)) * 100
                 bb_position_pct = max(0, min(100, bb_position_pct))
+                
+                # Calculate previous BB position for trend detection
+                if len(h30) > bb_period:
+                    price_prev_bb = h30["Close"].iloc[-2]
+                    bb_middle_prev = close.rolling(window=bb_period).mean().iloc[-2]
+                    std_dev_prev = close.rolling(window=bb_period).std().iloc[-2]
+                    bb_upper_prev = bb_middle_prev + (std_dev_prev * 2)
+                    bb_lower_prev = bb_middle_prev - (std_dev_prev * 2)
+                    if (bb_upper_prev - bb_lower_prev) > 0:
+                        bb_position_prev = ((price_prev_bb - bb_lower_prev) / (bb_upper_prev - bb_lower_prev)) * 100
+                        bb_position_prev = max(0, min(100, bb_position_prev))
+            
             bb_status = (
                 "Above Upper"
                 if price > bb_upper
@@ -769,8 +1013,11 @@ def fetch(ticker, ext=False, retry=0):
         # Generate trading signals using strategy framework
         signal_data = {
             'bb_position_pct': bb_position_pct,
+            'bb_position_prev': bb_position_prev,
             'rsi': rsi_val,
+            'rsi_prev': rsi_prev,
             'macd_label': macd_lbl,
+            'macd_prev_label': macd_prev_lbl,
             'ichimoku': ichimoku_data,
             'price': price,
             'price_prev': price_prev,
@@ -781,50 +1028,150 @@ def fetch(ticker, ext=False, retry=0):
         active_strategy = get_active_strategy()
         primary_signal = all_signals.get(active_strategy)
         
+        # Calculate signal confidence and strength
+        signal_confidence, signal_strength = calculate_signal_confidence(all_signals, active_strategy)
+        
+        # Calculate risk management parameters (ATR-based stop loss)
+        atr_value = None
+        stop_loss = None
+        risk_reward_ratio = None
+        position_size_pct = None
+        
+        if len(h30) >= 14 and primary_signal in ('BUY', 'SHORT'):
+            # Calculate ATR (Average True Range) for stop loss
+            high = h30['High']
+            low = h30['Low']
+            close = h30['Close']
+            
+            tr1 = high - low
+            tr2 = abs(high - close.shift())
+            tr3 = abs(low - close.shift())
+            tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+            atr_value = tr.rolling(window=14).mean().iloc[-1]
+            
+            if atr_value and atr_value > 0:
+                # Configurable ATR multiplier for stop loss
+                ATR_STOP_MULTIPLIER = float(os.getenv('ATR_STOP_MULTIPLIER', '2.0'))
+                RISK_PER_TRADE = float(os.getenv('RISK_PER_TRADE', '2.0'))  # % of account
+                
+                if primary_signal == 'BUY':
+                    stop_loss = price - (atr_value * ATR_STOP_MULTIPLIER)
+                    # Target: 2x risk (configurable)
+                    target_price = price + (atr_value * ATR_STOP_MULTIPLIER * 2)
+                    risk_reward_ratio = 2.0
+                elif primary_signal == 'SHORT':
+                    stop_loss = price + (atr_value * ATR_STOP_MULTIPLIER)
+                    target_price = price - (atr_value * ATR_STOP_MULTIPLIER * 2)
+                    risk_reward_ratio = 2.0
+                
+                # Calculate position size (% of account to risk)
+                if stop_loss:
+                    risk_per_share = abs(price - stop_loss)
+                    if risk_per_share > 0:
+                        # Position size to risk X% of account
+                        position_size_pct = RISK_PER_TRADE / (risk_per_share / price * 100)
+                        position_size_pct = min(position_size_pct, 25.0)  # Max 25% position
+        
         # Legacy bb_signal for backward compatibility (uses active strategy)
         bb_signal = primary_signal
 
-        # Predict trend based on technical indicators
-        trend_score = 0
-        # MACD signal (weight: 2)
-        if macd_lbl == 'Bullish':
-            trend_score += 2
-        elif macd_lbl == 'Bearish':
-            trend_score -= 2
-        # RSI signal (weight: 1)
-        if rsi_val is not None:
-            if rsi_val < 30:  # Oversold - potential uptrend
-                trend_score += 1
-            elif rsi_val > 70:  # Overbought - potential downtrend
-                trend_score -= 1
-        # BB Position (weight: 1)
-        if bb_status == "Below Lower":
-            trend_score += 1
-        elif bb_status == "Above Upper":
-            trend_score -= 1
-        # Active Signal (weight: 2)
-        if primary_signal == 'BUY':
-            trend_score += 2
-        elif primary_signal in ('SELL', 'SHORT'):
-            trend_score -= 2
-        # Price momentum (weight: 1)
-        if change_pct is not None:
-            if change_pct > 2:
-                trend_score += 1
-            elif change_pct < -2:
-                trend_score -= 1
+        # Predict trend based on technical indicators (with configurable thresholds)
+        # Strategy-aware weighting: More reliable strategies get higher weight for active signal
+        strategy_trend_weights = {
+            'ichimoku': 2.5,  # Most comprehensive
+            'combined': 2.0,  # Multiple confirmations
+            'macd': 1.5,      # Strong trend indicator
+            'bb': 1.2,        # Good momentum indicator
+            'bb_ichimoku': 1.8,  # Two-factor confirmation
+            'rsi': 1.0        # Less reliable alone
+        }
         
-        # Determine trend based on score
-        if trend_score >= 3:
+        # Configurable momentum thresholds (adjust for volatility)
+        TREND_MOMENTUM_THRESHOLD = float(os.getenv('TREND_MOMENTUM_THRESHOLD', '2.0'))
+        
+        trend_score = 0.0
+        
+        # MACD signal (weight: 2) - Only if not the active strategy to avoid double-counting
+        if active_strategy != 'macd':
+            if macd_lbl == 'Bullish':
+                trend_score += 2.0
+            elif macd_lbl == 'Bearish':
+                trend_score -= 2.0
+        
+        # RSI - Current momentum direction (weight: 1.0)
+        # Fixed: RSI > 50 indicates upward momentum, RSI < 50 indicates downward momentum
+        if rsi_val is not None:
+            if rsi_val > 60:  # Strong upward momentum
+                trend_score += 1.0
+            elif rsi_val > 50:  # Mild upward momentum
+                trend_score += 0.5
+            elif rsi_val < 40:  # Strong downward momentum
+                trend_score -= 1.0
+            elif rsi_val < 50:  # Mild downward momentum
+                trend_score -= 0.5
+        
+        # BB Position - Current trend direction (weight: 1.0)
+        # Fixed: High BB% indicates uptrend, low BB% indicates downtrend
+        if bb_position_pct is not None:
+            if bb_position_pct > 80:  # Strong uptrend
+                trend_score += 1.0
+            elif bb_position_pct > 60:  # Moderate uptrend
+                trend_score += 0.5
+            elif bb_position_pct < 20:  # Strong downtrend
+                trend_score -= 1.0
+            elif bb_position_pct < 40:  # Moderate downtrend
+                trend_score -= 0.5
+        
+        # Ichimoku Cloud trend (weight: 2.0 - most reliable trend indicator)
+        if ichimoku_data and active_strategy != 'ichimoku':
+            conv = ichimoku_data.get('conversion_line')
+            base = ichimoku_data.get('base_line')
+            span_a = ichimoku_data.get('span_a')
+            span_b = ichimoku_data.get('span_b')
+            
+            if all([price, span_a, span_b, conv, base]):
+                cloud_top = max(span_a, span_b)
+                cloud_bottom = min(span_a, span_b)
+                
+                # Price above cloud = bullish trend
+                if price > cloud_top:
+                    trend_score += 2.0
+                    # TK cross confirmation (Tenkan-Kijun)
+                    if conv > base:
+                        trend_score += 0.5
+                # Price below cloud = bearish trend
+                elif price < cloud_bottom:
+                    trend_score -= 2.0
+                    # TK cross confirmation
+                    if conv < base:
+                        trend_score -= 0.5
+                # Price in cloud = neutral/consolidation (no change to score)
+        
+        # Active Signal (dynamic weight based on strategy reliability)
+        active_weight = strategy_trend_weights.get(active_strategy, 1.5)
+        if primary_signal == 'BUY':
+            trend_score += active_weight
+        elif primary_signal in ('SELL', 'SHORT'):
+            trend_score -= active_weight
+        
+        # Price momentum (configurable threshold)
+        if change_pct is not None:
+            if change_pct > TREND_MOMENTUM_THRESHOLD:
+                trend_score += 1.0
+            elif change_pct < -TREND_MOMENTUM_THRESHOLD:
+                trend_score -= 1.0
+        
+        # Determine trend based on score (adjusted thresholds for new scoring)
+        if trend_score >= 4:
             predicted_trend = "↑"  # Strong uptrend
             trend_label = "UP"
-        elif trend_score >= 1:
+        elif trend_score >= 1.5:
             predicted_trend = "↗"  # Moderate uptrend
             trend_label = "UP"
-        elif trend_score <= -3:
+        elif trend_score <= -4:
             predicted_trend = "↓"  # Strong downtrend
             trend_label = "DOWN"
-        elif trend_score <= -1:
+        elif trend_score <= -1.5:
             predicted_trend = "↘"  # Moderate downtrend
             trend_label = "DOWN"
         else:
@@ -832,6 +1179,7 @@ def fetch(ticker, ext=False, retry=0):
             trend_label = "NEUTRAL"
 
         # CVR3 VIX Signal: Generate BUY/SELL/SHORT based on VIX (market, not individual ticker)
+        # VIX interpretation: HIGH VIX = fear/volatility = contrarian BUY opportunity
         cvr3_vix_signal = None
         cvr3_vix_pct = None
         cvr3_vix_value = None
@@ -850,15 +1198,25 @@ def fetch(ticker, ext=False, retry=0):
                     cvr3_vix_value = current_vix
                     cvr3_vix_pct = current_vix - prev_vix
                     pct_diff = ((current_vix - vix_sma) / vix_sma) * 100
-                    # Buy Signal: VIX significantly above 10-day SMA
-                    if pct_diff >= 10:
+                    
+                    # Contrarian VIX signals (configurable thresholds)
+                    VIX_EXTREME_FEAR = float(os.getenv('VIX_EXTREME_FEAR', '20'))  # Strong buy
+                    VIX_MODERATE_FEAR = float(os.getenv('VIX_MODERATE_FEAR', '10'))  # Buy
+                    VIX_COMPLACENCY = float(os.getenv('VIX_COMPLACENCY', '-10'))  # Sell
+                    VIX_EXTREME_COMPLACENCY = float(os.getenv('VIX_EXTREME_COMPLACENCY', '-20'))  # Short
+                    
+                    if pct_diff >= VIX_EXTREME_FEAR:
+                        # Extreme fear (VIX spike) = Best contrarian BUY opportunity
                         cvr3_vix_signal = "BUY"
-                    # Sell Signal: VIX significantly below 10-day SMA
-                    elif pct_diff <= -10:
-                        cvr3_vix_signal = "SELL"
-                    # Short Signal: VIX extremely elevated above SMA
-                    elif pct_diff >= 20:
+                    elif pct_diff >= VIX_MODERATE_FEAR:
+                        # Moderate fear = Good contrarian BUY opportunity
+                        cvr3_vix_signal = "BUY"
+                    elif pct_diff <= VIX_EXTREME_COMPLACENCY:
+                        # Extreme complacency (very low VIX) = SHORT opportunity
                         cvr3_vix_signal = "SHORT"
+                    elif pct_diff <= VIX_COMPLACENCY:
+                        # Complacency (low VIX) = SELL/reduce exposure
+                        cvr3_vix_signal = "SELL"
         except Exception:
             cvr3_vix_signal = None
             cvr3_vix_pct = None
@@ -1013,6 +1371,13 @@ def fetch(ticker, ext=False, retry=0):
             "market_cap": market_cap,
             "aum": aum,
             "category": category,
+            # Risk management and confidence metrics
+            "atr_14": atr_value,
+            "stop_loss_price": stop_loss,
+            "risk_reward_ratio": risk_reward_ratio,
+            "position_size_pct": position_size_pct,
+            "signal_confidence": signal_confidence,
+            "signal_strength": signal_strength,
         }
     except Exception as e:
         error_msg = str(e)
@@ -1457,6 +1822,7 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
 <div class="chip" data-filter="signal-buy">🟢 Buy Signal</div>
 <div class="chip" data-filter="signal-sell">🟠 Sell Signal</div>
 <div class="chip" data-filter="signal-short">🔴 Short Signal</div>
+<div class="chip" data-filter="signal-hold">⚪ Hold Signal</div>
 <div class="chip" data-filter="oversold">📉 Oversold</div>
 <div class="chip" data-filter="overbought">📈 Overbought</div>
 <div class="chip" data-filter="surge">🚀 Surge</div>
@@ -1646,11 +2012,50 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
         cvr3_html = ""
         # CVR3/VIX removed from table view - retained at page level only
         
+        # Risk management and confidence metrics
+        confidence_val = r.get('signal_confidence')
+        strength_val = r.get('signal_strength')
+        atr_val = r.get('atr_14')
+        stop_loss_val = r.get('stop_loss_price')
+        rr_ratio = r.get('risk_reward_ratio')
+        pos_size = r.get('position_size_pct')
+        
+        # Confidence color coding
+        if confidence_val is not None:
+            if confidence_val >= 0.6:
+                conf_cls = "positive"
+            elif confidence_val >= 0.3:
+                conf_cls = "neutral"
+            else:
+                conf_cls = "negative"
+            conf_str = f'<span class="{conf_cls}">{strength_val} ({confidence_val:.0%})</span>'
+        else:
+            conf_str = 'N/A'
+        
+        # Risk management display (only when values available)
+        risk_parts = []
+        if atr_val is not None:
+            risk_parts.append(f'ATR: ${atr_val:.2f}')
+        if stop_loss_val is not None:
+            risk_parts.append(f'SL: ${stop_loss_val:.2f}')
+        if rr_ratio is not None:
+            risk_parts.append(f'R:R: {rr_ratio:.1f}:1')
+        if pos_size is not None:
+            risk_parts.append(f'Pos: {pos_size:.1f}%')
+        
+        risk_str = ' | '.join(risk_parts) if risk_parts else ''
+        
         indicators_html = f"""<span class="{macd_cls}">MACD: {r['macd_label']}</span><br>
 Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<br>
 <span class="{hv_cls}">Volatility: {hv_str}</span><br>
 <span class="{opt_dir_cls}">Opt Dir: {r['options_direction']}</span><br>
 <span class="{bias_cls}">Bias: {'Down' if r['down_volume_bias'] else 'Up'}</span>"""
+        
+        # Add confidence and risk management if available
+        if conf_str != 'N/A':
+            indicators_html += f"<br>Confidence: {conf_str}"
+        if risk_str:
+            indicators_html += f"<br><span style='font-size:0.85em'>{risk_str}</span>"
 
         # include dividend dataset (percent) for filtering
         div_ds = (
@@ -1836,6 +2241,42 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
             zacks_url = f"https://www.zacks.com/stock/quote/{r['ticker']}?q={ticker_l}"
             stock_analysis_url = f"https://stockanalysis.com/stocks/{ticker_l}/"
         active_sig = r.get("active_signal") or r.get("bb_signal") or ""
+        # Risk management and confidence for card view
+        card_confidence_val = r.get('signal_confidence')
+        card_strength_val = r.get('signal_strength')
+        card_atr_val = r.get('atr_14')
+        card_stop_loss_val = r.get('stop_loss_price')
+        card_rr_ratio = r.get('risk_reward_ratio')
+        card_pos_size = r.get('position_size_pct')
+        
+        # Build confidence display
+        card_conf_html = ''
+        if card_confidence_val is not None:
+            if card_confidence_val >= 0.6:
+                card_conf_cls = "strong-bull"
+            elif card_confidence_val >= 0.3:
+                card_conf_cls = "neutral"
+            else:
+                card_conf_cls = "strong-bear"
+            card_conf_html = f'<div>Signal Confidence: <span class="{card_conf_cls}"><strong>{card_strength_val} ({card_confidence_val:.0%})</strong></span></div>'
+        
+        # Build risk management display (only when values available)
+        card_risk_parts = []
+        if card_atr_val is not None:
+            card_risk_parts.append(f'ATR(14): ${card_atr_val:.2f}')
+        if card_stop_loss_val is not None:
+            card_risk_parts.append(f'Stop Loss: ${card_stop_loss_val:.2f}')
+        if card_rr_ratio is not None:
+            card_risk_parts.append(f'R:R: {card_rr_ratio:.1f}:1')
+        if card_pos_size is not None:
+            card_risk_parts.append(f'Position: {card_pos_size:.1f}%')
+        
+        card_risk_html = ''
+        if card_risk_parts:
+            card_risk_html = f'<div style="font-size:0.9em;margin-top:5px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.1)">'
+            card_risk_html += ' | '.join(card_risk_parts)
+            card_risk_html += '</div>'
+        
         html += f"""<div class="stock-card stock-row" style="background:{bg}" 
             data-ticker="{r['ticker']}" 
             data-change="{r['change_pct']}" 
@@ -1865,6 +2306,8 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 <div>MACD: <span class="{macd_num_cls}">{na(r.get('macd_line'), '{:+.3f}')}</span> | <span class="{macd_num_cls}">{na(r.get('macd_signal'), '{:+.3f}')}</span> (<span class="{ 'bullish' if r.get('macd_label')=='Bullish' else 'bearish' if r.get('macd_label')=='Bearish' else 'neutral' }">{r.get('macd_label','N/A')}</span>)</div>
 <div>P/C Vol Ratio: <span class="{pc_cls}">{na(r.get('pc_ratio'), '{:.2f}')}</span></div>
 <div><strong>Opt Dir: <span class="{opt_dir_cls}">{opt_dir_val}</span> &nbsp; Short: <span class="{short_cls}">{na(short_pct, '{:.1f}%')}</span> ({na(days_cover, '{:.1f}d')})</strong></div>
+{card_conf_html}
+{card_risk_html}
 </div>"""
 
     html += "</div></div><div id='heatView'><div class='heat-grid'>"
@@ -2044,6 +2487,7 @@ function applyFilter() {
         else if (currentFilter === 'signal-buy') show = sig === 'BUY';
         else if (currentFilter === 'signal-sell') show = sig === 'SELL';
         else if (currentFilter === 'signal-short') show = sig === 'SHORT';
+        else if (currentFilter === 'signal-hold') show = sig === 'HOLD';
         else if (currentFilter.startsWith('cat-')) show = cat === currentFilter.replace('cat-','');
         if (tickerVal) {
             const tk = (r.dataset.ticker || '').toString().toLowerCase();
