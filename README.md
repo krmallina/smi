@@ -12,14 +12,14 @@
 
 # Stock Market Intelligence Dashboard
 
-A comprehensive stock market dashboard with advanced trading signals, real-time data, and interactive visualizations.
+A comprehensive Python-based stock market dashboard with advanced trading signals, real-time data, and interactive visualizations.
 
 ## Features
 
 ### 📊 Multi-View Dashboard
-- **Table View**: Sortable columns with detailed metrics
-- **Card View**: Rich card-based layout with visual indicators
-- **Heatmap View**: Color-coded performance visualization
+- **Table View**: Sortable columns with detailed metrics and sparklines
+- **Card View**: Rich card-based layout with visual indicators and trend arrows
+- **Heatmap View**: Color-coded performance visualization with compact metrics
 
 ### 🎯 Trading Signal Framework
 Six sophisticated trading strategies with visual indicators (🟢 BUY, 🟠 SELL, 🔴 SHORT):
@@ -29,6 +29,16 @@ Six sophisticated trading strategies with visual indicators (🟢 BUY, 🟠 SELL
 - **Ichimoku Cloud**: Multi-component trend and support/resistance
 - **Combined Strategy**: Requires 2+ strategies to agree
 - **BB + Ichimoku (Default)**: OR logic between BB and Ichimoku signals
+
+### 📈 Predicted Trend Indicators
+Color-coded trend arrows based on multi-factor technical analysis:
+- **↑** Strong uptrend (green) - Multiple bullish indicators aligned
+- **↗** Moderate uptrend (green) - Bullish bias detected
+- **→** Neutral/sideways (gray) - Mixed or weak signals
+- **↘** Moderate downtrend (red) - Bearish bias detected
+- **↓** Strong downtrend (red) - Multiple bearish indicators aligned
+
+Trend prediction weighs: MACD, RSI, Bollinger Bands position, active signals, and price momentum
 
 Set strategy via environment variable:
 ```bash
@@ -48,17 +58,12 @@ Interactive filter chips for quick analysis:
 - **Category Filters** (M7, Bio, Energy, LX)
 
 ### 📈 Market Indicators
-- **VIX**: Volatility index with real-time changes
-- **Fear & Greed Index**: CNN market sentiment gauge
+Consolidated market overview on a single line:
+- **Major Indices**: Dow, S&P 500, Nasdaq with real-time changes
+- **VIX**: Volatility index with change tracking
+- **CVR3 Signal**: Market-wide Buy/Sell/Short signals
+- **Fear & Greed Index**: CNN market sentiment gauge (0-100 scale)
 - **AAII Sentiment**: Bull/bear spread from investor survey
-- **Meme Stock Tracker**: Popular retail stocks
-
-### 🔗 Quick Links Integration
-Each ticker includes instant access to:
-- **Y**: Yahoo Finance - Comprehensive data
-- **F**: Finviz - Charts and technical analysis
-- **Z**: Zacks - Research and ratings (stock/ETF/mutual fund specific)
-- **S**: StockAnalysis.com - Fundamentals and metrics
 
 ### 🚨 Smart Alerts
 Automatic alert generation for:
@@ -66,23 +71,33 @@ Automatic alert generation for:
 - Price surges/crashes (>10%)
 - Volume spikes
 - Bollinger Band squeezes and breakouts
+- Active trading signals (🟢 BUY, 🟠 SELL, 🔴 SHORT)
 - Custom user-defined alerts (via `data/alerts.json`)
 
+Alert banner displays at top with color-coded hearts:
+- 🔥 52W High alerts
+- 📉 52W Low alerts  
+- 💚 Buy signals
+- 🧡 Sell signals (orange)
+- ❤️ Short signals
+
 ### ⚡ Performance Optimizations
-- **VIX Caching**: 5-minute TTL eliminates redundant API calls
-- **Alert Caching**: 5-minute TTL for alert data
-- **Fear & Greed Caching**: 1-hour TTL
+- **VIX Caching**: 30-minute TTL eliminates redundant API calls
+- **Alert Caching**: 30-minute TTL for alert data
+- **Fear & Greed Caching**: 30-minute TTL
+- **AAII Sentiment Caching**: 30-minute TTL
 - **Parallel Fetching**: ThreadPoolExecutor with 5 workers
 - **Optimized Calculations**: Vectorized Ichimoku with rolling operations
 - **Rate Limiting**: Global limiter prevents API throttling
 
-### 📊 Technical Indicators
+### 📊 Technical Indicators & Visualizations
+- **Sparklines**: Visual price trends for 30-day, 5-day, 1-month periods, and volume
 - **Bollinger Bands**: MA20 ± 2σ with squeeze detection
 - **RSI**: 14-period momentum oscillator
 - **MACD**: 12/26/9 EMA trend following
 - **Ichimoku Cloud**: Tenkan/Kijun/Senkou/Chikou analysis
 - **Moving Averages**: 50-day and 200-day (death cross detection)
-- **Volume Analysis**: Up/down volume bias
+- **Volume Analysis**: Up/down volume bias with sparkline trends
 - **Historical Volatility**: 30-day annualized
 - **Options Metrics**: Put/Call ratio, implied moves, options direction
 
