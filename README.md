@@ -14,11 +14,20 @@
 
 ### 📊 Multi-View Dashboard
 - **Table View**: Sortable columns with detailed metrics and sparklines
+  - All time period changes (Day, 5D, 1M, 6M, YTD, 1Y) with sparklines
+  - Golden Cross / Death Cross indicators in INDICATORS column
+  - Click any column header to sort
+  - Live ticker search and filtering
 - **Card View**: Rich card-based layout with visual indicators, trend arrows, and trade setups
-  - **Page 1**: Price action, volume, technical indicators, and options metrics
+  - **Page 1**: Price action, volume, technical indicators (BB, RSI, MACD, MA), and options metrics
   - **Page 2**: Fundamentals, dividends, earnings, and **ATR-based Trade Setup** recommendations
   - **Page 3**: Visual range charts (Day, 52W, Bollinger Bands, Implied Move)
+  - Responsive auto-sizing for Mac and iPad (no scrolling needed)
+  - Swipeable pages with navigation arrows
 - **Heatmap View**: Color-coded performance visualization with compact metrics
+  - Responsive auto-sizing tiles for all screen sizes
+  - Background color intensity based on price change
+  - Links to multiple data sources (Barchart, Yahoo, Finviz, Zacks, StockAnalysis)
 
 ### 💼 Trade Setup Recommendations
 For every ticker with BUY or SHORT signals, the card view displays actionable trade recommendations:
@@ -111,11 +120,11 @@ Six sophisticated trading strategies with visual indicators (🟢 BUY, 🟠 SELL
 
 ### 📈 Predicted Trend Indicators
 Color-coded trend arrows based on multi-factor technical analysis:
-- **↑** Strong uptrend (green) - Multiple bullish indicators aligned (score ≥4.0)
-- **↗** Moderate uptrend (green) - Bullish bias detected (score ≥1.5)
-- **→** Neutral/sideways (gray) - Mixed or weak signals (-1.5 to 1.5)
-- **↘** Moderate downtrend (red) - Bearish bias detected (score ≤-1.5)
-- **↓** Strong downtrend (red) - Multiple bearish indicators aligned (score ≤-4.0)
+- **<span style="color:green">↑</span>** Strong uptrend (green) - Multiple bullish indicators aligned (score ≥4.0)
+- **<span style="color:green">↗</span>** Moderate uptrend (green) - Bullish bias detected (score ≥1.5)
+- **<span style="color:gray">→</span>** Neutral/sideways (gray) - Mixed or weak signals (-1.5 to 1.5)
+- **<span style="color:red">↘</span>** Moderate downtrend (red) - Bearish bias detected (score ≤-1.5)
+- **<span style="color:red">↓</span>** Strong downtrend (red) - Multiple bearish indicators aligned (score ≤-4.0)
 
 **Trend Scoring Logic:**
 - **MACD** (±2.0): Bullish/Bearish signal (excluded if MACD is active strategy)
@@ -149,10 +158,33 @@ Interactive filter chips for quick analysis:
 - ⚪ **Hold Signal** - Stocks with neutral/hold signals
 - **Oversold** (RSI < 30) / **Overbought** (RSI > 70)
 - **Surge** (>10% gain) / **Crash** (>10% loss)
-- **Meme Stocks** / **High Volume** (>50M)
+- **Meme Stocks** / **High Volume** (>50M) / **M7 Starred**
 - **BB Squeeze** / **Short Squeeze**
 - **Earnings Week** / **Dividend Payers**
-- **Category Filters** (M7, Bio, Energy, LX)
+- **Category Filters** (Major Tech, Leveraged ETF, Sector ETF, Emerging Tech, Speculative/Meme)
+
+### 📋 Ticker File Management
+Flexible ticker list format with section support:
+- **Sectioned Format** (`data/tickers.csv`):
+  ```
+  [MEME]
+  GME, AMC, BB, KOSS, ...
+  
+  [M7]
+  AAPL, MSFT, GOOGL, META, NVDA, TSLA, ...
+  
+  [TICKERS]
+  AAPL, MSFT, GOOGL, ...
+  ```
+- **Simple Format** (backward compatible):
+  ```
+  AAPL, MSFT, GOOGL
+  NVDA
+  TSLA
+  ```
+- Sections auto-populate MEME and M7 filter categories
+- Supports comma-separated or newline-separated tickers
+- Automatically deduplicated
 
 ### 📈 Market Indicators
 Consolidated market overview on a single line:
@@ -161,6 +193,19 @@ Consolidated market overview on a single line:
 - **CVR3 Signal**: Market-wide Buy/Sell/Short signals
 - **Fear & Greed Index**: CNN market sentiment gauge (0-100 scale)
 - **AAII Sentiment**: Bull/bear spread from investor survey
+
+### 🎨 UI/UX Features
+- **Responsive Design**: Auto-sizing for Mac, iPad, and mobile devices
+  - Card view: tiles adapt from 280px to 350px based on viewport
+  - Heatmap view: tiles adapt from 180px to 220px based on viewport
+  - No horizontal or vertical scrolling required
+- **Theme Toggle**: Light/dark mode with local storage persistence
+- **View Persistence**: Remembers your last selected view (table/card/heatmap)
+- **Live Search**: Real-time ticker filtering in table view
+- **Sortable Columns**: Click any header to sort in table view
+- **Color Coding**: Consistent green (positive), red (negative), gray (neutral)
+- **External Links**: Quick access to Barchart, Yahoo Finance, Finviz, Zacks, StockAnalysis
+- **Swipeable Cards**: Navigate between card pages with arrows or swipe gestures
 
 ### 🚨 Smart Alerts
 Automatic alert generation for:
@@ -188,16 +233,29 @@ Alert banner displays at top with color-coded hearts:
 - **Rate Limiting**: Global limiter prevents API throttling
 
 ### 📊 Technical Indicators & Visualizations
-- **Sparklines**: Visual price trends for 30-day, 5-day, 1-month periods, and volume
+- **Sparklines**: Visual price trends for 30-day, 5-day, 1-month, 6-month, YTD, and 1-year periods, plus volume
 - **Bollinger Bands**: MA20 ± 2σ with configurable thresholds and squeeze detection
 - **RSI**: 14-period EWM momentum oscillator with extreme level detection
 - **MACD**: 12/26/9 EMA trend following with configurable lookback period (50-150 days)
 - **Ichimoku Cloud**: Tenkan/Kijun/Senkou/Chikou analysis with optional volume/price filters
 - **ATR**: 14-period Average True Range for volatility-based stop losses
-- **Moving Averages**: 50-day and 200-day (death cross detection)
+- **Moving Averages**: 50-day and 200-day SMAs
+  - **Golden Cross**: 🟢 SMA 50 crosses above SMA 200 (bullish)
+  - **Death Cross**: 🔴 SMA 50 crosses below SMA 200 (bearish)
+  - Displayed prominently in table view INDICATORS column
 - **Volume Analysis**: Up/down volume bias with sparkline trends
 - **Historical Volatility**: 30-day annualized
 - **Options Metrics**: Put/Call ratio, implied moves, options direction
+
+### 📈 Price Change Metrics
+- **Day %**: Intraday price change with absolute value
+- **5D %**: 5-day price change with sparkline
+- **1M %**: 1-month price change with sparkline
+- **6M %**: 6-month price change with sparkline
+- **YTD %**: Year-to-date price change with sparkline
+- **1Y %**: 1-year price change with sparkline (newly added)
+- All changes display in table and card views (not in heatmap)
+- Color-coded: green for gains, red for losses
 
 ## Installation
 
@@ -377,25 +435,122 @@ Create `data/alerts.json` for custom alert conditions:
 ]
 ```
 
-## Dashboard Features
+### Dashboard Features
 
-### Metrics Displayed
-- **Price & Changes**: Current price, day/5D/1M/6M/YTD performance
-- **Volume**: Trading volume with visual indicators
-- **Ranges**: Day and 52-week price ranges with position markers
-- **Valuation**: P/E ratio, EPS, Market Cap/AUM, Dividend yield
-- **Sentiment**: Analyst ratings, upside potential, options direction
-- **Risk Metrics**: Beta, volatility score, short interest, days to cover
-- **Risk Management**: ATR-14, stop loss levels, risk/reward ratios, position sizing
-- **Signal Confidence**: Confidence score (0-100%) and strength (WEAK/MODERATE/STRONG)
-- **Earnings**: Next earnings date with week highlighting
+### 📊 Metrics Displayed (All Views)
+**Price & Performance:**
+- Current price with day/5D/1M/6M/YTD/1Y changes
+- Sparklines for visual trend representation
+- 52-week high/low with position markers
+- Day range with visual indicators
 
-### Interactive Features
-- **Sortable Columns**: Click any header to sort (supports YTD% and all metrics)
-- **Live Search**: Filter by ticker symbol
-- **Theme Toggle**: Light/dark mode with persistence
-- **View Persistence**: Remembers your preferred view
-- **Responsive Design**: Works on desktop and mobile
+**Technical Analysis:**
+- Bollinger Bands: position %, width %, squeeze detection
+- RSI (14-period) with oversold/overbought levels
+- MACD line, signal, and trend label
+- Ichimoku Cloud signals *(when sufficient data available)*
+- Moving Averages: 50-day and 200-day SMAs *(when sufficient data available)*
+- Golden Cross / Death Cross detection ***(conditionally rendered - only when crossover detected)***
+- ATR (14-period) for volatility measurement
+
+**Trading Signals:**
+- Active signal (BUY/SELL/SHORT/HOLD) with colored indicators
+- Predicted trend arrows (<span style="color:green">↑↗</span><span style="color:gray">→</span><span style="color:red">↘↓</span>)
+- Signal confidence score ***(conditionally rendered - only for BUY/SHORT/SELL signals, not HOLD)***
+- Trade setup recommendations (entry/stop/target) ***(conditionally rendered - only shown for BUY/SHORT signals)***
+
+**Volume & Liquidity:**
+- Trading volume with sparkline
+- Volume bias (up/down volume)
+- Average volume comparison
+- Volume spike indicator ***(conditionally rendered - only when volume >150% of average)***
+
+**Valuation & Fundamentals:**
+- Market Cap or AUM (for ETFs)
+- P/E ratio *(optional - N/A for unprofitable companies or ETFs)*
+- EPS *(optional)*
+- Dividend yield and payout ratio *(optional - only for dividend-paying stocks)*
+- Beta *(optional - volatility vs market)*
+
+**Options & Sentiment:**
+- Put/Call ratio *(optional - only for optionable stocks)*
+- Implied move percentage *(optional - only for optionable stocks)*
+- Options direction (bullish/bearish) *(optional - only for optionable stocks)*
+- Analyst ratings and target price upside *(optional - only for analyst-covered stocks)*
+
+**Risk Management:**
+- Short interest % and days to cover *(optional - may not be available for all stocks)*
+- Historical volatility (30-day annualized)
+- Squeeze level (None/Moderate/High/Extreme) ***(conditionally rendered - Moderate/High/Extreme only shown when detected)***
+- ATR-based stop loss and targets
+- Position sizing recommendations ***(conditionally rendered - only shown with active BUY/SHORT signals)***
+
+**Corporate Events:**
+- Next earnings date with week highlighting *(optional - may be N/A)*
+- Earnings week badge ***(conditionally rendered - only for earnings within 7 days)***
+- Dividend ex-date and payment info *(optional - only for dividend-paying stocks)*
+
+**Alert Indicators** ***(conditionally rendered - only when conditions met):***
+- 🔥 52-week high alert
+- 📉 52-week low alert
+- 💚 Active buy signal
+- 🧡 Active sell signal
+- ❤️ Active short signal
+- Surge/crash indicators (>10% moves)
+
+**Note:** 
+- *Fields in italics are "optional"* and may display "N/A" or be omitted when data is unavailable from the data provider.
+- ***Fields in bold italic are "conditionally rendered"*** and only appear when specific conditions are met or signals are active.
+
+**Examples of Conditionally Rendered Fields:**
+
+1. **Golden/Death Cross:**
+   - ✅ Shown: When SMA 50 crosses above/below SMA 200 (crossover just occurred)
+   - ❌ Hidden: When moving averages are stable or no recent crossover
+
+2. **Signal Confidence:**
+   - ✅ Shown: "STRONG (85%)" for BUY signal with high agreement
+   - ❌ Hidden: Not shown for HOLD signals (neutral positions don't have confidence)
+
+3. **Trade Setup Box:**
+   ```
+   ✅ Shown for BUY signal:
+   🟢 TRADE SETUP (LONG - BUY)
+   Entry:      $188.81    Current
+   Stop Loss:  $178.92    -5.2%
+   Target:     $208.58    +10.5%
+   
+   ❌ Hidden for HOLD or when no active signal
+   ```
+
+4. **Volume Spike Indicator:**
+   - ✅ Shown: "🔥 Vol Spike!" when today's volume is 2.5M and average is 1.5M (167%)
+   - ❌ Hidden: When volume is 1.3M vs average 1.5M (87%)
+
+5. **Squeeze Level:**
+   - ✅ Shown: "Squeeze: High" when short interest >20% and days to cover >7
+   - ❌ Hidden: Shows "Squeeze: None" when conditions not met (always displays base value)
+
+6. **Position Sizing:**
+   - ✅ Shown: "Pos: 8.5%" in card view when BUY signal is active
+   - ❌ Hidden: When signal is HOLD or no active signal
+
+7. **Earnings Week Badge:**
+   - ✅ Shown: "📅 Earnings: Jan 15" with highlighted background when within 7 days
+   - ❌ Hidden: "Earnings: Feb 28" shown normally when >7 days away
+
+8. **Alert Indicators:**
+   - ✅ Shown in banner: "🔥 AAPL at 52W High | 💚 MSFT: BUY Signal"
+   - ❌ Hidden: When no alert conditions met (no banner displayed)
+
+### 🔧 Interactive Features
+- **Sortable Columns**: Click any header to sort (supports all metrics including YTD% and 1Y%)
+- **Live Search**: Filter by ticker symbol in real-time
+- **Theme Toggle**: Light/dark mode with persistence across sessions
+- **View Persistence**: Remembers your preferred view (table/card/heatmap)
+- **Responsive Design**: Works seamlessly on desktop, tablet, and mobile
+- **Filter Chips**: One-click filtering by signals, categories, and conditions
+- **Alert Dismissal**: Clickable alert banner with local storage persistence
 
 ## Files
 
@@ -410,6 +565,3 @@ Create `data/alerts.json` for custom alert conditions:
 - **Smart Caching**: Eliminates redundant API calls
 - **Optimized Calculations**: Vectorized operations for technical indicators
 - **Fast Rendering**: Generates both dashboards in ~2-3 minutes for 50 tickers
-
-
-

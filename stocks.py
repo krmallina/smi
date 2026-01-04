@@ -846,6 +846,7 @@ def fetch(ticker, ext=False, retry=0):
         ch1m, abs1m = calc_ch(h1m)
         ch6m, abs6m = calc_ch(h6m)
         chytd, absytd = calc_ch(ytd)
+        ch1y, abs1y = calc_ch(h_all)  # 1-year change
 
         high52, low52 = (
             (h_all["High"].max(), h_all["Low"].min()) if not h_all.empty else (price, price)
@@ -980,6 +981,7 @@ def fetch(ticker, ext=False, retry=0):
         spk_1m = sparkline(h1m["Close"].tolist() if not h1m.empty else [])
         spk_6m = sparkline(h6m["Close"].tolist() if not h6m.empty else [])
         spk_ytd = sparkline(ytd["Close"].tolist() if not ytd.empty else [])
+        spk_1y = sparkline(h_all["Close"].tolist() if not h_all.empty else [])
         spk_vol = sparkline(h30["Volume"].tolist() if not h30.empty else [])
 
         bb_period = 20
@@ -1382,6 +1384,8 @@ def fetch(ticker, ext=False, retry=0):
             "change_abs_6m": abs6m,
             "change_ytd": chytd,
             "change_abs_ytd": absytd,
+            "change_1y": ch1y,
+            "change_abs_1y": abs1y,
             "volume": vol,
             "volume_raw": vol,
             "52w_high": high52,
@@ -1409,6 +1413,7 @@ def fetch(ticker, ext=False, retry=0):
             "sparkline_1m": spk_1m,
             "sparkline_6m": spk_6m,
             "sparkline_ytd": spk_ytd,
+            "sparkline_1y": spk_1y,
             "sparkline_vol": spk_vol,
             "bb_upper": bb_upper,
             "bb_lower": bb_lower,
@@ -2049,6 +2054,7 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
 <th data-sort="change_1m">1M %</th>
 <th data-sort="change_6m">6M %</th>
 <th data-sort="change_ytd">YTD %</th>
+<th data-sort="change_1y">1Y %</th>
 <th data-sort="volume_raw">VOLUME</th>
 <th>RANGES</th>
 <th>INDICATORS</th>
@@ -2237,7 +2243,14 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
         
         risk_str = ' | '.join(risk_parts) if risk_parts else ''
         
-        indicators_html = f"""<span class="{macd_cls}">MACD: {r['macd_label']}</span><br>
+        # Build indicators HTML with death/golden cross signals
+        ma_cross_html = ""
+        if r.get('golden_cross'):
+            ma_cross_html = '<span class="bullish">🟢 Golden Cross</span><br>'
+        elif r.get('death_cross'):
+            ma_cross_html = '<span class="bearish">🔴 Death Cross</span><br>'
+        
+        indicators_html = f"""{ma_cross_html}<span class="{macd_cls}">MACD: {r['macd_label']}</span><br>
 Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<br>
 <span class="{hv_cls}">Volatility: {hv_str}</span><br>
 <span class="{opt_dir_cls}">Opt Dir: {r['options_direction']}</span><br>
@@ -2279,6 +2292,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 <td>{fmt_change(r['change_1m'], r['change_abs_1m'])} {r.get('sparkline_1m', '')}</td>
 <td>{fmt_change(r['change_6m'], r['change_abs_6m'])} {r.get('sparkline_6m', '')}</td>
 <td>{fmt_change(r['change_ytd'], r['change_abs_ytd'])} {r.get('sparkline_ytd', '')}</td>
+<td>{fmt_change(r.get('change_1y'), r.get('change_abs_1y'))} {r.get('sparkline_1y', '')}</td>
 <td data-sort="{r['volume_raw']}">{fmt_vol(r['volume'])} {r.get('sparkline_vol', '')}</td>
 <td>{ranges_html}</td>
 <td>{indicators_html}</td>
@@ -2632,6 +2646,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 <div>1M: {fmt_change(r['change_1m'], r['change_abs_1m'])} {r.get('sparkline_1m', '')}</div>
 <div>6M: {fmt_change(r['change_6m'], r['change_abs_6m'])} {r.get('sparkline_6m', '')}</div>
 <div>YTD: {fmt_change(r['change_ytd'], r['change_abs_ytd'])} {r.get('sparkline_ytd', '')}</div>
+<div>1Y: {fmt_change(r.get('change_1y'), r.get('change_abs_1y'))} {r.get('sparkline_1y', '')}</div>
 <div>Volume: {fmt_vol(r['volume'])} {r.get('sparkline_vol', '')}</div>
 <div><strong>52W: {card_y52_display}</strong></div>
 <div>{display_label}: <span class="{mcap_cls}"><strong>{fmt_mcap(display_val)}</strong></span></div>
