@@ -1909,18 +1909,29 @@ body{{font-family:'Oracle Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Robo
 .view-btn.active:hover{{color:#fff}}
 #tableView{{display:block}}
 #cardView,#heatView{{display:none}}
+#cardView{{width:100%;max-width:100vw;overflow:hidden;box-sizing:border-box}}
 #heatView{{width:100%;max-width:100vw;overflow:hidden;box-sizing:border-box}}
-.card-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax({CARD_MIN_WIDTH_PX}px,1fr));gap:20px}}
-.stock-card{{background:var(--card);border-radius:var(--radius-lg);padding:{CARD_PADDING_TOP_PX}px {CARD_PADDING_SIDE_PX}px {CARD_PADDING_SIDE_PX}px {CARD_PADDING_SIDE_PX}px;box-shadow:var(--shadow);transition:all 0.2s;border:1px solid var(--border);position:relative;height:{CARD_HEIGHT_PX}px;overflow:hidden;display:flex;flex-direction:column}}
+.card-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;padding:8px;max-width:100%;box-sizing:border-box}}
+.stock-card{{background:var(--card);border-radius:var(--radius-lg);padding:35px 20px 20px 20px;box-shadow:var(--shadow);transition:all 0.2s;border:1px solid var(--border);position:relative;min-height:380px;height:auto;overflow:hidden;display:flex;flex-direction:column;box-sizing:border-box}}
 .stock-card:hover{{transform:translateY(-2px);box-shadow:var(--shadow-lg);border-color:var(--accent)}}
-.card-content-scroll{{display:flex;overflow-x:scroll;overflow-y:hidden;scrollbar-width:none;-ms-overflow-style:none;scroll-snap-type:x mandatory;scroll-behavior:smooth;flex:1;width:100%;height:100%}}
+.card-content-scroll{{display:flex;overflow-x:scroll;overflow-y:hidden;scrollbar-width:none;-ms-overflow-style:none;scroll-snap-type:x mandatory;scroll-behavior:smooth;flex:1;width:100%;min-height:0}}
 .card-content-scroll::-webkit-scrollbar{{display:none}}
-.card-page{{flex:0 0 100%;width:100%;min-width:100%;max-width:100%;scroll-snap-align:start;scroll-snap-stop:always;box-sizing:border-box;overflow-y:auto;padding-right:5px;height:100%}}
+.card-page{{flex:0 0 100%;width:100%;min-width:100%;max-width:100%;scroll-snap-align:start;scroll-snap-stop:always;box-sizing:border-box;overflow-y:auto;padding-right:5px;min-height:0}}
 .card-page::-webkit-scrollbar{{width:6px}}
 .card-page::-webkit-scrollbar-track{{background:var(--surface);border-radius:3px}}
 .card-page::-webkit-scrollbar-thumb{{background:var(--border);border-radius:3px}}
 .card-page::-webkit-scrollbar-thumb:hover{{background:var(--accent)}}
-.card-scroll-btn{{position:absolute;top:8px;background:var(--accent);color:#fff;border:none;border-radius:50%;width:{CARD_ARROW_SIZE_PX}px;height:{CARD_ARROW_SIZE_PX}px;font-size:14px;cursor:pointer;z-index:10;box-shadow:var(--shadow);transition:all 0.2s;display:flex;align-items:center;justify-content:center;opacity:0.85;padding:0;line-height:1}}
+.card-scroll-btn{{position:absolute;top:8px;background:var(--accent);color:#fff;border:none;border-radius:50%;width:24px;height:24px;font-size:14px;cursor:pointer;z-index:10;box-shadow:var(--shadow);transition:all 0.2s;display:flex;align-items:center;justify-content:center;opacity:0.85;padding:0;line-height:1}}
+@media (min-width: 768px) {{
+  .card-grid{{grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}}
+  .stock-card{{padding:40px 24px 24px 24px;min-height:420px}}
+  .card-scroll-btn{{width:26px;height:26px}}
+}}
+@media (min-width: 1200px) {{
+  .card-grid{{grid-template-columns:repeat(auto-fit,minmax(350px,1fr));gap:20px}}
+  .stock-card{{padding:45px 24px 24px 24px;min-height:450px}}
+  .card-scroll-btn{{width:28px;height:28px}}
+}}
 .card-scroll-btn:hover{{opacity:1;transform:scale(1.15)}}
 .card-scroll-btn:disabled{{opacity:0.3;cursor:not-allowed;pointer-events:none}}
 .card-scroll-left{{left:8px}}
