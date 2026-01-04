@@ -2713,7 +2713,7 @@ function applyFilter() {
         else if (currentFilter === 'crash') show = (ch < -10) || (ch5 < -10);
         else if (currentFilter === 'meme') show = meme;
         else if (currentFilter === 'volume') show = vol > 5e7;
-        else if (currentFilter === 'm7') show = ['AAPL','AMZN','GOOGL','META','MSFT','NVDA','TSLA','AVGO','ORCL','NFLX','TQQQ','SSO','SOXL','BULZ','SHOP','SSO','UPRO','TNA','MIDU','SPYU','XLK','TECL','IGV','IYW','BNKU','CURE','LABU','NAIL','TARK'].includes(ticker);
+        else if (currentFilter === 'm7') show = ['AAPL','AMZN','GOOGL','META','MSFT','NVDA','TSLA','AVGO','ORCL','NFLX','TQQQ','SSO','SOXL','BULZ','SHOP','SSO','UPRO','TNA','MIDU','SPYU','XLK','TECL','IGV','IYW','BNKU','CURE','LABU','NAIL','TARK','FNGU'].includes(ticker);
         else if (currentFilter === 'squeeze') show = sq !== 'None';
         else if (currentFilter === 'earnings-week') show = (function(){
             const ed = r.dataset.earnings;
