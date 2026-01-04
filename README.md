@@ -10,18 +10,52 @@
 
 ![cf48c501-9030-4cec-9dde-cf5cc067dbe1](https://github.com/user-attachments/assets/20251d2d-fdf2-4197-b166-d091e752e3ed)
 
-# Stock Market Intelligence Dashboard
-
-A comprehensive Python-based stock market dashboard with advanced trading signals, real-time data, and interactive visualizations.
-
 ## Features
 
 ### 📊 Multi-View Dashboard
 - **Table View**: Sortable columns with detailed metrics and sparklines
-- **Card View**: Rich card-based layout with visual indicators and trend arrows
+- **Card View**: Rich card-based layout with visual indicators, trend arrows, and trade setups
+  - **Page 1**: Price action, volume, technical indicators, and options metrics
+  - **Page 2**: Fundamentals, dividends, earnings, and **ATR-based Trade Setup** recommendations
+  - **Page 3**: Visual range charts (Day, 52W, Bollinger Bands, Implied Move)
 - **Heatmap View**: Color-coded performance visualization with compact metrics
 
-### 🎯 Trading Signal Framework
+### 💼 Trade Setup Recommendations
+For every ticker with BUY or SHORT signals, the card view displays actionable trade recommendations:
+
+**Trade Setup Box includes:**
+- 🟢 **Entry Price**: Current market price
+- 🛑 **Stop Loss**: ATR-based stop (2× ATR below/above entry)
+  - Dynamically adjusts to stock volatility
+  - Shows both price level and risk percentage
+- 🎯 **Target Price**: 2:1 risk/reward target (4× ATR)
+  - Shows both price level and reward percentage
+- 📊 **Risk/Reward Summary**: Visual ratio display (e.g., "5.2% / 10.5% (1:2)")
+
+**Example Display:**
+```
+🟢 TRADE SETUP (LONG - BUY)
+Entry:      $188.81    Current
+Stop Loss:  $178.92    -5.2%
+Target:     $208.58    +10.5%
+─────────────────────────────────
+Risk/Reward: 5.2% / 10.5% (1:2)
+```
+
+**Features:**
+- Automatically shown for all tickers with active BUY/SHORT signals
+- Color-coded: Green for LONG/BUY positions, Red for SHORT positions
+- Adapts to both light and dark themes
+- Uses ATR (Average True Range) for volatility-adjusted levels
+- Configurable via `ATR_STOP_MULTIPLIER` environment variable (default: 2.0)
+
+### 🛡️ Risk Management
+ATR-based stop loss system with position sizing:
+- **ATR Stop Loss**: Dynamic stops based on 14-period Average True Range (always calculated for all tickers)
+- **Position Sizing**: Calculates optimal position size to risk 2% per trade (configurable)
+- **Risk/Reward Ratios**: Expected R:R calculation using 2:1 targets (4× ATR for targets, 2× ATR for stops)
+- **Maximum Position**: 25% account limit to prevent over-concentration
+- **Trade Setup Display**: Visual entry/stop/target recommendations on card view page 2
 Six sophisticated trading strategies with visual indicators (🟢 BUY, 🟠 SELL, 🔴 SHORT, ⚪ HOLD):
 
 - **Bollinger Bands (BB)**: Price channel breakout detection
@@ -93,14 +127,7 @@ Color-coded trend arrows based on multi-factor technical analysis:
 
 Strategy weights: Ichimoku (2.5), Combined (2.0), BB+Ichimoku (1.8), MACD (1.5), BB (1.2), RSI (1.0)
 
-### 🛡️ Risk Management
-ATR-based stop loss system with position sizing:
-- **ATR Stop Loss**: Dynamic stops based on 14-period Average True Range
-- **Position Sizing**: Calculates optimal position size to risk 2% per trade (configurable)
-- **Risk/Reward Ratios**: Expected R:R calculation using 2:1 targets
-- **Maximum Position**: 25% account limit to prevent over-concentration
-
-### 🎯 Signal Confidence Scoring
+### 🎯 Trading Signal Framework
 Inter-strategy agreement analysis for actionable signals:
 - **STRONG (≥75%)**: High agreement across strategies (3+ strategies agreeing)
 - **MODERATE (50-75%)**: Partial consensus (2 strategies agreeing)
@@ -315,8 +342,25 @@ export BB_ICHIMOKU_MODE=CONFIRM     # OR | AND | CONFIRM (default: CONFIRM)
 export TREND_MOMENTUM_THRESHOLD=2.5  # Threshold for trend signal (default: 2.5)
 ```
 
-#### Risk Management
+#### Risk Management & Trade Setup
 ```bash
+export ATR_STOP_MULTIPLIER=2.0      # ATR multiplier for stop loss (default: 2.0)
+export RISK_PER_TRADE=2.0           # % of account to risk per trade (default: 2.0)
+```
+
+**Trade Setup Calculation:**
+- Stop Loss = Entry Price ± (ATR × ATR_STOP_MULTIPLIER)
+- Target = Entry Price ± (ATR × ATR_STOP_MULTIPLIER × 2)  # 2:1 R:R
+- Risk % = (|Entry - Stop Loss| / Entry) × 100
+- Reward % = (|Target - Entry| / Entry) × 100
+
+**Example with ATR_STOP_MULTIPLIER=2.0:**
+- Stock at $100, ATR = $2.50
+- BUY Setup:
+  - Entry: $100.00
+  - Stop Loss: $95.00 (100 - 2.5×2)
+  - Target: $110.00 (100 + 2.5×4)
+  - Risk/Reward: 5% / 10% (1:2)
 export ATR_STOP_MULTIPLIER=2.0      # ATR multiplier for stop loss (default: 2.0)
 export RISK_PER_TRADE=2.0           # Risk per trade as % of account (default: 2.0)
 ```
