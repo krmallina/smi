@@ -1845,19 +1845,19 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
 :root{{ --bg:#f5f7fa; --card:#ffffff; --text:#312d2a; --border:#d6dbe0; --accent:#0572ce; --accent-hover:#0460b2; --accent-dark:#024a87; --pos:#20813e; --neg:#c74634; --bullish:#20813e; --bearish:#c74634; --surface:#fafbfc; --shadow:0 1px 3px 0 rgba(0,0,0,0.08), 0 1px 2px 0 rgba(0,0,0,0.06); --shadow-hover:0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); --shadow-lg:0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); --radius-sm:4px; --radius-md:6px; --radius-lg:8px }}
 [data-theme="dark"]{{ --bg:#1b1f24; --card:#272c33; --text:#e8ecef; --border:#3d4349; --accent:#1f8ffa; --accent-hover:#4da3fb; --accent-dark:#0572ce; --pos:#3eb878; --neg:#e0604f; --bullish:#3eb878; --bearish:#e0604f; --surface:#21262b; --shadow:0 1px 3px 0 rgba(0,0,0,0.2), 0 1px 2px 0 rgba(0,0,0,0.12) }}
 *{{box-sizing:border-box}}
-body{{font-family:'Oracle Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:var(--bg);color:var(--text);padding:24px;margin:0;transition:background 0.2s,color 0.2s;font-size:14px;line-height:1.5}}
+body{{font-family:'Oracle Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:var(--bg);color:var(--text);padding:16px;margin:0;transition:background 0.2s,color 0.2s;font-size:14px;line-height:1.5}}
 .container{{max-width:1600px;margin:auto}}
-.top-bar{{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;background:var(--card);padding:20px 24px;border-radius:var(--radius-lg);box-shadow:var(--shadow);border:1px solid var(--border)}}
+.top-bar{{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;background:var(--card);padding:14px 20px;border-radius:var(--radius-lg);box-shadow:var(--shadow);border:1px solid var(--border);margin-bottom:16px}}
 .btn{{padding:10px 20px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-md);cursor:pointer;font-weight:600;font-size:14px;transition:all 0.2s;box-shadow:var(--shadow)}}
 .btn:hover{{background:var(--accent-hover);box-shadow:var(--shadow-hover);transform:translateY(-1px)}}
 .btn:active{{transform:translateY(0);box-shadow:var(--shadow)}}
-.alert-banner{{background:var(--card);color:var(--text);padding:16px 60px 16px 24px;border-radius:var(--radius-lg);margin-bottom:24px;text-align:center;font-weight:600;box-shadow:var(--shadow);border:3px solid #c74634;position:relative;display:flex;align-items:center;justify-content:center}}
+.alert-banner{{background:var(--card);color:var(--text);padding:12px 60px 12px 20px;border-radius:var(--radius-lg);margin-bottom:16px;text-align:center;font-weight:600;box-shadow:var(--shadow);border:3px solid #c74634;position:relative;display:flex;align-items:center;justify-content:center}}
 .alert-content{{flex:1;text-align:center}}
 .alert-dismiss{{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:var(--neg);border:2px solid var(--card);color:#fff;font-size:28px;font-weight:bold;cursor:pointer;opacity:0.95;transition:all 0.2s;padding:2px 10px;line-height:1;border-radius:var(--radius-md);box-shadow:var(--shadow)}}
 .alert-dismiss:hover{{opacity:1;background:#8b2d23;transform:translateY(-50%) scale(1.15);box-shadow:var(--shadow-hover)}}
-.controls-container{{background:var(--card);padding:20px;border-radius:var(--radius-lg);margin-bottom:24px;box-shadow:var(--shadow);border:3px solid #a8b2bd}}
-.hours-toggle-container{{display:flex;gap:15px;flex-wrap:wrap;align-items:center;justify-content:space-between;padding-bottom:20px;border-bottom:1px solid var(--border);margin-bottom:20px}}
-.quick-filters{{display:flex;flex-wrap:wrap;gap:10px;padding-bottom:20px;border-bottom:1px solid var(--border);margin-bottom:20px}}
+.controls-container{{background:var(--card);padding:16px;border-radius:var(--radius-lg);margin-bottom:16px;box-shadow:var(--shadow);border:3px solid #a8b2bd}}
+.hours-toggle-container{{display:flex;gap:15px;flex-wrap:wrap;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:1px solid var(--border);margin-bottom:14px}}
+.quick-filters{{display:flex;flex-wrap:wrap;gap:10px;padding-bottom:14px;border-bottom:1px solid var(--border);margin-bottom:14px}}
 .chip{{padding:8px 18px;background:var(--surface);border:1.5px solid var(--border);border-radius:20px;cursor:pointer;font-weight:600;font-size:13px;transition:all 0.2s;color:var(--text)}}
 .chip.active{{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:var(--shadow)}}
 .chip:hover{{background:var(--accent-hover);border-color:var(--accent-hover);color:#fff;transform:translateY(-1px)}}
@@ -2436,6 +2436,68 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
             
             card_ma_html = f'<div>MA: {" | ".join(ma_parts)}{cross_indicator}</div>'
         
+        # Build ranges_html for card view (recalculate per card, not reuse from table view)
+        card_bb_bar = ""
+        if (
+            pd.notna(r.get("bb_position_pct"))
+            and pd.notna(r.get("bb_lower"))
+            and pd.notna(r.get("bb_middle"))
+            and pd.notna(r.get("bb_upper"))
+        ):
+            try:
+                pos = float(r["bb_position_pct"])
+                pos = max(0.0, min(100.0, pos))
+                bb_color = f"linear-gradient(to right, var(--pos) 0%, var(--pos) {pos}%, var(--neg) {pos}%, var(--neg) 100%)"
+                card_bb_bar = f'<div class="range-container"><div class="range-title">Bollinger Bands</div><div class="range-bar" style="background:{bb_color}"><div class="range-bar-marker" style="left:{pos}%"></div></div><div class="range-labels"><span>${na(r["bb_lower"])}</span><span>${na(r["bb_middle"])}</span><span>${na(r["bb_upper"])}</span></div><div style="font-size:0.75em;text-align:center">Width: {na(r["bb_width_pct"],"{:.1f}")}% – {r["bb_status"]}</div></div>'
+            except Exception:
+                card_bb_bar = ""
+
+        card_impl_bar = ""
+        if (
+            pd.notna(r.get("implied_move_pct"))
+            and pd.notna(r.get("implied_low"))
+            and pd.notna(r.get("implied_high"))
+        ):
+            try:
+                im_pct = float(r["implied_move_pct"])
+                if im_pct > 0:
+                    left_pct = 50 - im_pct / 2
+                    right_pct = 50 + im_pct / 2
+                    i_color = f"linear-gradient(to right, var(--neg) 0%, var(--neg) {left_pct}%, var(--pos) {right_pct}%, var(--pos) 100%)"
+                    card_impl_bar = f'<div class="range-container"><div class="range-title">Implied Move ±{im_pct:.1f}%</div><div class="range-bar" style="background:{i_color}"><div class="range-bar-marker" style="left:50%"></div></div><div class="range-labels"><span>${na(r["implied_low"])}</span><span>${na(r["implied_high"])}</span></div></div>'
+            except Exception:
+                card_impl_bar = ""
+
+        card_day_block = ""
+        if (
+            pd.notna(r.get("day_low"))
+            and pd.notna(r.get("day_high"))
+            and r["day_high"] is not None
+            and r["day_low"] is not None
+            and (r["day_high"] - r["day_low"]) > 0
+        ):
+            day_pos = (r["price"] - r["day_low"]) / (r["day_high"] - r["day_low"]) * 100
+            day_color = f"linear-gradient(to right, var(--pos) 0%, var(--pos) {day_pos}%, var(--neg) {day_pos}%, var(--neg) 100%)"
+            card_day_block = f"""
+    <div class="range-container"><div class="range-title">Day</div><div class="range-bar" style="background:{day_color}"><div class="range-bar-marker" style="left:{day_pos}%"></div></div><div class="range-labels"><span>${r['day_low']:.2f}</span><span>${r['day_high']:.2f}</span></div></div>
+    """
+
+        card_y52_block = ""
+        if (
+            pd.notna(r.get("52w_low"))
+            and pd.notna(r.get("52w_high"))
+            and r["52w_high"] is not None
+            and r["52w_low"] is not None
+            and (r["52w_high"] - r["52w_low"]) > 0
+        ):
+            y52_pos = (r["price"] - r["52w_low"]) / (r["52w_high"] - r["52w_low"]) * 100
+            y52_color = f"linear-gradient(to right, var(--pos) 0%, var(--pos) {y52_pos}%, var(--neg) {y52_pos}%, var(--neg) 100%)"
+            card_y52_block = f"""
+    <div class="range-container"><div class="range-title">52W</div><div class="range-bar" style="background:{y52_color}"><div class="range-bar-marker" style="left:{y52_pos}%"></div></div><div class="range-labels"><span>${r['52w_low']:.2f}</span><span>${r['52w_high']:.2f}</span></div></div>
+    """
+
+        card_ranges_html = f"{card_day_block}{card_y52_block}{card_bb_bar}{card_impl_bar}"
+        
         html += f"""<div class="stock-card stock-row" style="background:{bg}" 
             data-ticker="{r['ticker']}" 
             data-change="{r['change_pct']}" 
@@ -2483,7 +2545,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 {card_risk_html}
         </div>
         <div class="card-page">
-{ranges_html}
+{card_ranges_html}
         </div>
     </div>
 </div>"""
