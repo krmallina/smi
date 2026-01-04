@@ -1100,13 +1100,14 @@ def fetch(ticker, ext=False, retry=0):
         signal_confidence, signal_strength = calculate_signal_confidence(all_signals, active_strategy)
         
         # Calculate risk management parameters (ATR-based stop loss)
+        # ALWAYS calculate ATR for all tickers (not just BUY/SHORT) so trade setups can be shown
         atr_value = None
         stop_loss = None
         risk_reward_ratio = None
         position_size_pct = None
         
-        if len(h30) >= 14 and primary_signal in ('BUY', 'SHORT'):
-            # Calculate ATR (Average True Range) for stop loss
+        if len(h30) >= 14:
+            # Calculate ATR (Average True Range) for risk management
             high = h30['High']
             low = h30['Low']
             close = h30['Close']
@@ -1117,7 +1118,8 @@ def fetch(ticker, ext=False, retry=0):
             tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
             atr_value = tr.rolling(window=14).mean().iloc[-1]
             
-            if atr_value and atr_value > 0:
+            # Only calculate stop loss and position sizing for active BUY/SHORT signals
+            if atr_value and atr_value > 0 and primary_signal in ('BUY', 'SHORT'):
                 # Configurable ATR multiplier for stop loss
                 ATR_STOP_MULTIPLIER = float(os.getenv('ATR_STOP_MULTIPLIER', '2.0'))
                 RISK_PER_TRADE = float(os.getenv('RISK_PER_TRADE', '2.0'))  # % of account
@@ -2408,6 +2410,58 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
             card_risk_html += ' | '.join(card_risk_parts)
             card_risk_html += '</div>'
         
+        # Build Trade Setup display (Entry, Stop Loss, Target with visual indicators)
+        card_trade_setup_html = ''
+        active_sig = r.get("active_signal") or r.get("bb_signal")
+        
+        # Show trade setup recommendations for all tickers with ATR data
+        if r.get('price') is not None and card_atr_val is not None and card_atr_val > 0:
+            entry_price = r['price']
+            ATR_MULTIPLIER = 2.0
+            
+            # Determine trade direction based on signal, default to LONG if no signal
+            if active_sig == 'SHORT':
+                trade_type = 'SHORT'
+                stop_loss_price = entry_price + (card_atr_val * ATR_MULTIPLIER)
+                target_price = entry_price - (card_atr_val * ATR_MULTIPLIER * 2.0)
+                setup_color = 'var(--neg)'
+                setup_icon = '🔴'
+            else:
+                # Show LONG setup for BUY signals or as default recommendation
+                trade_type = 'LONG' if active_sig != 'BUY' else 'BUY'
+                stop_loss_price = entry_price - (card_atr_val * ATR_MULTIPLIER)
+                target_price = entry_price + (card_atr_val * ATR_MULTIPLIER * 2.0)
+                setup_color = 'var(--pos)'
+                setup_icon = '🟢'
+            
+            # Calculate percentages
+            risk_per_share = abs(entry_price - stop_loss_price)
+            risk_pct = (risk_per_share / entry_price) * 100
+            
+            if trade_type in ('BUY', 'LONG'):
+                reward_pct = ((target_price - entry_price) / entry_price) * 100
+            else:  # SHORT
+                reward_pct = ((entry_price - target_price) / entry_price) * 100
+            
+            # Add signal indicator
+            signal_label = f" - {active_sig}" if active_sig in ('BUY', 'SHORT', 'SELL', 'HOLD') else ""
+            
+            card_trade_setup_html = f'''
+<div style="margin-top:10px;padding:12px;border:2px solid {setup_color};border-radius:8px;background:var(--card);box-shadow:0 2px 8px rgba(0,0,0,0.2)">
+<div style="font-weight:bold;font-size:1.1em;margin-bottom:10px;color:{setup_color}">{setup_icon} TRADE SETUP ({trade_type}{signal_label})</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:0.95em;color:var(--text)">
+<div style="text-align:left"><strong>Entry:</strong> ${entry_price:.2f}</div>
+<div style="text-align:right;color:var(--text);opacity:0.8">Current</div>
+<div style="text-align:left"><strong>Stop Loss:</strong> ${stop_loss_price:.2f}</div>
+<div style="text-align:right;color:#ff4444;font-weight:bold">-{risk_pct:.1f}%</div>
+<div style="text-align:left"><strong>Target:</strong> ${target_price:.2f}</div>
+<div style="text-align:right;color:#00cc00;font-weight:bold">+{reward_pct:.1f}%</div>
+</div>
+<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);text-align:center;font-size:0.9em;color:var(--text)">
+<strong>Risk/Reward:</strong> <span style="color:{setup_color};font-weight:bold">{risk_pct:.1f}% / {reward_pct:.1f}% (1:2)</span>
+</div>
+</div>'''
+        
         # Upside color coding
         card_upside_cls = (
             "bullish"
@@ -2543,6 +2597,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 <div>Earnings: <strong>{r.get('earnings_date') or 'N/A'}</strong></div>
 {card_conf_html}
 {card_risk_html}
+{card_trade_setup_html}
         </div>
         <div class="card-page">
 {card_ranges_html}
