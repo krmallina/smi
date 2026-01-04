@@ -2287,12 +2287,12 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         html += f"""<tr class="stock-row" data-ticker="{r['ticker']}" data-change="{r['change_pct']}" data-change-5d="{r.get('change_5d') or ''}" data-earnings="{r.get('earnings_date_iso') or ''}" data-rsi="{r['rsi'] or 50}" data-vol="{r['volume_raw']}" data-meme="{r['is_meme_stock']}" data-squeeze="{r['squeeze_level']}" data-bb-width="{bb_width_val}" data-dividend="{div_ds}" data-category="{r.get('category') or ''}" data-signal="{active_sig}">
     <td><a href="https://www.barchart.com/stocks/quotes/{r['ticker']}" target="_blank">{bb_icon}{r['ticker']}{trend_arrow}</a> (<a href="https://finance.yahoo.com/quote/{r['ticker']}" target="_blank" style="font-size:0.9em">Y</a>, <a href="https://finviz.com/quote.ashx?t={r['ticker']}" target="_blank" style="font-size:0.9em">F</a>, <a href="{zacks_url}" target="_blank" style="font-size:0.9em">Z</a>, <a href="{stock_analysis_url}" target="_blank" style="font-size:0.9em">S</a>)</td>
 <td data-sort="{r['price']:.2f}">${r['price']:.2f} {r['sparkline']}</td>
-<td>{fmt_change(r['change_pct'], r['change_abs_day'])}</td>
-<td>{fmt_change(r.get('change_5d'), r.get('change_abs_5d'))} {r.get('sparkline_5d', '')}</td>
-<td>{fmt_change(r['change_1m'], r['change_abs_1m'])} {r.get('sparkline_1m', '')}</td>
-<td>{fmt_change(r['change_6m'], r['change_abs_6m'])} {r.get('sparkline_6m', '')}</td>
-<td>{fmt_change(r['change_ytd'], r['change_abs_ytd'])} {r.get('sparkline_ytd', '')}</td>
-<td>{fmt_change(r.get('change_1y'), r.get('change_abs_1y'))} {r.get('sparkline_1y', '')}</td>
+<td data-sort="{(r['change_pct'] if r['change_pct'] is not None else -999999):.10f}">{fmt_change(r['change_pct'], r['change_abs_day'])}</td>
+<td data-sort="{(r.get('change_5d') if r.get('change_5d') is not None else -999999):.10f}">{fmt_change(r.get('change_5d'), r.get('change_abs_5d'))} {r.get('sparkline_5d', '')}</td>
+<td data-sort="{(r['change_1m'] if r['change_1m'] is not None else -999999):.10f}">{fmt_change(r['change_1m'], r['change_abs_1m'])} {r.get('sparkline_1m', '')}</td>
+<td data-sort="{(r['change_6m'] if r['change_6m'] is not None else -999999):.10f}">{fmt_change(r['change_6m'], r['change_abs_6m'])} {r.get('sparkline_6m', '')}</td>
+<td data-sort="{(r['change_ytd'] if r['change_ytd'] is not None else -999999):.10f}">{fmt_change(r['change_ytd'], r['change_abs_ytd'])} {r.get('sparkline_ytd', '')}</td>
+<td data-sort="{(r.get('change_1y') if r.get('change_1y') is not None else -999999):.10f}">{fmt_change(r.get('change_1y'), r.get('change_abs_1y'))} {r.get('sparkline_1y', '')}</td>
 <td data-sort="{r['volume_raw']}">{fmt_vol(r['volume'])} {r.get('sparkline_vol', '')}</td>
 <td>{ranges_html}</td>
 <td>{indicators_html}</td>
@@ -2888,21 +2888,34 @@ document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', func
     applyFilter();
 }));
 
-document.querySelectorAll('th[data-sort]').forEach((th) => {
-    th.onclick = () => {
+document.querySelectorAll('th[data-sort]').forEach(function(th) {
+    th.onclick = function() {
         const col = th.cellIndex;
         const table = document.getElementById('stockTable');
         const rows = Array.from(table.querySelectorAll('tr:nth-child(n+2)'));
         const dir = th.dataset.dir = (th.dataset.dir === 'asc' ? 'desc' : 'asc');
-        rows.sort((a, b) => {
-            let av = a.cells[col].querySelector('[data-sort]')?.dataset.sort || a.cells[col].textContent.trim();
-            let bv = b.cells[col].querySelector('[data-sort]')?.dataset.sort || b.cells[col].textContent.trim();
+        rows.sort(function(a, b) {
+            const cellA = a.cells[col];
+            const cellB = b.cells[col];
+            let av, bv;
+            if (cellA.dataset.sort) {
+                av = cellA.dataset.sort;
+            } else {
+                const sortElemA = cellA.querySelector('[data-sort]');
+                av = sortElemA ? sortElemA.dataset.sort : cellA.textContent.trim();
+            }
+            if (cellB.dataset.sort) {
+                bv = cellB.dataset.sort;
+            } else {
+                const sortElemB = cellB.querySelector('[data-sort]');
+                bv = sortElemB ? sortElemB.dataset.sort : cellB.textContent.trim();
+            }
             av = isNaN(parseFloat(av)) ? av : parseFloat(av);
             bv = isNaN(parseFloat(bv)) ? bv : parseFloat(bv);
             if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * (dir === 'asc' ? 1 : -1);
             return av.localeCompare(bv, undefined, {numeric: true}) * (dir === 'asc' ? 1 : -1);
         });
-        rows.forEach(r => table.appendChild(r));
+        rows.forEach(function(r) { table.appendChild(r); });
     };
 });
 
