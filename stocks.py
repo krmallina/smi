@@ -2888,8 +2888,9 @@ document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', func
     applyFilter();
 }));
 
-document.querySelectorAll('th[data-sort]').forEach((th, col) => {
+document.querySelectorAll('th[data-sort]').forEach((th) => {
     th.onclick = () => {
+        const col = th.cellIndex;
         const table = document.getElementById('stockTable');
         const rows = Array.from(table.querySelectorAll('tr:nth-child(n+2)'));
         const dir = th.dataset.dir = (th.dataset.dir === 'asc' ? 'desc' : 'asc');
