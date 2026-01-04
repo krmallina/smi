@@ -65,7 +65,9 @@ ATR-based stop loss system with position sizing:
 - **Risk/Reward Ratios**: Expected R:R calculation using 2:1 targets (4× ATR for targets, 2× ATR for stops)
 - **Maximum Position**: 25% account limit to prevent over-concentration
 - **Trade Setup Display**: Visual entry/stop/target recommendations on card view page 2
-Six sophisticated trading strategies with visual indicators (🟢 BUY, 🟠 SELL, 🔴 SHORT, ⚪ HOLD):
+
+### 🎯 Trading Strategies
+Six sophisticated trading strategies with visual indicators (🟢 BUY, 🟠 SELL, 🔴 SHORT, ⏸️ HOLD):
 
 - **Bollinger Bands (BB)**: Price channel breakout detection
   - BUY: Price ≤10% of BB range (oversold)
@@ -116,7 +118,7 @@ Six sophisticated trading strategies with visual indicators (🟢 BUY, 🟠 SELL
 - 🟢 **BUY** - Strong bullish signal, entry opportunity
 - 🔴 **SHORT** - Strong bearish signal, short entry opportunity
 - 🟠 **SELL** - Exit signal for existing positions
-- ⚪ **HOLD** - Neutral position, no action recommended
+- ⏸️ **HOLD** - Neutral position, no action recommended
 
 ### 📈 Predicted Trend Indicators
 Color-coded trend arrows based on multi-factor technical analysis:
@@ -155,7 +157,7 @@ Interactive filter chips for quick analysis:
 - 🟢 **Buy Signal** - Stocks with active buy signals
 - 🟠 **Sell Signal** - Stocks with active sell signals  
 - 🔴 **Short Signal** - Stocks with active short signals
-- ⚪ **Hold Signal** - Stocks with neutral/hold signals
+- ⏸️ **Hold Signal** - Stocks with neutral/hold signals
 - **Oversold** (RSI < 30) / **Overbought** (RSI > 70)
 - **Surge** (>10% gain) / **Crash** (>10% loss)
 - **Meme Stocks** / **High Volume** (>50M) / **M7 Starred**
