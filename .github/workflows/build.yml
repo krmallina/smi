@@ -19,7 +19,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 
+          fetch-depth: 1  # Shallow clone - we don't need history for generated files
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -31,35 +31,29 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; else pip install yfinance pandas requests; fi
       - name: Run stocks.py
         run: python stocks.py
-      - name: Sync and Push Changes
+      - name: Deploy dashboards (no history tracking)
         if: success()
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Only add the dashboard HTML files, not the workflow
+          # Stage only HTML files
           git add data/*.html
           
           if git diff --staged --quiet; then
-            echo "No changes to commit."
+            echo "No changes to deploy."
             exit 0
           fi
           
-          git commit -m "Update dashboards $(date -u)"
+          # Commit with --amend to replace last commit (no new history)
+          # First commit will create history, subsequent ones reuse the same commit
+          if git log --oneline -1 | grep -q "Deploy dashboard"; then
+            git commit --amend --no-edit
+          else
+            git commit -m "Deploy dashboard - auto-updated"
+          fi
           
-          # STRATEGY: Always force push dashboard changes (they're generated data, not source code)
-          for i in {1..5}; do
-            echo "Attempt $i: Pushing..."
-            
-            # Fetch latest to update remote tracking
-            git fetch origin main
-            
-            # Force push our dashboard changes (last write wins)
-            if git push --force-with-lease origin main; then
-              echo "Successfully pushed changes"
-              break
-            else
-              echo "Push failed, retrying in 5s..."
-              sleep 5
-            fi
-          done
+          # Force push to main (overwrites, no history accumulation)
+          git push --force origin main
+          
+          echo "✓ Dashboards updated on main branch (no history tracking)"
