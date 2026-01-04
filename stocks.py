@@ -110,30 +110,9 @@ CARD_ARROW_SIZE_PX = 24  # Size of navigation arrow buttons
 CARD_MIN_WIDTH_PX = 300  # Minimum width for card grid items
 HEAT_TILE_HEIGHT_PX = 250  # Fixed height for heatmap tiles in pixels
 
-MEME_STOCKS = frozenset(
-    {
-        "GME",
-        "AMC",
-        "BB",
-        "KOSS",
-        "EXPR",
-        "DJT",
-        "HOOD",
-        "RDDT",
-        "SPCE",
-        "RIVN",
-        "DNUT",
-        "OPEN",
-        "KSS",
-        "RKLB",
-        "GPRO",
-        "AEO",
-        "BYND",
-        "CVNA",
-        "PLTR",
-        "SMCI",
-    }
-)
+# These will be loaded from tickers.csv file
+MEME_STOCKS = frozenset()
+M7_STOCKS = frozenset()
 
 # Category buckets for filtering chips
 CATEGORY_MAP = {
@@ -1589,19 +1568,79 @@ def get_index_data(symbol):
         return {"price": None, "change_pct": None, "change_abs": None}
 
 
-def dashboard(csv="data/tickers.csv", ext=False):
-    os.makedirs("data", exist_ok=True)
+def load_ticker_sections(csv="data/tickers.csv"):
+    """Load tickers from CSV file with optional [MEME], [M7], and [TICKERS] sections.
+    
+    If sections are not present, treats all tickers as regular tickers.
+    """
+    global MEME_STOCKS, M7_STOCKS
+    
+    meme_list = []
+    m7_list = []
+    ticker_list = []
+    current_section = None
+    has_sections = False
+    
     try:
         with open(csv, "r", encoding="utf-8") as f:
-            txt = f.read()
-        txt = txt.replace("\r\n", "\n").replace("\r", "\n")
-        parts = re.split(r"[\n,]+", txt.strip())
-        parts = [p.strip().upper() for p in parts if p and p.strip()]
-        if parts and parts[0].lower() in ("ticker", "tickers"):
-            parts = parts[1:]
-        tickers = pd.Series(parts).unique().tolist()
-    except Exception:
-        tickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "SPY"]
+            content = f.read()
+        
+        # Check if file has section headers
+        has_sections = "[MEME]" in content or "[M7]" in content or "[TICKERS]" in content
+        
+        if has_sections:
+            # Parse with sections
+            for line in content.split('\n'):
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                # Check for section headers
+                if line == "[MEME]":
+                    current_section = "meme"
+                    continue
+                elif line == "[M7]":
+                    current_section = "m7"
+                    continue
+                elif line == "[TICKERS]":
+                    current_section = "tickers"
+                    continue
+                
+                # Parse tickers from line
+                parts = re.split(r"[,]+", line)
+                parts = [p.strip().upper() for p in parts if p and p.strip()]
+                
+                # Add to appropriate list
+                if current_section == "meme":
+                    meme_list.extend(parts)
+                elif current_section == "m7":
+                    m7_list.extend(parts)
+                elif current_section == "tickers":
+                    ticker_list.extend(parts)
+        else:
+            # Backward compatible: treat as simple CSV without sections
+            content = content.replace("\r\n", "\n").replace("\r", "\n")
+            parts = re.split(r"[\n,]+", content.strip())
+            parts = [p.strip().upper() for p in parts if p and p.strip()]
+            # Skip header row if present
+            if parts and parts[0].lower() in ("ticker", "tickers"):
+                parts = parts[1:]
+            ticker_list = parts
+        
+        # Update global frozensets
+        MEME_STOCKS = frozenset(meme_list)
+        M7_STOCKS = frozenset(m7_list)
+        
+        # Return unique tickers
+        return pd.Series(ticker_list).unique().tolist(), meme_list, m7_list
+    except Exception as e:
+        print(f"Warning: Could not load {csv}: {e}")
+        return ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "SPY"], [], []
+
+
+def dashboard(csv="data/tickers.csv", ext=False):
+    os.makedirs("data", exist_ok=True)
+    tickers, meme_list, m7_list = load_ticker_sections(csv)
 
     data = []
     # Adaptive worker count: Increased from 3 to 5 for better parallelization
@@ -1870,6 +1909,7 @@ body{{font-family:'Oracle Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Robo
 .view-btn.active:hover{{color:#fff}}
 #tableView{{display:block}}
 #cardView,#heatView{{display:none}}
+#heatView{{width:100%;max-width:100vw;overflow:hidden;box-sizing:border-box}}
 .card-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax({CARD_MIN_WIDTH_PX}px,1fr));gap:20px}}
 .stock-card{{background:var(--card);border-radius:var(--radius-lg);padding:{CARD_PADDING_TOP_PX}px {CARD_PADDING_SIDE_PX}px {CARD_PADDING_SIDE_PX}px {CARD_PADDING_SIDE_PX}px;box-shadow:var(--shadow);transition:all 0.2s;border:1px solid var(--border);position:relative;height:{CARD_HEIGHT_PX}px;overflow:hidden;display:flex;flex-direction:column}}
 .stock-card:hover{{transform:translateY(-2px);box-shadow:var(--shadow-lg);border-color:var(--accent)}}
@@ -1885,8 +1925,16 @@ body{{font-family:'Oracle Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Robo
 .card-scroll-btn:disabled{{opacity:0.3;cursor:not-allowed;pointer-events:none}}
 .card-scroll-left{{left:8px}}
 .card-scroll-right{{left:36px}}
-.heat-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}}
-.heat-tile{{height:{HEAT_TILE_HEIGHT_PX}px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:var(--radius-md);padding:12px;cursor:pointer;transition:all 0.2s;border:1px solid transparent;overflow-y:auto}}
+.heat-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;padding:8px;max-width:100%;box-sizing:border-box}}
+.heat-tile{{min-height:180px;height:auto;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:var(--radius-md);padding:12px;cursor:pointer;transition:all 0.2s;border:1px solid transparent;overflow:hidden;box-sizing:border-box}}
+@media (min-width: 768px) {{
+  .heat-grid{{grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}}
+  .heat-tile{{min-height:200px}}
+}}
+@media (min-width: 1200px) {{
+  .heat-grid{{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}}
+  .heat-tile{{min-height:220px}}
+}}
 .heat-tile:hover{{transform:scale(1.03);box-shadow:var(--shadow-lg);border-color:var(--accent)}}
 table{{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);box-shadow:var(--shadow);border-radius:var(--radius-lg);overflow:hidden;border:1px solid var(--border)}}
 th{{background:linear-gradient(180deg,var(--accent),var(--accent-dark));color:#fff;padding:16px;cursor:pointer;position:sticky;top:0;z-index:10;font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid var(--accent-dark)}}
@@ -2714,9 +2762,13 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 
     html += "</div></div></div>"
 
-    html += """
+    # Inject M7_TICKERS array into JavaScript
+    m7_tickers_js = json.dumps(list(M7_STOCKS))
+    html += f"""
 <script>
-const prefsKey = 'dash_prefs';
+const M7_TICKERS = {m7_tickers_js};
+"""
+    html += """const prefsKey = 'dash_prefs';
 let prefs = JSON.parse(localStorage.getItem(prefsKey) || '{"theme":"light","view":"table"}');
 document.documentElement.setAttribute('data-theme', prefs.theme);
 
@@ -2768,7 +2820,7 @@ function applyFilter() {
         else if (currentFilter === 'crash') show = (ch < -10) || (ch5 < -10);
         else if (currentFilter === 'meme') show = meme;
         else if (currentFilter === 'volume') show = vol > 5e7;
-        else if (currentFilter === 'm7') show = ['AAPL','AMZN','GOOGL','META','MSFT','NVDA','TSLA','AVGO','ORCL','NFLX','TQQQ','SSO','SOXL','BULZ','SHOP','SSO','UPRO','TNA','MIDU','SPYU','XLK','TECL','IGV','IYW','BNKU','CURE','LABU','NAIL','TARK','FNGU'].includes(ticker);
+        else if (currentFilter === 'm7') show = M7_TICKERS.includes(ticker);
         else if (currentFilter === 'squeeze') show = sq !== 'None';
         else if (currentFilter === 'earnings-week') show = (function(){
             const ed = r.dataset.earnings;
