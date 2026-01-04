@@ -1921,7 +1921,7 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
 <div class="top-bar">
 <div><h1>📊 Dashboard</h1><small>{update}</small></div>
 <div style="display:flex;gap:15px;align-items:center;white-space:nowrap">
-<span>{indices_h}</span><span style="color:#888">|</span><span>{fg_h}</span><span style="color:#888">|</span><span>{aaii_h}</span>
+<span id="marketIndices">{indices_h}</span><span style="color:#888">|</span><span>{fg_h}</span><span style="color:#888">|</span><span>{aaii_h}</span>
 </div>
 </div>
 
@@ -2310,13 +2310,13 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         except Exception:
             mcap_cls = "neutral"
 
-        # 52W display
-        y52_low = r.get("52w_low")
-        y52_high = r.get("52w_high")
-        if pd.notna(y52_low) and pd.notna(y52_high):
-            y52_display = f"${y52_low:.2f} - ${y52_high:.2f}"
+        # 52W display for card view
+        card_y52_low = r.get("52w_low")
+        card_y52_high = r.get("52w_high")
+        if pd.notna(card_y52_low) and pd.notna(card_y52_high):
+            card_y52_display = f"${card_y52_low:.2f} - ${card_y52_high:.2f}"
         else:
-            y52_display = "N/A"
+            card_y52_display = "N/A"
 
         # include dividend dataset for card
         card_div_ds = (
@@ -2452,7 +2452,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 <div>6M: {fmt_change(r['change_6m'], r['change_abs_6m'])} {r.get('sparkline_6m', '')}</div>
 <div>YTD: {fmt_change(r['change_ytd'], r['change_abs_ytd'])} {r.get('sparkline_ytd', '')}</div>
 <div>Volume: {fmt_vol(r['volume'])} {r.get('sparkline_vol', '')}</div>
-<div><strong>52W: {y52_display}</strong></div>
+<div><strong>52W: {card_y52_display}</strong></div>
 <div>{display_label}: <span class="{mcap_cls}"><strong>{fmt_mcap(display_val)}</strong></span></div>
 <div><span class="{hv_cls}">Volatility: {hv_str}</span></div>
 <div>BB: {r['bb_status']} ({na(r['bb_width_pct'], '{:.1f}%')})</div>
@@ -2521,13 +2521,13 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
         except Exception:
             mcap_cls = "neutral"
 
-        # 52W range
-        y52_low = r.get("52w_low")
-        y52_high = r.get("52w_high")
-        if pd.notna(y52_low) and pd.notna(y52_high):
-            y52_display = f"${y52_low:.2f} - ${y52_high:.2f}"
+        # 52W range for heatmap view
+        heat_y52_low = r.get("52w_low")
+        heat_y52_high = r.get("52w_high")
+        if pd.notna(heat_y52_low) and pd.notna(heat_y52_high):
+            heat_y52_display = f"${heat_y52_low:.2f} - ${heat_y52_high:.2f}"
         else:
-            y52_display = "N/A"
+            heat_y52_display = "N/A"
 
         # include dividend dataset for heat tiles
         heat_div_ds = (
@@ -2585,7 +2585,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
     <div style="font-size:0.85em">5D: {fmt_change(r.get('change_5d'), r.get('change_abs_5d'))} {r.get('sparkline_5d', '')}</div>
     <div style="font-size:0.85em">1M: {fmt_change(r['change_1m'], r['change_abs_1m'])} {r.get('sparkline_1m', '')}</div>
     <div style="font-size:0.85em">Vol: {fmt_vol(r['volume'])} {r.get('sparkline_vol', '')}</div>
-    <div style="font-size:0.9em;margin-top:6px"><strong>52W: {y52_display}</strong></div>
+    <div style="font-size:0.9em;margin-top:6px"><strong>52W: {heat_y52_display}</strong></div>
     <div style="font-size:0.9em">{display_label}: <span class="{mcap_cls}"><strong>{fmt_mcap(display_val)}</strong></span></div>
     </div>"""
 
@@ -2645,7 +2645,7 @@ function applyFilter() {
         else if (currentFilter === 'crash') show = (ch < -10) || (ch5 < -10);
         else if (currentFilter === 'meme') show = meme;
         else if (currentFilter === 'volume') show = vol > 5e7;
-        else if (currentFilter === 'm7') show = ['AAPL','AMZN','GOOGL','META','MSFT','NVDA','TSLA','AVGO','ORCL','NFLX','TQQQ','SSO','SOXL','BULZ','SHOP','SSO','UPRO','TNA','MIDU','SPYU','XLK','TECL','IGV','IWY','BNKU','CURE','LABU'].includes(ticker);
+        else if (currentFilter === 'm7') show = ['AAPL','AMZN','GOOGL','META','MSFT','NVDA','TSLA','AVGO','ORCL','NFLX','TQQQ','SSO','SOXL','BULZ','SHOP','SSO','UPRO','TNA','MIDU','SPYU','XLK','TECL','IGV','IWY','BNKU','CURE','LABU','NAIL','TARK'].includes(ticker);
         else if (currentFilter === 'squeeze') show = sq !== 'None';
         else if (currentFilter === 'earnings-week') show = (function(){
             const ed = r.dataset.earnings;
@@ -2795,7 +2795,52 @@ window.addEventListener('DOMContentLoaded', () => {
             banner.style.display = 'none';
         }
     }
+    
+    // Fetch live market indices for GitHub Pages
+    fetchMarketIndices();
 });
+
+async function fetchMarketIndices() {
+    const symbols = [
+        {ticker: '^DJI', name: 'Dow'},
+        {ticker: '^GSPC', name: 'S&P'},
+        {ticker: '^IXIC', name: 'Nasdaq'},
+        {ticker: '^VIX', name: 'VIX'}
+    ];
+    
+    try {
+        const results = await Promise.all(symbols.map(async ({ticker, name}) => {
+            try {
+                const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5d`, {
+                    headers: {'User-Agent': 'Mozilla/5.0'}
+                });
+                if (!response.ok) return null;
+                const data = await response.json();
+                const quote = data.chart.result[0];
+                const meta = quote.meta;
+                const price = meta.regularMarketPrice || meta.previousClose;
+                const prevClose = meta.chartPreviousClose || meta.previousClose;
+                const change = price - prevClose;
+                return {name, price, change};
+            } catch {
+                return null;
+            }
+        }));
+        
+        let html = results.map(r => {
+            if (!r) return `<span class="neutral">${r?.name || '?'}: N/A</span>`;
+            const cls = r.change >= 0 ? 'positive' : 'negative';
+            return `<span class="${cls}">${r.name}: ${r.price.toFixed(2)} (${r.change >= 0 ? '+' : ''}${r.change.toFixed(2)})</span>`;
+        }).join(' | ');
+        
+        const indicesEl = document.getElementById('marketIndices');
+        if (indicesEl && results.some(r => r !== null)) {
+            indicesEl.innerHTML = html;
+        }
+    } catch (error) {
+        console.log('Market indices fetch failed (using server values):', error);
+    }
+}
 </script>
 </body></html>"""
 
