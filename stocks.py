@@ -90,9 +90,9 @@ PST = pytz.timezone("America/Los_Angeles")
 MAX_WORKERS = 5  # Maximum thread pool workers for parallel ticker fetching
 MIN_WORKERS = 2  # Minimum thread pool workers
 TICKER_BATCH_DIVISOR = 6  # Divisor for calculating worker count from ticker count
-RATE_LIMIT_INTERVAL = 0.9  # Minimum seconds between API requests
+RATE_LIMIT_INTERVAL = 0.6  # Minimum seconds between API requests (reduced due to fewer calls)
 MAX_RETRIES = 3  # Maximum retry attempts for failed API calls
-FETCH_BASE_DELAY = 0.1  # Base delay in seconds for fetch requests
+FETCH_BASE_DELAY = 0.05  # Base delay in seconds for fetch requests (reduced)
 FETCH_JITTER_MAX = 0.15  # Maximum random jitter to add to delays
 RETRY_DELAY_MULTIPLIER = 0.15  # Multiplier for retry delays
 EXPONENTIAL_BACKOFF_BASE = 5  # Base seconds for exponential backoff
@@ -805,7 +805,12 @@ def fetch(ticker, ext=False, retry=0):
         time.sleep(FETCH_BASE_DELAY + jitter + (retry * RETRY_DELAY_MULTIPLIER))
 
         info = get_ticker_info_cached(ticker)
+        
+        # OPTIMIZATION: Fetch longer history once and slice it for all needs
+        # This reduces API calls from ~8 to ~3 per ticker
+        h_all = safe_history(t, period="1y")  # Get 1 year for all calculations
         h_day = safe_history(t, period="1d", interval="1m", prepost=ext)
+        
         if h_day.empty:
             h_day = safe_history(t, period="5d", prepost=ext)
         if h_day.empty:
@@ -813,7 +818,13 @@ def fetch(ticker, ext=False, retry=0):
 
         price = h_day["Close"].iloc[-1]
         day_low, day_high = h_day["Low"].min(), h_day["High"].max()
-        reg = safe_history(t, period="5d", prepost=False)
+        
+        # Slice from h_all instead of separate API calls
+        reg = safe_history(t, period="5d", prepost=False)  # Still need this for prepost=False
+        h30 = h_all.tail(60) if not h_all.empty else pd.DataFrame()  # Last 60 days
+        h6m = h_all.tail(180) if not h_all.empty else pd.DataFrame()  # Last ~6 months
+        h1m = h_all.tail(42) if not h_all.empty else pd.DataFrame()  # Last ~2 months
+        
         change_pct = change_abs_day = 0.0
         if len(reg) >= 2:
             prev = reg["Close"].iloc[-2]
@@ -833,24 +844,18 @@ def fetch(ticker, ext=False, retry=0):
             change_5d = None
             change_abs_5d = None
 
-        h1m, h6m = safe_history(t, period="2mo"), safe_history(t, period="7mo")
-        
-        # YTD calculation: Use previous year's last trading day as baseline
-        # Get sufficient history to ensure we have prev year's data
-        ytd_history = safe_history(t, period="3mo")
+        # YTD calculation: Use h_all data already fetched
         ytd = pd.DataFrame()
-        if not ytd_history.empty:
+        if not h_all.empty:
             current_year = datetime.now().year
             # Filter for current year data
-            ytd = ytd_history[ytd_history.index.year == current_year]
+            ytd = h_all[h_all.index.year == current_year]
             # If we have current year data but need baseline from previous year
             if len(ytd) >= 1:
-                prev_year_data = ytd_history[ytd_history.index.year == current_year - 1]
+                prev_year_data = h_all[h_all.index.year == current_year - 1]
                 if not prev_year_data.empty:
                     # Add last day of previous year as first row for comparison
                     ytd = pd.concat([prev_year_data.tail(1), ytd])
-        
-        y, h30 = safe_history(t, period="1y"), safe_history(t, period="60d")
 
         def calc_ch(h):
             if len(h) >= 2 and h["Close"].iloc[0] > 0:
@@ -864,7 +869,7 @@ def fetch(ticker, ext=False, retry=0):
         chytd, absytd = calc_ch(ytd)
 
         high52, low52 = (
-            (y["High"].max(), y["Low"].min()) if not y.empty else (price, price)
+            (h_all["High"].max(), h_all["Low"].min()) if not h_all.empty else (price, price)
         )
         vol = h_day["Volume"].sum()
 
@@ -900,9 +905,10 @@ def fetch(ticker, ext=False, retry=0):
 
         rsi_val, rsi_prev = rsi(h30["Close"], return_prev=True) if not h30.empty else (None, None)
         
-        # Configurable MACD period: 100d (stable) or 50d (momentum)
+        # OPTIMIZATION: Use h_all for MACD to avoid separate API call
         macd_period = int(os.getenv('MACD_PERIOD', '100'))
-        h_macd = safe_history(t, period=f"{macd_period}d")
+        # Use h30 (60 days) or h_all for MACD - most periods need ~100 days
+        h_macd = h_all if not h_all.empty else pd.DataFrame()
         if not h_macd.empty:
             macd_val, macd_sig, macd_lbl, macd_prev_lbl = macd(h_macd["Close"], return_prev_label=True)
         else:
@@ -1040,32 +1046,32 @@ def fetch(ticker, ext=False, retry=0):
         death_cross = False
         golden_cross = False
         
-        if len(y) >= 60:
-            ichimoku_data = calculate_ichimoku(y["High"], y["Low"], y["Close"])
+        if len(h_all) >= 60:
+            ichimoku_data = calculate_ichimoku(h_all["High"], h_all["Low"], h_all["Close"])
             
             # Calculate volume SMA(20)
             if len(h30) >= 20:
                 vol_sma_20 = h30["Volume"].rolling(window=20).mean().iloc[-1]
             
             # Calculate price SMA(60)
-            price_sma_60 = y["Close"].rolling(window=60).mean().iloc[-1]
+            price_sma_60 = h_all["Close"].rolling(window=60).mean().iloc[-1]
             
             # Get previous close for crossover detection
-            if len(y) >= 2:
-                price_prev = y["Close"].iloc[-2]
+            if len(h_all) >= 2:
+                price_prev = h_all["Close"].iloc[-2]
         
         # Calculate SMA 50 and SMA 200 for moving average analysis
-        if len(y) >= 50:
-            sma_50 = y["Close"].rolling(window=50).mean().iloc[-1]
+        if len(h_all) >= 50:
+            sma_50 = h_all["Close"].rolling(window=50).mean().iloc[-1]
         
-        if len(y) >= 200:
-            sma_200 = y["Close"].rolling(window=200).mean().iloc[-1]
+        if len(h_all) >= 200:
+            sma_200 = h_all["Close"].rolling(window=200).mean().iloc[-1]
             
             # Death cross: SMA 50 crosses below SMA 200 (bearish)
             # Golden cross: SMA 50 crosses above SMA 200 (bullish)
-            if sma_50 is not None and len(y) >= 201:
-                sma_50_prev = y["Close"].rolling(window=50).mean().iloc[-2]
-                sma_200_prev = y["Close"].rolling(window=200).mean().iloc[-2]
+            if sma_50 is not None and len(h_all) >= 201:
+                sma_50_prev = h_all["Close"].rolling(window=50).mean().iloc[-2]
+                sma_200_prev = h_all["Close"].rolling(window=200).mean().iloc[-2]
                 
                 if sma_50_prev >= sma_200_prev and sma_50 < sma_200:
                     death_cross = True
@@ -2645,7 +2651,7 @@ function applyFilter() {
         else if (currentFilter === 'crash') show = (ch < -10) || (ch5 < -10);
         else if (currentFilter === 'meme') show = meme;
         else if (currentFilter === 'volume') show = vol > 5e7;
-        else if (currentFilter === 'm7') show = ['AAPL','AMZN','GOOGL','META','MSFT','NVDA','TSLA','AVGO','ORCL','NFLX','TQQQ','SSO','SOXL','BULZ','SHOP','SSO','UPRO','TNA','MIDU','SPYU','XLK','TECL','IGV','IWY','BNKU','CURE','LABU','NAIL','TARK'].includes(ticker);
+        else if (currentFilter === 'm7') show = ['AAPL','AMZN','GOOGL','META','MSFT','NVDA','TSLA','AVGO','ORCL','NFLX','TQQQ','SSO','SOXL','BULZ','SHOP','SSO','UPRO','TNA','MIDU','SPYU','XLK','TECL','IGV','IYW','BNKU','CURE','LABU','NAIL','TARK'].includes(ticker);
         else if (currentFilter === 'squeeze') show = sq !== 'None';
         else if (currentFilter === 'earnings-week') show = (function(){
             const ed = r.dataset.earnings;
