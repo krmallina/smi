@@ -1,10 +1,10 @@
 name: Update Dashboard
 on:
   schedule:
-    # 4 AM - 4 PM PST on Weekdays (Monday-Friday) - every 30 minutes
-    # UTC is +8 hours: 12:00 PM to 12:00 AM. 
+    # 4 AM - 5 PM PST on Weekdays (Monday-Friday) - every 30 minutes
+    # UTC is +8 hours: 12:00 PM to 1:00 AM. 
     # '1-6' covers the Friday afternoon PST run which occurs on Saturday UTC.
-    - cron: '0,30 0,12-23 * * 1-6'
+    - cron: '0,30 0,1,12-23 * * 1-6'
   workflow_dispatch: 
 permissions:
   contents: write
