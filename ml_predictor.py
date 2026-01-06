@@ -123,7 +123,17 @@ def load_or_fetch_stock_data(ticker: str, force_refresh: bool = False, verbose: 
         try:
             cached_data = pd.read_pickle(cache_file)
             last_date = cached_data.index.max()
-            days_since_update = (pd.Timestamp.now() - last_date).days
+            
+            # Ensure consistent timezone handling
+            current_time = pd.Timestamp.now(tz='UTC')  # Explicitly UTC
+            if last_date.tz is None:
+                # Make last_date tz-aware to match current_time
+                last_date = last_date.tz_localize('UTC')
+            elif last_date.tz != current_time.tz:
+                # Convert both to UTC
+                last_date = last_date.tz_convert('UTC')
+                
+            days_since_update = (current_time - last_date).days
 
             if days_since_update < 7:
                 if verbose:
@@ -140,9 +150,18 @@ def load_or_fetch_stock_data(ticker: str, force_refresh: bool = False, verbose: 
                 logger.info(f"🔄 Updating {ticker} data (last: {last_date.date()})...")
             try:
                 new_data = yf.Ticker(ticker).history(start=last_date + pd.Timedelta(days=1))
-                if not new_data.empty:
+                if new_data is not None and hasattr(new_data, 'empty') and not new_data.empty:
+                    # Ensure timezone consistency for concatenation
+                    if cached_data.index.tz != new_data.index.tz:
+                        if cached_data.index.tz is None:
+                            cached_data.index = cached_data.index.tz_localize('UTC')
+                        if new_data.index.tz is None:
+                            new_data.index = new_data.index.tz_localize('UTC')
+                        elif new_data.index.tz != cached_data.index.tz:
+                            new_data.index = new_data.index.tz_convert(cached_data.index.tz)
+                            
                     combined_data = pd.concat([cached_data, new_data])
-                    cutoff_date = pd.Timestamp.now() - pd.DateOffset(years=2)
+                    cutoff_date = current_time - pd.DateOffset(years=2)
                     combined_data = combined_data[combined_data.index >= cutoff_date]
                     combined_data.to_pickle(cache_file)
                     if verbose:
@@ -172,11 +191,14 @@ def load_or_fetch_stock_data(ticker: str, force_refresh: bool = False, verbose: 
 
     try:
         stock_data = yf.Ticker(ticker).history(period="2y", auto_adjust=False)
-        if not stock_data.empty:
+        # Ensure we got a valid DataFrame
+        if stock_data is None:
+            raise ValueError("yfinance returned None")
+        if hasattr(stock_data, 'empty') and not stock_data.empty:
             stock_data.to_pickle(cache_file)
             if verbose:
                 logger.info(f"💾 Cached data for {ticker} ({len(stock_data)} days)")
-        return stock_data
+        return stock_data if stock_data is not None else pd.DataFrame()
     except Exception as e:
         if verbose:
             logger.error(f"❌ Failed to fetch data for {ticker}: {e}")
