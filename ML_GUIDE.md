@@ -34,15 +34,40 @@ If you want to automate retraining, use the provided workflow:
 - **Prediction**: BREAKOUT | CRASH | NEUTRAL classification
 - **Confidence**: Model certainty (0-100%)
 
-## Installation
+## Data Processing Details
 
-```bash
-# Install ML dependencies
-pip install -r requirements.txt
+### Historical Data Timeline
 
-# Or install manually
-pip install scikit-learn xgboost
+The ML model processes **2 years (504 trading days)** of historical data per ticker with a specific training methodology:
+
 ```
+[2 years ago] ← [1 year ago: Features] → [6-12 months: Future performance]
+     ↓              ↓                        ↓
+   Fetched        Used for                  Used for
+   data          prediction               labeling
+```
+
+**Step-by-step process:**
+1. **Fetch 2 years of data**: `yf.Ticker(ticker).history(period="2y")`
+2. **Feature generation**: Use data from exactly 252 trading days ago (1 year back)
+3. **Technical analysis**: Calculate RSI, BB, MACD, volume patterns, etc. at that historical point
+4. **Future evaluation**: Check price performance over next 6-12 months
+5. **Label assignment**: 
+   - **BREAKOUT**: +100% or more gain in 6-12 months
+   - **CRASH**: -50% or more loss in 6-12 months  
+   - **NEUTRAL**: Performance between -50% and +100%
+
+**Why this approach?**
+- **252 trading days** = ~1 year (market cycles)
+- **504 trading days** = ~2 years (sufficient historical context)
+- **6-12 month horizon** = Medium-term breakout/crash detection
+- Simulates real-world prediction: "What would we have predicted 1 year ago?"
+
+### Minimum Data Requirements
+
+- **252+ trading days** minimum (1 year of data)
+- Stocks with insufficient history are skipped
+- Ensures reliable technical indicator calculations
 
 ## Quick Start
 
@@ -84,13 +109,13 @@ historical_data = []
 labels = []
 
 for ticker in tickers:
-    # Fetch historical data (2 years)
+    # Fetch 2 years of historical data (~504 trading days)
     stock = yf.Ticker(ticker)
     hist = stock.history(period="2y")
     
-    # Calculate features at the midpoint (1 year ago)
-    # Then check if price doubled (+100%) or crashed (-50%) in next 6-12 months
-    # Label accordingly: 'BREAKOUT', 'CRASH', or 'NEUTRAL'
+    # Use data from 1 year ago (252 trading days back) for features
+    # Check performance over next 6-12 months for labeling
+    # Label as BREAKOUT (+100%+), CRASH (-50%-), or NEUTRAL
     
     # ... extract features and determine label ...
     historical_data.append(features_dict)
@@ -110,11 +135,11 @@ python3 stocks.py data/tickers.csv
 ```
 
 The dashboard will show:
-- 🚀 **ML Column**: Breakout scores with color coding
-  - **Green (≥70%)**: High breakout potential 🚀
-  - **Orange (50-69%)**: Moderate potential
-  - **Gray (<50%)**: Low potential
-- ⚠️ **Crash warnings**: Displayed when crash risk ≥50%
+- **INDICATORS Column**: ML scores integrated with other indicators
+  - **🚀 BREAKOUT (≥70%)**: High breakout potential with green highlighting
+  - **💥 CRASH (≥50%)**: High crash risk with red highlighting  
+  - **NEUTRAL**: Low probability signals
+- ⚠️ **ML Alerts**: Breakout and crash alerts in the dashboard banner
 
 ## Understanding ML Scores
 

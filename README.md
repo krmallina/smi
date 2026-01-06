@@ -14,7 +14,7 @@
 
 **Troubleshooting ML N/A Values:**
 - If ML values show as N/A, check:
-  - The ML model files exist in `data/ml_models/` (see ML_GUIDE.md for retraining)
+  - The ML model files exist in `data/ml_models/` (see ML Model Training section below)
   - The ticker is supported by the model (U.S. equities only)
   - All required features are available for the ticker
   - The ticker is not an ETF or non-stock symbol
@@ -397,10 +397,15 @@ Alert banner displays at top with color-coded hearts:
 ## Files
 
 - `stocks.py` - Main dashboard generator
+- `ml_predictor.py` - ML model training and prediction engine
 - `data/tickers.csv` - Tracked ticker symbols
 - `data/alerts.json` - Custom alert definitions
 - `data/dashboard.html` - Generated dashboard (auto-detects market hours)
-- `.github/workflows/build.yml` - Automated updates (4 AM - 5 PM PST, every 30 min)
+- `data/ml_models/` - Trained ML models and scalers
+  - `breakout_crash_model.pkl` - Main ML model for breakout/crash predictions
+  - `feature_scaler.pkl` - Feature normalization scaler
+- `.github/workflows/build.yml` - Automated dashboard updates (4 AM - 5 PM PST, every 30 min)
+- `.github/workflows/mlbuild.yml` - Weekly ML model retraining (Mondays at 1 AM PST)
 
 ## Performance
 
@@ -419,6 +424,48 @@ cd smi
 # Install dependencies
 pip install -r requirements.txt
 ```
+
+## ML Model Training & Automation
+
+### Manual ML Training
+
+Train the ML model on your ticker data:
+
+```bash
+# Train ML model using tickers from data/tickers.csv
+python3 ml_predictor.py
+```
+
+This will:
+- Fetch historical data for all tickers
+- Train a new breakout/crash prediction model
+- Save the model to `data/ml_models/breakout_crash_model.pkl`
+- Test the model on sample data
+
+### Automated ML Training
+
+The `mlbuild.yml` GitHub Actions workflow automatically retrains the ML model weekly:
+
+- **Schedule**: Every Monday at 1:00 AM PST
+- **Trigger**: Manual via GitHub Actions UI
+- **Process**: 
+  - Fetches latest ticker data
+  - Trains new model on current market conditions
+  - Commits only the updated model files (no code changes)
+  - Maintains flat commit history for model updates
+
+**Benefits:**
+- Models stay current with evolving market patterns
+- No manual intervention required
+- Automatic deployment of improved predictions
+- Historical model performance tracking
+
+### ML Model Files
+
+- `data/ml_models/breakout_crash_model.pkl` - Gradient Boosting model trained on historical winners/losers
+- `data/ml_models/feature_scaler.pkl` - Feature normalization scaler
+- Models are automatically loaded by `stocks.py` for predictions
+- If models don't exist, predictions show as "N/A"
 
 ## Usage
 
