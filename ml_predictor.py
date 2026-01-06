@@ -683,60 +683,217 @@ if __name__ == "__main__":
 
             try:
                 stock_hist = load_or_fetch_stock_data(ticker, verbose=args.verbose)
-                if stock_hist.empty or len(stock_hist) < 252:
+                
+                # Validate data quality (relaxed requirements for training)
+                if stock_hist.empty:
+                    if args.verbose:
+                        logger.warning(f"  Skipping {ticker}: No data available")
+                    continue
+                    
+                min_required_days = 100  # Reduced from 252 to allow more tickers
+                if len(stock_hist) < min_required_days:
+                    if args.verbose:
+                        logger.warning(f"  Skipping {ticker}: Insufficient data ({len(stock_hist)} days < {min_required_days} required)")
+                    continue
+                
+                # Check for excessive missing values (relaxed from 10% to 20%)
+                if stock_hist["Close"].isna().sum() > len(stock_hist) * 0.2:
+                    if args.verbose:
+                        logger.warning(f"  Skipping {ticker}: Too many missing values")
                     continue
 
                 # Use a single-row snapshot from 1 year ago (simplified placeholder)
                 one_year_ago_data = stock_hist.iloc[-252]
 
-                # Simplified feature creation - in a real scenario compute real features here
+                # Calculate real technical indicators from historical data
+                # Use the last available data for feature calculation (minimum 100 days)
+                recent_data = stock_hist.tail(min(252, len(stock_hist)))  # Use up to 1 year of data
+                
+                # Import indicator functions from stocks.py
+                try:
+                    from stocks import rsi, macd
+                    
+                    # Calculate RSI
+                    rsi_val = rsi(recent_data["Close"]) if len(recent_data) >= 14 else 50.0
+                    
+                    # Calculate MACD
+                    macd_val, macd_sig, macd_label = macd(recent_data["Close"]) if len(recent_data) >= 26 else (0, 0, None)
+                    
+                    # Calculate Bollinger Bands
+                    bb_position_pct = 50.0  # Default
+                    bb_width_pct = 10.0     # Default
+                    if len(recent_data) >= 20:
+                        sma = recent_data["Close"].rolling(20).mean()
+                        std = recent_data["Close"].rolling(20).std()
+                        upper_bb = sma + (2 * std)
+                        lower_bb = sma - (2 * std)
+                        current_price = recent_data["Close"].iloc[-1]
+                        bb_position_pct = ((current_price - lower_bb.iloc[-1]) / (upper_bb.iloc[-1] - lower_bb.iloc[-1])) * 100
+                        bb_width_pct = ((upper_bb.iloc[-1] - lower_bb.iloc[-1]) / sma.iloc[-1]) * 100
+                    
+                    # Calculate Stochastic Oscillator
+                    stoch_k = stoch_d = 50.0
+                    if len(recent_data) >= 14:
+                        low_14 = recent_data["Low"].rolling(14).min()
+                        high_14 = recent_data["High"].rolling(14).max()
+                        k = ((recent_data["Close"] - low_14) / (high_14 - low_14)) * 100
+                        stoch_k = k.iloc[-1]
+                        if len(k) >= 3:
+                            stoch_d = k.rolling(3).mean().iloc[-1]
+                    
+                    # Calculate ATR (Average True Range)
+                    atr_val = 0.0
+                    if len(recent_data) >= 14:
+                        high = recent_data["High"]
+                        low = recent_data["Low"]
+                        close = recent_data["Close"]
+                        tr1 = high - low
+                        tr2 = (high - close.shift(1)).abs()
+                        tr3 = (low - close.shift(1)).abs()
+                        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+                        atr_val = tr.rolling(14).mean().iloc[-1]
+                    
+                    # Calculate OBV (On-Balance Volume)
+                    obv_val = 0.0
+                    if len(recent_data) >= 2:
+                        obv = pd.Series(index=recent_data.index, dtype=float)
+                        obv.iloc[0] = recent_data["Volume"].iloc[0]
+                        for i in range(1, len(recent_data)):
+                            if recent_data["Close"].iloc[i] > recent_data["Close"].iloc[i-1]:
+                                obv.iloc[i] = obv.iloc[i-1] + recent_data["Volume"].iloc[i]
+                            elif recent_data["Close"].iloc[i] < recent_data["Close"].iloc[i-1]:
+                                obv.iloc[i] = obv.iloc[i-1] - recent_data["Volume"].iloc[i]
+                            else:
+                                obv.iloc[i] = obv.iloc[i-1]
+                        obv_val = obv.iloc[-1]
+                    
+                except ImportError:
+                    # Fallback to defaults if stocks.py not available
+                    rsi_val = np.random.uniform(30, 70)
+                    macd_label = None
+                    bb_position_pct = 50.0
+                    bb_width_pct = 10.0
+                    stoch_k = 50.0
+                    stoch_d = 50.0
+                    atr_val = 0.0
+                    obv_val = 0.0
+                
+                # Calculate price changes
+                current_price = recent_data["Close"].iloc[-1]
+                change_pct = ((current_price - recent_data["Close"].iloc[-2]) / recent_data["Close"].iloc[-2]) * 100 if len(recent_data) >= 2 else 0
+                change_5d = ((current_price - recent_data["Close"].iloc[-6]) / recent_data["Close"].iloc[-6]) * 100 if len(recent_data) >= 6 else 0
+                
+                # Calculate moving average crosses
+                golden_cross = death_cross = False
+                if len(recent_data) >= 50:
+                    sma_50 = recent_data["Close"].rolling(50).mean()
+                    sma_200 = recent_data["Close"].rolling(200).mean()
+                    if len(sma_50) >= 2 and len(sma_200) >= 2:
+                        prev_50 = sma_50.iloc[-2]
+                        prev_200 = sma_200.iloc[-2]
+                        curr_50 = sma_50.iloc[-1]
+                        curr_200 = sma_200.iloc[-1]
+                        if prev_50 <= prev_200 and curr_50 > curr_200:
+                            golden_cross = True
+                        elif prev_50 >= prev_200 and curr_50 < curr_200:
+                            death_cross = True
+                
+                # Volume analysis
+                volume_bias = 0.0
+                volume_spike = False
+                if len(recent_data) >= 20:
+                    avg_volume = recent_data["Volume"].rolling(20).mean().iloc[-1]
+                    current_volume = recent_data["Volume"].iloc[-1]
+                    volume_bias = ((current_volume - avg_volume) / avg_volume) * 100
+                    volume_spike = current_volume > avg_volume * 2  # 2x average volume
+                
                 features = {
-                    "rsi": np.random.uniform(30, 70),  # Placeholder
+                    "rsi": rsi_val,
+                    "bb_position_pct": bb_position_pct,
+                    "bb_width_pct": bb_width_pct,
+                    "macd_label": macd_label,
+                    "atr": atr_val,
+                    "obv": obv_val,
+                    "stoch_k": stoch_k,
+                    "stoch_d": stoch_d,
+                    "adx": 25.0,  # Placeholder - would need full ADX calculation
+                    "cci": 0.0,   # Placeholder
+                    "mfi": 50.0,  # Placeholder
+                    "williams_r": -50.0,  # Placeholder
+                    "roc": 0.0,   # Placeholder
+                    "volume_roc": 0.0,  # Placeholder
+                    "volume_bias": volume_bias,
+                    "volume_spike": volume_spike,
+                    "change_pct": change_pct,
+                    "change_5d": change_5d,
+                    "change_1m": (current_price - recent_data["Close"].iloc[0]) / recent_data["Close"].iloc[0] * 100 if len(recent_data) >= 21 else 0,
+                    "golden_cross": golden_cross,
+                    "death_cross": death_cross,
                     "pe_ratio": one_year_ago_data.get("P/E Ratio", 25) if isinstance(one_year_ago_data, pd.Series) else 25,
+                    "eps": one_year_ago_data.get("EPS", 5.0) if isinstance(one_year_ago_data, pd.Series) else 5.0,
                     "market_cap": one_year_ago_data.get("Market Cap", 1e9) if isinstance(one_year_ago_data, pd.Series) else 1e9,
-                    "change_1m": (one_year_ago_data["Close"] / stock_hist.iloc[-252 - 21]["Close"] - 1) * 100 if len(stock_hist) > 252 + 21 else 0,
-                    # Fill other keys with defaults so extract_features works
-                    "bb_position_pct": 50.0,
-                    "bb_width_pct": 10.0,
-                    "macd_label": None,
-                    "atr_14": 0.0,
-                    "obv": 0.0,
-                    "stoch_k": 50.0,
-                    "stoch_d": 50.0,
-                    "adx": 25.0,
-                    "cci": 0.0,
-                    "mfi": 50.0,
-                    "williams_r": -50.0,
-                    "roc": 0.0,
-                    "vol_roc": 0.0,
-                    "volume_bias": 0.0,
-                    "volume_spike": False,
-                    "change_pct": 0.0,
-                    "change_5d": 0.0,
-                    "golden_cross": False,
-                    "death_cross": False,
-                    "put_call_ratio": 1.0,
-                    "short_interest": 0.0,
-                    "squeeze_level": "None",
-                    "active_signal": "HOLD",
-                    "trend_score": 0.0,
+                    "put_call_ratio": 1.0,  # Placeholder
+                    "short_interest": 0.0,  # Placeholder
+                    "squeeze_level": "None",  # Placeholder
+                    "active_signal": "HOLD",  # Placeholder
+                    "trend_score": 0.0,  # Placeholder
                 }
 
-                # Label based on future performance (next ~6 and 12 months in the existing data)
-                # Note: This simplistic label logic relies on the specific indexing used above.
+                # Improved labeling logic based on multiple criteria
                 try:
-                    future_price_6m = stock_hist.iloc[-126]["Close"]
-                    future_price_12m = stock_hist.iloc[-1]["Close"]
+                    # Get price data points
                     initial_price = one_year_ago_data["Close"]
-                except Exception:
-                    # If indexing fails, skip this ticker
+                    future_price_3m = stock_hist.iloc[-189]["Close"] if len(stock_hist) > 189 else initial_price  # 3 months
+                    future_price_6m = stock_hist.iloc[-126]["Close"] if len(stock_hist) > 126 else initial_price  # 6 months  
+                    future_price_12m = stock_hist.iloc[-1]["Close"]  # 12 months
+                    
+                    # Calculate returns
+                    return_3m = (future_price_3m - initial_price) / initial_price
+                    return_6m = (future_price_6m - initial_price) / initial_price
+                    return_12m = (future_price_12m - initial_price) / initial_price
+                    
+                    # Calculate volatility (standard deviation of returns)
+                    if len(recent_data) >= 20:
+                        daily_returns = recent_data["Close"].pct_change().dropna()
+                        volatility = daily_returns.std() * np.sqrt(252)  # Annualized volatility
+                    else:
+                        volatility = 0.3  # Default assumption
+                    
+                    # Determine breakout/crash labels based on multiple factors
+                    label = "NEUTRAL"
+                    
+                    # BREAKOUT conditions:
+                    # 1. Significant price appreciation (50%+ in 6-12 months)
+                    # 2. Consistent upward momentum
+                    # 3. Not excessively volatile
+                    breakout_score = 0
+                    if return_6m > 0.5: breakout_score += 2  # 50% in 6 months
+                    if return_12m > 1.0: breakout_score += 3  # 100% in 12 months
+                    if return_3m > 0.15: breakout_score += 1  # 15% in 3 months
+                    if return_6m > return_3m * 0.8: breakout_score += 1  # Consistent momentum
+                    if volatility < 0.6: breakout_score += 1  # Not too volatile
+                    
+                    # CRASH conditions:
+                    # 1. Significant price decline (30%- in 6-12 months)
+                    # 2. Consistent downward momentum
+                    crash_score = 0
+                    if return_6m < -0.3: crash_score += 2  # 30% drop in 6 months
+                    if return_12m < -0.5: crash_score += 3  # 50% drop in 12 months
+                    if return_3m < -0.1: crash_score += 1  # 10% drop in 3 months
+                    if return_6m < return_3m * 1.2: crash_score += 1  # Consistent decline
+                    if volatility > 0.8: crash_score += 1  # High volatility (crashes are volatile)
+                    
+                    # Final classification with confidence thresholds
+                    if breakout_score >= 4:
+                        label = "BREAKOUT"
+                    elif crash_score >= 4:
+                        label = "CRASH"
+                    # NEUTRAL if neither condition strongly met
+                    
+                except Exception as e:
+                    if args.verbose:
+                        logger.warning(f"Could not calculate labels for {ticker}: {e}")
                     continue
-
-                label = "NEUTRAL"
-                if (future_price_6m / initial_price > 2.0) or (future_price_12m / initial_price > 2.0):
-                    label = "BREAKOUT"
-                elif (future_price_6m / initial_price < 0.5) or (future_price_12m / initial_price < 0.5):
-                    label = "CRASH"
 
                 training_data.append(features)
                 labels.append(label)
