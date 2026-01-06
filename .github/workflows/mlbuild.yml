@@ -1,9 +1,9 @@
-name: Weekly ML Model Build
+name: Daily ML Model Build (Working Days)
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 1 * * 1'
+    - cron: '0 11 * * 1-5'  # 3 AM PST (11 AM UTC) Monday-Friday
 
 permissions:
   contents: write
@@ -46,23 +46,24 @@ jobs:
           git fetch origin main
           git reset --mixed origin/main
 
-          # 2. Stage ONLY the model files
+          # 2. Stage ONLY the model files and stock cache
           # This ignores any modified HTML or code files
           git add data/ml_models/
+          git add data/stock_cache/
 
           # 3. Check if there is anything to commit
           if git diff --staged --quiet; then
-            echo "No changes in model files. Skipping."
+            echo "No changes in model files or stock cache. Skipping."
             exit 0
           fi
 
           # 4. Create the commit
           # We use --amend if the last commit was also an auto-build to keep history flat
           LAST_MSG=$(git log -1 --pretty=%B)
-          if [[ "$LAST_MSG" == *"feat: weekly ml model update"* ]]; then
-            git commit --amend -m "feat: weekly ml model update [skip ci]"
+          if [[ "$LAST_MSG" == *"feat: daily ml model update"* ]]; then
+            git commit --amend -m "feat: daily ml model update [skip ci]"
           else
-            git commit -m "feat: weekly ml model update [skip ci]"
+            git commit -m "feat: daily ml model update [skip ci]"
           fi
 
           # 5. Force push to replace the remote version with this specific snapshot
