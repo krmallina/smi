@@ -733,27 +733,90 @@ def check_alerts(data):
             f"{emoji} <strong>{label}:</strong> {', '.join(a['ticker'] for a in items)}"
         )
 
+
     grouped = []
-    if high_52w:
-        grouped.append(fmt(high_52w, "🔥", "52W High"))
-    if low_52w:
-        grouped.append(fmt(low_52w, "📉", "52W Low"))
-    if buy_signals:
-        grouped.append(fmt(buy_signals, "🟢", "Buy"))
-    if sell_signals:
-        grouped.append(fmt(sell_signals, "🟠", "Sell"))
-    if short_signals:
-        grouped.append(fmt(short_signals, "🔴", "Short"))
-    if surge:
-        grouped.append(fmt(surge, "🚀", "Surge"))
-    if crash:
-        grouped.append(fmt(crash, "💥", "Crash"))
+    # Accordion-style expandable section for alert groups
+    accordion_html = """
+        <style>
+        .accordion-group { display: inline-block; margin-right: 8px; vertical-align: middle; }
+        .accordion-header { cursor: pointer; font-weight: 600; font-size: 14px; padding: 0 8px; display: inline-block; }
+        .accordion-content { display: none; padding: 4px 0 0 0; font-weight: 400; }
+        .accordion-active .accordion-content { display: block; }
+        </style>
+        <script>
+        function showAccordion(idx) {
+            document.querySelectorAll('.accordion-group').forEach((el, i) => {
+                if (i === idx) {
+                    if (el.classList.contains('accordion-active')) {
+                        el.classList.remove('accordion-active');
+                    } else {
+                        el.classList.add('accordion-active');
+                    }
+                } else {
+                    el.classList.remove('accordion-active');
+                }
+            });
+        }
+        </script>
+        <div id='alert-accordion' style='display:inline'>
+    """
+    accordion_items = []
+    idx = 0
+    if high_52w or low_52w:
+        tickers_high = ', '.join(a['ticker'] for a in high_52w) if high_52w else ''
+        tickers_low = ', '.join(a['ticker'] for a in low_52w) if low_52w else ''
+        content = (
+            (f"<div><span style='color:#d97706'>🔥 52W High:</span> {tickers_high}</div>" if tickers_high else '') +
+            (f"<div><span style='color:#20813e'>📉 52W Low:</span> {tickers_low}</div>" if tickers_low else '')
+        )
+        accordion_items.append(f"<div class='accordion-group' onclick='showAccordion({idx})'>"
+            f"<span class='accordion-header'>📅 52W High/Low</span>"
+            f"<div class='accordion-content'>{content}</div></div>")
+        idx += 1
+    if buy_signals or sell_signals or short_signals:
+        tickers_buy = ', '.join(a['ticker'] for a in buy_signals) if buy_signals else ''
+        tickers_sell = ', '.join(a['ticker'] for a in sell_signals) if sell_signals else ''
+        tickers_short = ', '.join(a['ticker'] for a in short_signals) if short_signals else ''
+        content = (
+            (f"<div><span style='color:#20813e'>🟢 Buy:</span> {tickers_buy}</div>" if tickers_buy else '') +
+            (f"<div><span style='color:#d97706'>🟠 Sell:</span> {tickers_sell}</div>" if tickers_sell else '') +
+            (f"<div><span style='color:#c74634'>🔴 Short:</span> {tickers_short}</div>" if tickers_short else '')
+        )
+        accordion_items.append(f"<div class='accordion-group' onclick='showAccordion({idx})'>"
+            f"<span class='accordion-header'>🚦 Signals</span>"
+            f"<div class='accordion-content'>{content}</div></div>")
+        idx += 1
+    if surge or crash:
+        tickers_surge = ', '.join(a['ticker'] for a in surge) if surge else ''
+        tickers_crash = ', '.join(a['ticker'] for a in crash) if crash else ''
+        content = (
+            (f"<div><span style='color:#20813e'>🚀 Surge:</span> {tickers_surge}</div>" if tickers_surge else '') +
+            (f"<div><span style='color:#c74634'>💥 Crash:</span> {tickers_crash}</div>" if tickers_crash else '')
+        )
+        accordion_items.append(f"<div class='accordion-group' onclick='showAccordion({idx})'>"
+            f"<span class='accordion-header'>💣 Surge & Crash</span>"
+            f"<div class='accordion-content'>{content}</div></div>")
+        idx += 1
     if volume_spike:
-        grouped.append(fmt(volume_spike, "📈", "Vol Spike"))
-    if ml_breakout:
-        grouped.append(fmt(ml_breakout, "🚀", "ML Breakout"))
-    if ml_crash:
-        grouped.append(fmt(ml_crash, "⚠️", "ML Crash"))
+        tickers_vol = ', '.join(a['ticker'] for a in volume_spike)
+        content = f"<div><span style='color:#c74634'>Vol Spike:</span> {tickers_vol}</div>"
+        accordion_items.append(f"<div class='accordion-group' onclick='showAccordion({idx})'>"
+            f"<span class='accordion-header'>📈 Vol Spike</span>"
+            f"<div class='accordion-content'>{content}</div></div>")
+        idx += 1
+    if ml_breakout or ml_crash:
+        tickers_ml_breakout = ', '.join(a['ticker'] for a in ml_breakout) if ml_breakout else ''
+        tickers_ml_crash = ', '.join(a['ticker'] for a in ml_crash) if ml_crash else ''
+        content = (
+            (f"<div><span style='color:#20813e'>🚀 Breakout:</span> {tickers_ml_breakout}</div>" if tickers_ml_breakout else '') +
+            (f"<div><span style='color:#c74634'>⚠️ Crash:</span> {tickers_ml_crash}</div>" if tickers_ml_crash else '')
+        )
+        accordion_items.append(f"<div class='accordion-group' onclick='showAccordion({idx})'>"
+            f"<span class='accordion-header'>🔮 ML Prediction</span>"
+            f"<div class='accordion-content'>{content}</div></div>")
+        idx += 1
+    accordion_html += ''.join(accordion_items) + "</div>"
+    grouped.append(accordion_html)
     if custom:
         grouped.append(fmt(custom, "⚡", "Custom"))
     return {"grouped": grouped, "time": now.strftime("%I:%M %p")}
