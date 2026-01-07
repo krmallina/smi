@@ -17,14 +17,6 @@
 - **28 Technical + Fundamental Indicators**: RSI, BB Position %, BB Width %, MACD, ATR, OBV, Stochastic %K/%D, ADX, CCI, MFI, Williams %R, ROC, Volume ROC, Volume Bias, Volume Spike, Change %, 5D Change, 1M Change, MA Cross, PE Ratio, EPS, Market Cap, Put/Call Ratio, Short Interest, Squeeze Score, Trading Signal, Trend Score
 - See [ML_GUIDE.md](ML_GUIDE.md) for complete guide
 
-**Troubleshooting ML N/A Values:**
-- If ML values show as N/A, check:
-  - The ML model files exist in `data/ml_models/` (see ML Model Training section below)
-  - The ticker is supported by the model (U.S. equities only)
-  - All required features are available for the ticker
-  - The ticker is not an ETF or non-stock symbol
-  - See the console output for any error messages
-
 ### 📊 Historical Performance Tracking
 **Track ML Prediction Accuracy Over Time**: The system now records every prediction and tracks outcomes to provide:
 - **Win Rate**: Historical accuracy percentage for breakout/crash predictions
@@ -44,16 +36,6 @@
 - **Display**: Shows in both table view and card view ML Predictions section
 - **Rule-Based**: Uses technical indicators, implied move, and earnings timing when ML predictions are neutral
 - **Color-Coded**: Green for bullish, red for bearish, orange for momentum, purple for earnings plays
-
-### 💰 Cost Analysis
-**Extremely Cost-Effective System**: Built for personal use with minimal operating costs:
-- **Monthly Operating Costs**: $0 (free Yahoo Finance API, local processing)
-- **Development Costs**: $2,000-9,000 one-time (your time investment)
-- **Trading Costs**: $0-5 per trade (commissions only when you trade)
-- **Cloud Deployment**: $0-12/month optional (Heroku free tier available)
-- **Storage**: ~12MB total (281 cached stock files)
-- **API Usage**: Rate-limited (0.6s between calls) with intelligent caching
-- **Optimization**: 90% storage reduction possible, 30-day cache TTL options
 
 **Auto-Detecting Market Hours**: The dashboard automatically detects whether it's regular trading hours (9:30 AM - 4:00 PM ET, Mon-Fri) or extended hours, and fetches appropriate data accordingly. Extended hours sessions are indicated with a badge at the top of the dashboard.
 
@@ -793,45 +775,4 @@ Create `data/alerts.json` to define custom alert conditions for specific tickers
   }
 ]
 ```
-
-**Notes:**
-- Price and percentage conditions require a `value` field
-- RSI, volume, and signal conditions do not require a `value`
-- Alerts appear in the banner at the top of the dashboard
-- Custom alerts are cached for 30 minutes to improve performance
-
 ---
-
-## 📋 Recent Updates
-
-### v2.2+ Robustness & Error Handling
-- **🛡️ Enhanced Error Handling**: Comprehensive bounds checking for all pandas operations prevents IndexError crashes
-- **📊 Data Validation**: Robust handling of stocks with insufficient historical data (100-251 days)
-- **🔧 Production Stability**: ML training pipeline now gracefully handles edge cases and data inconsistencies
-- **⚡ Improved Performance**: 280+ tickers processed successfully with 91.1% model accuracy
-- **🛠️ Smart Fallbacks**: Automatic fallback to earliest available data when 1-year snapshots unavailable
-
-### v2.1+ Enhanced ML Features
-- **📊 Historical Performance Tracking**: Tracks prediction accuracy with win rates and expected returns
-- **📈 Options Strategy Suggestions**: Rule-based recommendations for calls/puts based on technical indicators
-- **💰 Cost Analysis**: Comprehensive cost breakdown showing $0 monthly operating costs
-- **🎯 Smart Suggestions**: Options recommendations when ML predictions are neutral
-- **📈 Performance Metrics**: Win rates and expected returns displayed in dashboard
-- **💾 Performance Persistence**: Historical data stored in prediction_performance.pkl
-
-### v2.0+ ML Enhancements
-- **🤖 Smart ML Training**: Intelligent data caching (10x faster after initial setup)
-- **⏰ Daily Automation**: ML models retrain daily on working days (3 AM PST)
-- **📊 Integrated Predictions**: ML scores merged into INDICATORS column
-- **⚡ Command-Line Options**: `--verbose` flag for detailed logging
-- **💾 Efficient Storage**: Flat git history for automated model updates
-- **🔄 Stock Cache**: Persistent historical data cache for faster training
-
-### Key Improvements
-- Automated ML training runs Monday-Friday at 3:00 AM PST
-- Smart caching eliminates redundant data downloads
-- ML predictions show breakout/crash probabilities
-- Command-line verbose mode for debugging
-- Comprehensive ML documentation in `ML_GUIDE.md`
-
-See [ML_GUIDE.md](ML_GUIDE.md) for complete ML system documentation.
