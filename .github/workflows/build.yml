@@ -4,8 +4,8 @@ on:
     # 4 AM - 5 PM PST on Weekdays (Monday-Friday) - every 30 minutes
     # UTC is +8 hours: 12:00 PM to 1:00 AM. 
     # '1-5' covers Mon-Fri, '6' covers Friday afternoon PST run which occurs on Saturday UTC.
-    - cron: '0,30 12-23 * * 1-5'
-    - cron: '0,30 0 * * 2-6'
+    - cron: '0,15,30,45 12-23 * * 1-5'
+    - cron: '0,15,30,45 0 * * 2-6'
   workflow_dispatch: 
 permissions:
   contents: write
