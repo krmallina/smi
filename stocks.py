@@ -739,28 +739,8 @@ def check_alerts(data):
     accordion_items = []
     accordion_js_contents = []
     idx = 0
-    # 52W High/Low
-    tickers_high = ', '.join(a['ticker'] for a in high_52w) if high_52w else ''
-    tickers_low = ', '.join(a['ticker'] for a in low_52w) if low_52w else ''
-    content = (
-        (f"<div><span style='color:#d97706'>🔥 52W High:</span> {tickers_high}</div>" if tickers_high else '') +
-        (f"<div><span style='color:#20813e'>📉 52W Low:</span> {tickers_low}</div>" if tickers_low else '')
-    )
-    accordion_items.append(f"<span class='accordion-header' onclick='showAccordion({idx})'>📅 52W High/Low</span>")
-    accordion_js_contents.append(content)
-    idx += 1
-    # Signals
-    tickers_buy = ', '.join(a['ticker'] for a in buy_signals) if buy_signals else ''
-    tickers_sell = ', '.join(a['ticker'] for a in sell_signals) if sell_signals else ''
-    tickers_short = ', '.join(a['ticker'] for a in short_signals) if short_signals else ''
-    content = (
-        (f"<div><span style='color:#20813e'>🟢 Buy:</span> {tickers_buy}</div>" if tickers_buy else '') +
-        (f"<div><span style='color:#d97706'>🟠 Sell:</span> {tickers_sell}</div>" if tickers_sell else '') +
-        (f"<div><span style='color:#c74634'>🔴 Short:</span> {tickers_short}</div>" if tickers_short else '')
-    )
-    accordion_items.append(f"<span class='accordion-header' onclick='showAccordion({idx})'>🚦 Signals</span>")
-    accordion_js_contents.append(content)
-    idx += 1
+
+    # --- Reordered: Surge & Crash | Vol Spike | Signals | ML Prediction | 52W High/Low | Custom ---
     # Surge & Crash
     tickers_surge = ', '.join(a['ticker'] for a in surge) if surge else ''
     tickers_crash = ', '.join(a['ticker'] for a in crash) if crash else ''
@@ -777,6 +757,18 @@ def check_alerts(data):
     accordion_items.append(f"<span class='accordion-header' onclick='showAccordion({idx})'>📈 Vol Spike</span>")
     accordion_js_contents.append(content)
     idx += 1
+    # Signals
+    tickers_buy = ', '.join(a['ticker'] for a in buy_signals) if buy_signals else ''
+    tickers_sell = ', '.join(a['ticker'] for a in sell_signals) if sell_signals else ''
+    tickers_short = ', '.join(a['ticker'] for a in short_signals) if short_signals else ''
+    content = (
+        (f"<div><span style='color:#20813e'>🟢 Buy:</span> {tickers_buy}</div>" if tickers_buy else '') +
+        (f"<div><span style='color:#d97706'>🟠 Sell:</span> {tickers_sell}</div>" if tickers_sell else '') +
+        (f"<div><span style='color:#c74634'>🔴 Short:</span> {tickers_short}</div>" if tickers_short else '')
+    )
+    accordion_items.append(f"<span class='accordion-header' onclick='showAccordion({idx})'>🚦 Signals</span>")
+    accordion_js_contents.append(content)
+    idx += 1
     # ML Prediction
     tickers_ml_breakout = ', '.join(a['ticker'] for a in ml_breakout) if ml_breakout else ''
     tickers_ml_crash = ', '.join(a['ticker'] for a in ml_crash) if ml_crash else ''
@@ -785,6 +777,16 @@ def check_alerts(data):
         (f"<div><span style='color:#c74634'>⚠️ Crash:</span> {tickers_ml_crash}</div>" if tickers_ml_crash else '')
     )
     accordion_items.append(f"<span class='accordion-header' onclick='showAccordion({idx})'>🔮 ML Prediction</span>")
+    accordion_js_contents.append(content)
+    idx += 1
+    # 52W High/Low
+    tickers_high = ', '.join(a['ticker'] for a in high_52w) if high_52w else ''
+    tickers_low = ', '.join(a['ticker'] for a in low_52w) if low_52w else ''
+    content = (
+        (f"<div><span style='color:#d97706'>🔥 52W High:</span> {tickers_high}</div>" if tickers_high else '') +
+        (f"<div><span style='color:#20813e'>📉 52W Low:</span> {tickers_low}</div>" if tickers_low else '')
+    )
+    accordion_items.append(f"<span class='accordion-header' onclick='showAccordion({idx})'>📅 52W High/Low</span>")
     accordion_js_contents.append(content)
     idx += 1
     # Custom (always as a link)
