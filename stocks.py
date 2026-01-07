@@ -136,7 +136,7 @@ M7_STOCKS = frozenset()
 
 # Category buckets for filtering chips
 CATEGORY_MAP = {
-    "major-tech": frozenset({"AAPL", "AMZN", "GOOGL", "META", "MSFT", "NVDA", "TSLA"}),
+    "major-tech": frozenset({"AAPL", "AMZN", "GOOGL", "META", "MSFT", "NVDA", "TSLA", "NFLX", "PLTR", "AVGO", "ORCL", "SHOP", "ARM"}),
     "leveraged-etf": frozenset({"TQQQ", "SPXL", "AAPU", "PLTU"}),
     "sector-etf": frozenset({"SPY", "XLF", "SMH", "XBI"}),
     "spec-meme": MEME_STOCKS,
@@ -683,7 +683,18 @@ def check_alerts(data):
         elif ch < -15:
             crash.append({"ticker": s["ticker"], "msg": f"CRASHED < -15% → {ch:+.2f}%"})
         if s["volume_spike"]:
-            volume_spike.append({"ticker": s["ticker"], "msg": "VOLUME SPIKE"})
+            # Determine volume direction arrow
+            arrow = ""
+            if "volume_bias" in s:
+                try:
+                    vb = s["volume_bias"]
+                    if vb > 0.05:
+                        arrow = "<span style='color:#20813e'>&uarr;</span> "  # green up
+                    elif vb < -0.05:
+                        arrow = "<span style='color:#c74634'>&darr;</span> "  # red down
+                except Exception:
+                    pass
+            volume_spike.append({"ticker": f"{arrow}{s['ticker']}", "msg": "VOLUME SPIKE"})
         
         # Trading Signal alerts (using active strategy)
         active_sig = s.get("active_signal") or s.get("bb_signal")
@@ -1784,36 +1795,54 @@ def fmt_3yr10k(pct, val_10k):
 @lru_cache(maxsize=32)  # OPTIMIZED: Cache index data
 def get_index_data(symbol):
     try:
-        t = yf.Ticker(symbol)
-        
-        # Try getting current data from info
-        info = t.info
-        price = info.get("regularMarketPrice") or info.get("currentPrice") or info.get("previousClose")
-        ch_pct = info.get("regularMarketChangePercent")
-        prev = info.get("regularMarketPreviousClose") or info.get("previousClose")
-        
-        # Fallback to historical data if info doesn't have what we need
-        if price is None or prev is None:
-            hist = safe_history(t, period="5d")
-            if len(hist) >= 2:
-                price = hist["Close"].iloc[-1]
-                prev = hist["Close"].iloc[-2]
-        
-        ch_abs = None
-        if price is not None and prev is not None:
-            try:
-                # Ensure numeric types
-                price = float(price)
-                prev = float(prev)
-                ch_abs = price - prev
-            except (ValueError, TypeError):
-                ch_abs = None
-        if ch_pct is None and price is not None and prev is not None and prev > 0:
-            try:
-                ch_pct = ((float(price) - float(prev)) / float(prev)) * 100
-            except (ValueError, TypeError):
-                ch_pct = None
-        return {"price": price, "change_pct": ch_pct, "change_abs": ch_abs}
+        # Use fetch() to get full signal/trend info for index/commodity, as in ticker table
+        data = fetch(symbol, ext=False)
+        if not data:
+            # fallback to minimal info if fetch fails
+            t = yf.Ticker(symbol)
+            info = t.info
+            price = info.get("regularMarketPrice") or info.get("currentPrice") or info.get("previousClose")
+            ch_pct = info.get("regularMarketChangePercent")
+            prev = info.get("regularMarketPreviousClose") or info.get("previousClose")
+            if price is None or prev is None:
+                hist = safe_history(t, period="5d")
+                if len(hist) >= 2:
+                    price = hist["Close"].iloc[-1]
+                    prev = hist["Close"].iloc[-2]
+            ch_abs = None
+            if price is not None and prev is not None:
+                try:
+                    price = float(price)
+                    prev = float(prev)
+                    ch_abs = price - prev
+                except (ValueError, TypeError):
+                    ch_abs = None
+            if ch_pct is None and price is not None and prev is not None and prev > 0:
+                try:
+                    ch_pct = ((float(price) - float(prev)) / float(prev)) * 100
+                except (ValueError, TypeError):
+                    ch_pct = None
+            return {"price": price, "change_pct": ch_pct, "change_abs": ch_abs}
+        # Return all relevant fields for ticker-style trending arrow logic
+        return {
+            "price": data.get("price"),
+            "change_pct": data.get("change_pct"),
+            "change_abs": data.get("change_abs_day"),
+            "active_signal": data.get("active_signal"),
+            "signal_combined": data.get("signal_combined"),
+            "predicted_trend": data.get("predicted_trend"),
+            "trend_label": data.get("trend_label"),
+            "macd_label": data.get("macd_label"),
+            "rsi": data.get("rsi"),
+            "bb_signal": data.get("bb_signal"),
+            "signal_bb": data.get("signal_bb"),
+            "signal_rsi": data.get("signal_rsi"),
+            "signal_macd": data.get("signal_macd"),
+            "signal_ichimoku": data.get("signal_ichimoku"),
+            "signal_bb_ichimoku": data.get("signal_bb_ichimoku"),
+            "signal_confidence": data.get("signal_confidence"),
+            "signal_strength": data.get("signal_strength"),
+        }
     except Exception as e:
         return {"price": None, "change_pct": None, "change_abs": None}
 
@@ -2073,6 +2102,7 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
     # Major indices
     dow = get_index_data("^DJI")
     sp = get_index_data("^GSPC")
+    spy = get_index_data("SPY")
     nas = get_index_data("^IXIC")
     vix = get_index_data("^VIX")
     
@@ -2101,15 +2131,46 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
     except Exception:
         cvr3_signal = "NEUTRAL"
 
+    def signal_and_trend_icons(data):
+        # Prefix: signal icon (BUY/SELL/SHORT), Suffix: trend arrow (↑, ↗, →, ↘, ↓)
+        signal = data.get("active_signal") or data.get("signal_combined")
+        trend = data.get("predicted_trend")
+        # Signal icon and color
+        sig_icon = ""
+        sig_color = "neutral"
+        if signal == "BUY":
+            sig_icon = "🟢"
+            sig_color = "positive"
+        elif signal == "SELL":
+            sig_icon = "🔴"
+            sig_color = "negative"
+        elif signal == "SHORT":
+            sig_icon = "🟣"
+            sig_color = "negative"
+        # Trend arrow and color
+        trend_arrow = trend if trend in ["↑", "↗", "→", "↘", "↓"] else "→"
+        if trend_arrow in ["↑", "↗", "→"]:
+            trend_color = "positive"  # Up and sideways are green
+        elif trend_arrow in ["↓", "↘"]:
+            trend_color = "negative"  # Down is red
+        else:
+            trend_color = "positive"
+        # Compose HTML
+        prefix = f'<span class="{sig_color}" style="font-size:1.1em">{sig_icon}</span> ' if sig_icon else ""
+        suffix = f' <span class="{trend_color}" style="font-size:1.1em">{trend_arrow}</span>'
+        return prefix, suffix, sig_color if sig_icon else trend_color
+
     def index_str(data, name, invert=False):
-        if data["price"] is None:
+        if data.get("price") is None:
             return f'<span class="neutral">{name}: N/A</span>'
         ch_abs = data.get("change_abs")
+        prefix, suffix, color = signal_and_trend_icons(data)
         if invert:
             cls = "negative" if ch_abs is not None and ch_abs >= 0 else "positive"
         else:
             cls = "positive" if ch_abs is not None and ch_abs >= 0 else "negative"
-        return f'<span class="{cls}">{name}: {na(data["price"])} ({na(ch_abs, "{:+.2f}")})</span>'
+        # Prefix signal icon, name, suffix trend arrow, then price
+        return f'{prefix}<span class="{color}">{name}</span>{suffix}: <span class="{cls}">{na(data.get("price"))} ({na(ch_abs, "{:+.2f}")})</span>'
 
     # CVR3 signal color
     cvr3_color = (
@@ -2119,11 +2180,11 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
     )
     cvr3_str = f'<span class="{cvr3_color}">CVR3: {cvr3_signal}</span>'
     
-    # Commodities line
+    # Commodities line with arrows
     commodities_h = f'{index_str(gold, "Gold")} | {index_str(silver, "Silver")} | {index_str(copper, "Copper")} | {index_str(bitcoin, "Bitcoin")}'
 
-    # Build single-line market summary with all global indexes
-    indices_h = f'{index_str(dow, "Dow")} | {index_str(sp, "S&P")} | {index_str(nas, "Nasdaq")} | {index_str(vix, "VIX", invert=True)}'
+    # Build single-line market summary with all global indexes and arrows, SPY before Nasdaq
+    indices_h = f'{index_str(dow, "Dow")} | {index_str(sp, "S&P")} | {index_str(spy, "SPY")} | {index_str(nas, "Nasdaq")} | {index_str(vix, "VIX", invert=True)}'
 
     fg_h = '<span class="neutral">F&G: N/A</span>'
     if fg.get("score") is not None:
@@ -2279,7 +2340,7 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
 <summary>🔗 Quick Links</summary>
 <div class="quick-links-content">
 <ul>
-<li><a href="https://tradingeconomics.com/us100:ind" target="_blank">US 100</a> | <a href="https://tradingeconomics.com/calendar" target="_blank">Calendar</a> | <a href="https://www.ssga.com/us/en/intermediary/resources/sector-tracker#currentTab=dayFive" target="_blank">Sectors</a> | <a href="https://tradingeconomics.com/stream" target="_blank">News</a> | <a href="https://finviz.com/news.ashx" target="_blank">Finviz</a></li>
+<li><a href="https://tradingeconomics.com/us100:ind" target="_blank">US 100</a> | <a href="https://tradingeconomics.com/calendar" target="_blank">Calendar</a> | <a href="https://www.ssga.com/us/en/intermediary/resources/sector-tracker#currentTab=dayFive" target="_blank">Sectors</a> | <a href="https://tradingeconomics.com/stream" target="_blank">News</a> | <a href="https://finviz.com/news.ashx" target="_blank">Finviz</a> | <a href="https://www.optionsprofitcalculator.com/calculator/call-spread.html" target="_blank">Options</a></li>
 <li><a href="https://www.slickcharts.com/market-movers" target="_blank">Market Movers</a> | <a href="https://stockanalysis.com/markets/gainers/" target="_blank">SA: Movers</a> | <a href="https://stockanalysis.com/trending" target="_blank">SA: Trending</a> | <a href="https://stockanalysis.com/markets/heatmap/?time=1W" target="_blank">Heat Map</a> | <a href="https://www.morningstar.com/markets" target="_blank">MS: Markets</a></li>
 <li><a href="https://www.trackinsight.com/en" target="_blank">Flows</a> | <a href="https://www.google.com/search?q=https://www.morningstar.com/topics/fund-flows" target="_blank">MS: Flows</a> | <a href="https://www.ssga.com/us/en/intermediary/insights/a-feast-of-etf-inflows-and-returns" target="_blank">SPDR: Flows</a> | <a href="https://www.etf.com/sections/daily-etf-flows" target="_blank">ETF.com</a> | <a href="https://etfdb.com/etf-fund-flows/#issuer=blackrock-inc" target="_blank">ETFdb</a></li>
 <li><a href="https://www.cnn.com/markets/fear-and-greed" target="_blank">Fear & Greed Index</a> | <a href="https://www.aaii.com/sentiment-survey" target="_blank">AAII Sentiment</a> | <a href="https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models" target="_blank">Trading Strategies</a> | <a href="https://krmallina.github.io/smi/" target="_blank">Readme</a></li>
@@ -2307,9 +2368,12 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
 
 <div class="quick-filters">
 <div class="chip active" data-filter="all">All</div>
-<div class="chip" data-filter="m7">⭐ Starred</div>
 <div class="chip" data-filter="volume">📊 High Vol</div>
+<div class="chip" data-filter="m7">⭐ Starred</div>
 <div class="chip" data-filter="earnings-week">📅 Earnings</div>
+<div class="chip" data-filter="cat-major-tech">🌐 Tech</div>
+<div class="chip" data-filter="cat-leveraged-etf">⚡ Leveraged</div>
+<div class="chip" data-filter="cat-sector-etf">🏦 ETFs</div>
 <div class="chip" data-filter="signal-buy">🟢 Buy</div>
 <div class="chip" data-filter="signal-sell">🟠 Sell</div>
 <div class="chip" data-filter="signal-short">🔴 Short</div>
@@ -2318,9 +2382,6 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
 <div class="chip" data-filter="overbought">📈 Overbought</div>
 <div class="chip" data-filter="surge">🚀 Surge</div>
 <div class="chip" data-filter="crash">💥 Crash</div>
-<div class="chip" data-filter="cat-major-tech">🌐 Tech</div>
-<div class="chip" data-filter="cat-leveraged-etf">⚡ Leveraged</div>
-<div class="chip" data-filter="cat-sector-etf">🏦 ETFs</div>
 <div class="chip" data-filter="cat-emerging-tech">🚧 Emerging Tech</div>
 <div class="chip" data-filter="dividend">💰 Dividend</div>
 <div class="chip" data-filter="cat-spec-meme">🎲 Speculative</div>
@@ -3294,6 +3355,13 @@ function applyFilter() {
         else if (currentFilter === 'meme') show = meme;
         else if (currentFilter === 'volume') show = vol > 5e7;
         else if (currentFilter === 'm7') show = M7_TICKERS.includes(ticker);
+        else if (currentFilter === 'indexes') {
+            if (window.INDEXES_SET) {
+                show = window.INDEXES_SET.includes(ticker);
+            } else {
+                show = false;
+            }
+        }
         else if (currentFilter === 'squeeze') show = sq !== 'None';
         else if (currentFilter === 'earnings-week') show = (function(){
             const ed = r.dataset.earnings;
