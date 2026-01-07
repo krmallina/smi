@@ -1,4 +1,4 @@
-name: ML Model Build (Working Days)
+name: ML Model Build
 
 on:
   workflow_dispatch:
