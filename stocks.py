@@ -137,11 +137,11 @@ M7_STOCKS = frozenset()
 
 # Category buckets for filtering chips
 CATEGORY_MAP = {
-    "major-tech": frozenset({"AAPL", "AMZN", "GOOGL", "META", "MSFT", "NVDA", "TSLA", "NFLX", "PLTR", "AVGO", "ORCL", "SHOP", "ARM"}),
-    "leveraged-etf": frozenset({"TQQQ", "SPXL", "AAPU", "PLTU"}),
-    "sector-etf": frozenset({"SPY", "XLF", "SMH", "XBI"}),
+    "major-tech": frozenset({"AAPL", "AMZN", "GOOGL", "META", "MSFT", "NVDA", "TSLA", "NFLX", "PLTR", "AVGO", "ORCL", "SHOP", "ARM","MU"}),
+    "leveraged-etf": frozenset({"AAPU", "AMDL", "AMZU", "BULZ", "CONL", "CRWG", "CRWV", "DDM", "EDC", "FAS", "FBL", "FNGU", "GGLL", "HIBL", "LABU", "LAYS", "MIDU", "MSFU", "NAIL", "NVDL", "NVDU", "ORCX", "PLTU", "SHPU", "SOXL", "SPXL", "SSO", "TARK", "TECL", "TNA", "TQQQ", "TSLL", "UNHG", "UPRO", "USD", "WEBL"}),
+    "sector-etf": frozenset({"SPY", "SMH", "XLB", "XLC", "XLE", "XLF", "XLI", "XLK", "XLP", "XLRE", "XLU", "XLV", "XLY"}),
     "spec-meme": MEME_STOCKS,
-    "emerging-tech": frozenset({"OKLO", "SMR", "CRWV", "RKLB"}),
+    "emerging-tech": frozenset({"ALAB", "ASTS", "CRWV", "DVLT", "GEV", "IONQ", "NBIS", "OKLO", "PLTR", "QBTS", "RGTI", "RKLB", "SIDU", "SMR", "VRT"}),
     "star": STAR_STOCKS,  
     "m7": M7_STOCKS,
 }
