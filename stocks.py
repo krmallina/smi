@@ -132,6 +132,7 @@ HEAT_TILE_HEIGHT_PX = 250  # Fixed height for heatmap tiles in pixels
 
 # These will be loaded from tickers.csv file
 MEME_STOCKS = frozenset()
+STAR_STOCKS = frozenset()
 M7_STOCKS = frozenset()
 
 # Category buckets for filtering chips
@@ -141,6 +142,8 @@ CATEGORY_MAP = {
     "sector-etf": frozenset({"SPY", "XLF", "SMH", "XBI"}),
     "spec-meme": MEME_STOCKS,
     "emerging-tech": frozenset({"OKLO", "SMR", "CRWV", "RKLB"}),
+    "star": STAR_STOCKS,  
+    "m7": M7_STOCKS,
 }
 
 
@@ -678,10 +681,10 @@ def check_alerts(data):
 
     for s in data:
         ch = s["change_pct"]
-        if ch > 15:
-            surge.append({"ticker": s["ticker"], "msg": f"SURGED > +15% → {ch:+.2f}%"})
-        elif ch < -15:
-            crash.append({"ticker": s["ticker"], "msg": f"CRASHED < -15% → {ch:+.2f}%"})
+        if ch > 10:
+            surge.append({"ticker": s["ticker"], "msg": f"SURGED > +10% → {ch:+.2f}%"})
+        elif ch < -10:
+            crash.append({"ticker": s["ticker"], "msg": f"CRASHED < -10% → {ch:+.2f}%"})
         if s["volume_spike"]:
             # Determine volume direction arrow
             arrow = ""
@@ -1855,13 +1858,14 @@ def get_index_data(symbol):
 
 
 def load_ticker_sections(csv="data/tickers.csv"):
-    """Load tickers from CSV file with optional [MEME], [M7], and [TICKERS] sections.
+    """Load tickers from CSV file with optional [MEME], [STAR], [M7] and [TICKERS] sections.
     
     If sections are not present, treats all tickers as regular tickers.
     """
-    global MEME_STOCKS, M7_STOCKS
-    
+    global MEME_STOCKS, STAR_STOCKS, M7_STOCKS
+
     meme_list = []
+    star_list = []
     m7_list = []
     ticker_list = []
     current_section = None
@@ -1870,20 +1874,20 @@ def load_ticker_sections(csv="data/tickers.csv"):
     try:
         with open(csv, "r", encoding="utf-8") as f:
             content = f.read()
-        
         # Check if file has section headers
-        has_sections = "[MEME]" in content or "[M7]" in content or "[TICKERS]" in content
-        
+        has_sections = "[MEME]" in content or "[STAR]" in content or "[M7]" in content or "[TICKERS]" in content
         if has_sections:
             # Parse with sections
             for line in content.split('\n'):
                 line = line.strip()
                 if not line:
                     continue
-                    
                 # Check for section headers
                 if line == "[MEME]":
                     current_section = "meme"
+                    continue
+                elif line == "[STAR]":
+                    current_section = "star"
                     continue
                 elif line == "[M7]":
                     current_section = "m7"
@@ -1891,16 +1895,16 @@ def load_ticker_sections(csv="data/tickers.csv"):
                 elif line == "[TICKERS]":
                     current_section = "tickers"
                     continue
-                
                 # Parse tickers from line
                 parts = re.split(r"[,]+", line)
                 parts = [p.strip().upper() for p in parts if p and p.strip()]
-                
                 # Add to appropriate list
                 if current_section == "meme":
                     meme_list.extend(parts)
                 elif current_section == "m7":
                     m7_list.extend(parts)
+                elif current_section == "star":
+                    star_list.extend(parts)
                 elif current_section == "tickers":
                     ticker_list.extend(parts)
         else:
@@ -1915,22 +1919,27 @@ def load_ticker_sections(csv="data/tickers.csv"):
         
         # Update global frozensets (frozensets automatically deduplicate)
         MEME_STOCKS = frozenset(meme_list)
+        STAR_STOCKS = frozenset(star_list)
         M7_STOCKS = frozenset(m7_list)
         
         # Return unique tickers for all lists
         unique_tickers = pd.Series(ticker_list).unique().tolist()
         unique_meme = list(set(meme_list))
+        unique_star = list(set(star_list))
         unique_m7 = list(set(m7_list))
-        
-        return unique_tickers, unique_meme, unique_m7
+        return unique_tickers, unique_meme, unique_star, unique_m7
     except Exception as e:
-        return ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "SPY"], [], []
+        M7_STOCKS = frozenset()
+        return ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "SPY"], [], [], []
 
 
 def dashboard(csv="data/tickers.csv", ext=None):
     """Generate dashboard data. If ext=None, auto-detect based on current market hours."""
     os.makedirs("data", exist_ok=True)
-    tickers, meme_list, m7_list = load_ticker_sections(csv)
+    tickers, meme_list, star_list, m7_list = load_ticker_sections(csv)
+    # Ensure CATEGORY_MAP uses the latest sets
+    CATEGORY_MAP["m7"] = M7_STOCKS
+    CATEGORY_MAP["star"] = STAR_STOCKS
 
     # Auto-detect if not explicitly specified
     if ext is None:
@@ -2376,7 +2385,8 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
 <div class="quick-filters">
 <div class="chip active" data-filter="all">All</div>
 <div class="chip" data-filter="volume">📊 High Vol</div>
-<div class="chip" data-filter="m7">⭐ Starred</div>
+<div class="chip" data-filter="m7">💎 M7</div>
+<div class="chip" data-filter="star">⭐ Starred</div>
 <div class="chip" data-filter="earnings-week">📅 Earnings</div>
 <div class="chip" data-filter="cat-major-tech">🌐 Tech</div>
 <div class="chip" data-filter="cat-leveraged-etf">⚡ Leveraged</div>
@@ -3309,11 +3319,13 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 
     html += "</div></div></div>"
 
-    # Inject M7_TICKERS array into JavaScript
+    # Inject M7_TICKERS and STAR_TICKERS arrays into JavaScript
     m7_tickers_js = json.dumps(list(M7_STOCKS))
+    star_tickers_js = json.dumps(list(STAR_STOCKS))
     html += f"""
 <script>
 const M7_TICKERS = {m7_tickers_js};
+const STAR_TICKERS = {star_tickers_js};
 """
     html += """const prefsKey = 'dash_prefs';
 let prefs = JSON.parse(localStorage.getItem(prefsKey) || '{"theme":"light","view":"table"}');
@@ -3361,14 +3373,8 @@ function applyFilter() {
         else if (currentFilter === 'crash') show = (ch < -10) || (ch5 < -10);
         else if (currentFilter === 'meme') show = meme;
         else if (currentFilter === 'volume') show = vol > 5e7;
+        else if (currentFilter === 'star') show = STAR_TICKERS.includes(ticker);
         else if (currentFilter === 'm7') show = M7_TICKERS.includes(ticker);
-        else if (currentFilter === 'indexes') {
-            if (window.INDEXES_SET) {
-                show = window.INDEXES_SET.includes(ticker);
-            } else {
-                show = false;
-            }
-        }
         else if (currentFilter === 'squeeze') show = sq !== 'None';
         else if (currentFilter === 'earnings-week') show = (function(){
             const ed = r.dataset.earnings;
