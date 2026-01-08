@@ -261,6 +261,14 @@ Alert banner displays at top with color-coded hearts:
 - 🚀 ML Breakout alerts
 - ⚠️ ML Crash Risk alerts
 
+### 🔄 Rotation Detection & Sector Leadership
+
+**Early Rotation Detection:**
+- The dashboard detects and highlights early signs of market rotation using 3-day and 5-day momentum inflection.
+- The leading index or sector (e.g., Nasdaq, Mid-Cap, S&P 500) is shown in the Signals alert group, with ticker, label, and momentum summary.
+- If no significant rotation is detected, the rotation leader block is simply omitted (no message shown).
+- Rotation logic is fully integrated—no separate tab, always grouped with Buy/Sell/Short signals.
+
 ### ⚡ Performance Optimizations
 - **VIX Caching**: 30-minute TTL eliminates redundant API calls
 - **Alert Caching**: 30-minute TTL for alert data
@@ -775,4 +783,3 @@ Create `data/alerts.json` to define custom alert conditions for specific tickers
   }
 ]
 ```
----

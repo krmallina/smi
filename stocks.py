@@ -137,11 +137,11 @@ M7_STOCKS = frozenset()
 
 # Category buckets for filtering chips
 CATEGORY_MAP = {
-    "major-tech": frozenset({"AAPL", "AMZN", "GOOGL", "META", "MSFT", "NVDA", "TSLA", "NFLX", "PLTR", "AVGO", "ORCL", "SHOP", "ARM","MU"}),
-    "leveraged-etf": frozenset({"AAPU", "AMDL", "AMZU", "BULZ", "CONL", "CRWG", "CRWV", "DDM", "EDC", "FAS", "FBL", "FNGU", "GGLL", "HIBL", "LABU", "LAYS", "MIDU", "MSFU", "NAIL", "NVDL", "NVDU", "ORCX", "PLTU", "SHPU", "SOXL", "SPXL", "SSO", "TARK", "TECL", "TNA", "TQQQ", "TSLL", "UNHG", "UPRO", "USD", "WEBL"}),
-    "sector-etf": frozenset({"SPY", "SMH", "XLB", "XLC", "XLE", "XLF", "XLI", "XLK", "XLP", "XLRE", "XLU", "XLV", "XLY"}),
+    "major-tech": frozenset({"AAPL", "AMZN", "GOOGL", "META", "MSFT", "NVDA", "TSLA", "NFLX", "PLTR", "AVGO", "ORCL", "SHOP", "ARM"}),
+    "leveraged-etf": frozenset({"TQQQ", "SPXL", "AAPU", "PLTU"}),
+    "sector-etf": frozenset({"SPY", "XLF", "SMH", "XBI"}),
     "spec-meme": MEME_STOCKS,
-    "emerging-tech": frozenset({"ALAB", "ASTS", "CRWV", "DVLT", "GEV", "IONQ", "NBIS", "OKLO", "PLTR", "QBTS", "RGTI", "RKLB", "SIDU", "SMR", "VRT"}),
+    "emerging-tech": frozenset({"OKLO", "SMR", "CRWV", "RKLB"}),
     "star": STAR_STOCKS,  
     "m7": M7_STOCKS,
 }
@@ -645,6 +645,25 @@ def check_alerts(data):
     ) = ([], [], [], [], [], [], [], [], [], [], [])
     stock_dict = {x["ticker"]: x for x in data}
 
+    # --- ROTATION DETECTION LOGIC ---
+    rotation_map = {
+        "MIDU": "Mid-Cap", "TNA": "Small-Cap", "DDM": "Dow 2x",
+        "^DJI": "Dow 30", "^IXIC": "Nasdaq", "^GSPC": "S&P 500"
+    }
+    rot_candidates = []
+    for sym, label in rotation_map.items():
+        s = stock_dict.get(sym)
+        if s and s.get("change_3d") is not None and s.get("change_5d") is not None:
+            s["rot_score"] = s["change_3d"] - (s["change_5d"] * 0.5)
+            s["rot_label"] = label
+            rot_candidates.append(s)
+    rotation_leader = None
+    if rot_candidates:
+        rot_candidates.sort(key=lambda x: x["rot_score"], reverse=True)
+        if rot_candidates[0]["change_3d"] > 0:
+            rotation_leader = rot_candidates[0]
+    # ---------------------------------
+
     for a in custom_alerts:
         s = stock_dict.get(a["ticker"].upper())
         if not s:
@@ -676,8 +695,10 @@ def check_alerts(data):
             active_sig = s.get("active_signal") or s.get("bb_signal")
             if active_sig == "SHORT":
                 short_signals.append({"ticker": s["ticker"], "msg": f"Custom: SHORT signal"})
-        if msg:
-            custom.append({"ticker": s["ticker"], "msg": msg})
+    if msg:
+        custom.append({"ticker": s["ticker"], "msg": msg})
+
+    # --- Rotation Leader block will be appended to Signals tab content below ---
 
     for s in data:
         ch = s["change_pct"]
@@ -771,6 +792,19 @@ def check_alerts(data):
         (f"<div><span style='color:#d97706'>🟠 Sell:</span> {tickers_sell}</div>" if tickers_sell else '') +
         (f"<div><span style='color:#c74634'>🔴 Short:</span> {tickers_short}</div>" if tickers_short else '')
     )
+    # --- Rotation Leader block (append to Signals tab) ---
+    rot_content = ""
+    if rotation_leader:
+        color = "#20813e" if rotation_leader["change_3d"] > 1.5 else "#1e40af"
+        rot_content = (
+            f"<div style='padding-left: 10px; margin-top:6px;'>"
+            f"<strong>🔄 ROTATION LEADER: {rotation_leader['rot_label']} ({rotation_leader['ticker']})</strong><br>"
+            f"<span style='font-size:0.9em; color:#444;'>"
+            f"Momentum shifting into {rotation_leader['rot_label']}. "
+            f"3D Perf: {rotation_leader['change_3d']:+.2f}% vs 5D: {rotation_leader['change_5d']:+.2f}%</span></div>"
+        )
+    # If no rotation leader, rot_content remains empty
+    content += rot_content
     accordion_items.append(f"<span class='accordion-header' onclick='showAccordion({idx})'>🚦 Signals</span>")
     accordion_js_contents.append(content)
     idx += 1
@@ -818,7 +852,8 @@ def check_alerts(data):
     accordion_html = accordion_css + "<div id='alert-accordion' style='display:inline'>" + ' | '.join(accordion_items) + "</div>"
     accordion_html += f"<div id='accordion-details'></div><script>var accordionContents = {json.dumps(accordion_js_contents)};function showAccordion(idx){{document.querySelectorAll('.accordion-header').forEach((el,i)=>el.classList.toggle('active',i===idx));var details=document.getElementById('accordion-details');if(details)details.innerHTML=accordionContents[idx]||'';}}if(accordionContents.length>0)showAccordion(0);</script>"
     grouped.append(accordion_html)
-    return {"grouped": grouped, "time": now.strftime("%I:%M %p")}
+    update_time = datetime.now(UTC).astimezone(PST).strftime("%I:%M:%S %p PST on %B %d, %Y")
+    return {"grouped": grouped, "time": update_time}
 
 
 def rsi(s, return_prev=False):
@@ -1592,6 +1627,19 @@ def fetch(ticker, ext=False, retry=0):
         tu = ticker.upper()
         category = infer_category_from_info(tu, info) or get_category(tu)
         quote_type = (info.get("quoteType") or "").upper()
+       
+        # --- Early Rotation Detection: 3d/5d momentum ---
+        if len(h_all) >= 6:
+            # 3-day change (current vs 3 sessions ago)
+            p_3d = h_all['Close'].iloc[-4]
+            change_3d = ((price - p_3d) / p_3d) * 100
+            # 5-day change (current vs 5 sessions ago)
+            p_5d = h_all['Close'].iloc[-6]
+            change_5d = ((price - p_5d) / p_5d) * 100
+        else:
+            change_3d = None
+            change_5d = None
+
         result = {
             "ticker": tu,
             "quote_type": quote_type,
@@ -1606,6 +1654,8 @@ def fetch(ticker, ext=False, retry=0):
             "change_abs_6m": abs6m,
             "change_ytd": chytd,
             "change_abs_ytd": absytd,
+            "change_3d": change_3d,
+"change_5d": change_5d,
             "change_1y": ch1y,
             "change_abs_1y": abs1y,
             "change_3y": ch3y,
@@ -1634,7 +1684,7 @@ def fetch(ticker, ext=False, retry=0):
             "implied_low": impl_lo,
             "down_volume_bias": down_bias,
             "sparkline": spk,
-            "sparkline_5d": spk_5d,
+            "sparkline_5d": sparkline(reg["Close"].tolist() if not reg.empty else []),
             "sparkline_1m": spk_1m,
             "sparkline_6m": spk_6m,
             "sparkline_ytd": spk_ytd,
@@ -2101,8 +2151,7 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
     # Handle empty dataframe
     if df.empty:
         # Create a minimal HTML file
-        with open(file, "w", encoding="utf-8") as f:
-            f.write(f"<html><body><h1>No Data Available</h1><p>Last updated: {update}</p></body></html>")
+        f.write(f"<html><body><h1>No Data Available</h1><p>Last updated: {update}</p></body></html>")
         return
 
     # Always render the banner, even if group links are empty
