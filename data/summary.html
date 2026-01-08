@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Static Daily & Weekly Dashboard (Template)</title>
+<style>
+  :root {
+    --bg:#0b1220; --card:#0f1b33; --text:#e8eefc; --muted:#a9b6d3;
+    --border:#223153; --pos:#2dd4bf; --neg:#fb7185; --warn:#fbbf24;
+    --accent:#60a5fa; --shadow: 0 10px 25px rgba(0,0,0,0.35);
+  }
+  body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+         background:var(--bg); color:var(--text); }
+  .wrap { max-width: 1400px; margin: 0 auto; padding: 18px; }
+  .top { display:flex; gap:12px; align-items:baseline; justify-content:space-between; flex-wrap:wrap; }
+  .title h1 { margin:0; font-size: 20px; letter-spacing:0.2px; }
+  .meta { color:var(--muted); font-size: 12px; }
+  .tabs { display:flex; gap:10px; margin: 12px 0 14px; }
+  .tabbtn {
+    background: transparent; color: var(--text); border:1px solid var(--border);
+    padding: 8px 12px; border-radius: 10px; cursor:pointer; font-weight: 600;
+  }
+  .tabbtn.active { background: var(--accent); border-color: transparent; color:#0b1220; }
+  .panel { display:none; }
+  .panel.active { display:block; }
+
+  .card {
+    background:var(--card); border:1px solid var(--border); border-radius: 14px;
+    box-shadow: var(--shadow); overflow:hidden;
+  }
+  .card-h { padding: 12px 14px; border-bottom: 1px solid var(--border);
+            display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+  .card-h .h { font-weight:800; }
+  .card-h .sub { color:var(--muted); font-size:12px; }
+  .card-b { padding: 8px 10px 14px; overflow:auto; }
+
+  table { width:100%; border-collapse:separate; border-spacing:0; min-width: 900px; }
+  thead th {
+    position: sticky; top: 0; z-index: 1;
+    background: #122446; color: var(--text); font-size: 12px; text-transform: uppercase;
+    letter-spacing: 0.6px; padding: 10px 10px; border-bottom: 1px solid var(--border);
+  }
+  tbody td {
+    padding: 10px 10px; border-bottom: 1px solid rgba(34,49,83,0.55);
+    color: var(--text); font-size: 13px; vertical-align: top;
+  }
+  tbody tr:hover td { background: rgba(96,165,250,0.08); }
+  .positive { color: var(--pos); font-weight:700; }
+  .negative { color: var(--neg); font-weight:700; }
+  .neutral { color: var(--muted); }
+  .sig-buy { color: var(--pos); font-weight: 900; }
+  .sig-sell { color: var(--warn); font-weight: 900; }
+  .sig-short { color: var(--neg); font-weight: 900; }
+  .sig-hold { color: var(--muted); font-weight: 900; }
+  .footer { margin-top: 12px; color: var(--muted); font-size: 12px; }
+  code { background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 8px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="title">
+        <h1>📊 Daily & Weekly Summary Dashboard</h1>
+        <div class="meta">Template generated: 2026-01-08 03:44:56</div>
+      </div>
+      <div class="meta">This is a static HTML template. Replace table rows with your daily build script output.</div>
+    </div>
+
+    <div class="tabs">
+      <button class="tabbtn active" data-tab="daily">Daily Summary</button>
+      <button class="tabbtn" data-tab="weekly">Weekly Summary</button>
+    </div>
+
+    <div class="panel active" id="panel-daily">
+      <div class="card">
+        <div class="card-h">
+          <div class="h">Daily Snapshot</div>
+          <div class="sub">Add your latest-day metrics: % change, RSI, MACD, SMA20/50/200, ATR, etc.</div>
+        </div>
+        <div class="card-b">
+          <table id="dailyTable">
+            <thead>
+              <tr>
+                <th>Ticker</th><th>Close</th><th>Day %</th><th>RSI14</th><th>MACD Hist</th><th>SMA50</th><th>SMA200</th><th>Signal</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>SPY</td><td>—</td><td class="neutral">—</td><td>—</td><td>—</td><td>—</td><td>—</td><td class="sig-hold">HOLD</td>
+              </tr>
+              <tr>
+                <td>QQQ</td><td>—</td><td class="neutral">—</td><td>—</td><td>—</td><td>—</td><td>—</td><td class="sig-hold">HOLD</td>
+              </tr>
+              <tr>
+                <td>AAPL</td><td>—</td><td class="neutral">—</td><td>—</td><td>—</td><td>—</td><td>—</td><td class="sig-hold">HOLD</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="panel-weekly">
+      <div class="card">
+        <div class="card-h">
+          <div class="h">Weekly Summary</div>
+          <div class="sub">Add your last-5-trading-days % change and indicator snapshot.</div>
+        </div>
+        <div class="card-b">
+          <table id="weeklyTable">
+            <thead>
+              <tr>
+                <th>Ticker</th><th>Close</th><th>Week %</th><th>RSI14</th><th>MACD Hist</th><th>SMA50</th><th>SMA200</th><th>Signal</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>SPY</td><td>—</td><td class="neutral">—</td><td>—</td><td>—</td><td>—</td><td>—</td><td class="sig-hold">HOLD</td>
+              </tr>
+              <tr>
+                <td>QQQ</td><td>—</td><td class="neutral">—</td><td>—</td><td>—</td><td>—</td><td>—</td><td class="sig-hold">HOLD</td>
+              </tr>
+              <tr>
+                <td>AAPL</td><td>—</td><td class="neutral">—</td><td>—</td><td>—</td><td>—</td><td>—</td><td class="sig-hold">HOLD</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div><b>How to automate:</b> run your Python script daily to compute indicators and rewrite this HTML file.</div>
+      <div>Tip: keep this template and have Python replace the <code>&lt;tbody&gt;...&lt;/tbody&gt;</code> blocks with generated rows.</div>
+    </div>
+  </div>
+
+<script>
+  // Tiny tab switcher (still static HTML; no backend)
+  const btns = document.querySelectorAll('.tabbtn');
+  function activate(tab) {
+    btns.forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    document.getElementById('panel-daily').classList.toggle('active', tab === 'daily');
+    document.getElementById('panel-weekly').classList.toggle('active', tab === 'weekly');
+  }
+  btns.forEach(b => b.addEventListener('click', () => activate(b.dataset.tab)));
+</script>
+</body>
+</html>
