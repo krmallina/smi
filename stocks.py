@@ -134,14 +134,17 @@ HEAT_TILE_HEIGHT_PX = 250  # Fixed height for heatmap tiles in pixels
 MEME_STOCKS = frozenset()
 STAR_STOCKS = frozenset()
 M7_STOCKS = frozenset()
+EMERGINGTECH_STOCKS = frozenset()
+LEVERAGED_STOCKS = frozenset()
+ETFS_STOCKS = frozenset()
 
 # Category buckets for filtering chips
 CATEGORY_MAP = {
     "major-tech": frozenset({"AAPL", "AMZN", "GOOGL", "META", "MSFT", "NVDA", "TSLA", "NFLX", "PLTR", "AVGO", "ORCL", "SHOP", "ARM"}),
-    "leveraged-etf": frozenset({"TQQQ", "SPXL", "AAPU", "PLTU"}),
-    "sector-etf": frozenset({"SPY", "XLF", "SMH", "XBI"}),
+    "leveraged-etf": LEVERAGED_STOCKS,
+    "sector-etf": ETFS_STOCKS,
     "spec-meme": MEME_STOCKS,
-    "emerging-tech": frozenset({"OKLO", "SMR", "CRWV", "RKLB"}),
+    "emerging-tech": EMERGINGTECH_STOCKS,
     "star": STAR_STOCKS,  
     "m7": M7_STOCKS,
 }
@@ -1908,15 +1911,18 @@ def get_index_data(symbol):
 
 
 def load_ticker_sections(csv="data/tickers.csv"):
-    """Load tickers from CSV file with optional [MEME], [STAR], [M7] and [TICKERS] sections.
+    """Load tickers from CSV file with optional [MEME], [STAR], [M7], [EMERGINGTECH], [LEVERAGED], [ETFS] and [TICKERS] sections.
     
     If sections are not present, treats all tickers as regular tickers.
     """
-    global MEME_STOCKS, STAR_STOCKS, M7_STOCKS
+    global MEME_STOCKS, STAR_STOCKS, M7_STOCKS, EMERGINGTECH_STOCKS, LEVERAGED_STOCKS, ETFS_STOCKS
 
     meme_list = []
     star_list = []
     m7_list = []
+    emergingtech_list = []
+    leveraged_list = []
+    etfs_list = []
     ticker_list = []
     current_section = None
     has_sections = False
@@ -1925,7 +1931,7 @@ def load_ticker_sections(csv="data/tickers.csv"):
         with open(csv, "r", encoding="utf-8") as f:
             content = f.read()
         # Check if file has section headers
-        has_sections = "[MEME]" in content or "[STAR]" in content or "[M7]" in content or "[TICKERS]" in content
+        has_sections = "[MEME]" in content or "[STAR]" in content or "[M7]" in content or "[EMERGINGTECH]" in content or "[LEVERAGED]" in content or "[ETFS]" in content or "[TICKERS]" in content
         if has_sections:
             # Parse with sections
             for line in content.split('\n'):
@@ -1942,6 +1948,15 @@ def load_ticker_sections(csv="data/tickers.csv"):
                 elif line == "[M7]":
                     current_section = "m7"
                     continue
+                elif line == "[EMERGINGTECH]":
+                    current_section = "emergingtech"
+                    continue
+                elif line == "[LEVERAGED]":
+                    current_section = "leveraged"
+                    continue
+                elif line == "[ETFS]":
+                    current_section = "etfs"
+                    continue
                 elif line == "[TICKERS]":
                     current_section = "tickers"
                     continue
@@ -1955,6 +1970,12 @@ def load_ticker_sections(csv="data/tickers.csv"):
                     m7_list.extend(parts)
                 elif current_section == "star":
                     star_list.extend(parts)
+                elif current_section == "emergingtech":
+                    emergingtech_list.extend(parts)
+                elif current_section == "leveraged":
+                    leveraged_list.extend(parts)
+                elif current_section == "etfs":
+                    etfs_list.extend(parts)
                 elif current_section == "tickers":
                     ticker_list.extend(parts)
         else:
@@ -1971,13 +1992,19 @@ def load_ticker_sections(csv="data/tickers.csv"):
         MEME_STOCKS = frozenset(meme_list)
         STAR_STOCKS = frozenset(star_list)
         M7_STOCKS = frozenset(m7_list)
+        EMERGINGTECH_STOCKS = frozenset(emergingtech_list)
+        LEVERAGED_STOCKS = frozenset(leveraged_list)
+        ETFS_STOCKS = frozenset(etfs_list)
         
         # Return unique tickers for all lists
         unique_tickers = pd.Series(ticker_list).unique().tolist()
         unique_meme = list(set(meme_list))
         unique_star = list(set(star_list))
         unique_m7 = list(set(m7_list))
-        return unique_tickers, unique_meme, unique_star, unique_m7
+        unique_emergingtech = list(set(emergingtech_list))
+        unique_leveraged = list(set(leveraged_list))
+        unique_etfs = list(set(etfs_list))
+        return unique_tickers, unique_meme, unique_star, unique_m7, unique_emergingtech, unique_leveraged, unique_etfs
     except Exception as e:
         M7_STOCKS = frozenset()
         return ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "SPY"], [], [], []
@@ -1986,10 +2013,13 @@ def load_ticker_sections(csv="data/tickers.csv"):
 def dashboard(csv="data/tickers.csv", ext=None):
     """Generate dashboard data. If ext=None, auto-detect based on current market hours."""
     os.makedirs("data", exist_ok=True)
-    tickers, meme_list, star_list, m7_list = load_ticker_sections(csv)
+    tickers, meme_list, star_list, m7_list, emergingtech_list, leveraged_list, etfs_list = load_ticker_sections(csv)
     # Ensure CATEGORY_MAP uses the latest sets
     CATEGORY_MAP["m7"] = M7_STOCKS
     CATEGORY_MAP["star"] = STAR_STOCKS
+    CATEGORY_MAP["emerging-tech"] = EMERGINGTECH_STOCKS
+    CATEGORY_MAP["leveraged-etf"] = LEVERAGED_STOCKS
+    CATEGORY_MAP["sector-etf"] = ETFS_STOCKS
 
     # Auto-detect if not explicitly specified
     if ext is None:
@@ -2434,10 +2464,10 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
 <div class="quick-filters">
 <div class="chip active" data-filter="all">All</div>
 <div class="chip" data-filter="volume">📊 High Vol</div>
-<div class="chip" data-filter="m7">💎 M7</div>
+<div class="chip" data-filter="m7">💎 M</div>
 <div class="chip" data-filter="star">⭐ Starred</div>
 <div class="chip" data-filter="earnings-week">📅 Earnings</div>
-<div class="chip" data-filter="cat-major-tech">🌐 Tech</div>
+<div class="chip" data-filter="cat-major-tech">🌐 Growth</div>
 <div class="chip" data-filter="cat-leveraged-etf">⚡ Leveraged</div>
 <div class="chip" data-filter="cat-sector-etf">🏦 ETFs</div>
 <div class="chip" data-filter="signal-buy">🟢 Buy</div>
@@ -2448,7 +2478,7 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
 <div class="chip" data-filter="overbought">📈 Overbought</div>
 <div class="chip" data-filter="surge">🚀 Surge</div>
 <div class="chip" data-filter="crash">💥 Crash</div>
-<div class="chip" data-filter="cat-emerging-tech">🚧 Emerging Tech</div>
+<div class="chip" data-filter="cat-emerging-tech">🚧 Emerging</div>
 <div class="chip" data-filter="dividend">💰 Dividend</div>
 <div class="chip" data-filter="cat-spec-meme">🎲 Speculative</div>
 <div class="chip" data-filter="squeeze">🔥 Squeeze</div>
@@ -2456,9 +2486,9 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
 </div>
 
 <div class="views" style="margin-top:6px">
-<button class="view-btn active" onclick="setView(this,'table')">📋 Table</button>
-<button class="view-btn" onclick="setView(this,'card')">🗂️ Cards</button>
 <button class="view-btn" onclick="setView(this,'heat')">🔥 Heatmap</button>
+<button class="view-btn" onclick="setView(this,'card')">🗂️ Cards</button>
+<button class="view-btn active" onclick="setView(this,'table')">📋 Table</button>
 <input id="tickerFilter" placeholder="Filter tickers..." oninput="applyFilter()">
 </div>
 </div>
