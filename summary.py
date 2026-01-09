@@ -7,6 +7,120 @@ from typing import Iterable, Optional, Tuple, List
 
 import pandas as pd
 import yfinance as yf
+import os
+import re
+import pytz
+
+# Timezone setup
+UTC = pytz.utc
+PST = pytz.timezone("America/Los_Angeles")
+
+# Global variables for ticker categories
+MEME_STOCKS = frozenset()
+STAR_STOCKS = frozenset()
+M7_STOCKS = frozenset()
+EMERGINGTECH_STOCKS = frozenset()
+LEVERAGED_STOCKS = frozenset()
+ETFS_STOCKS = frozenset()
+
+def load_ticker_sections(csv="data/tickers.csv"):
+    """Load tickers from CSV file with optional [MEME], [STAR], [M7], [EMERGINGTECH], [LEVERAGED], [ETFS] and [TICKERS] sections.
+    
+    If sections are not present, treats all tickers as regular tickers.
+    """
+    global MEME_STOCKS, STAR_STOCKS, M7_STOCKS, EMERGINGTECH_STOCKS, LEVERAGED_STOCKS, ETFS_STOCKS
+
+    meme_list = []
+    star_list = []
+    m7_list = []
+    emergingtech_list = []
+    leveraged_list = []
+    etfs_list = []
+    ticker_list = []
+    current_section = None
+    has_sections = False
+    
+    try:
+        with open(csv, "r", encoding="utf-8") as f:
+            content = f.read()
+        # Check if file has section headers
+        has_sections = "[MEME]" in content or "[STAR]" in content or "[M7]" in content or "[EMERGINGTECH]" in content or "[LEVERAGED]" in content or "[ETFS]" in content or "[TICKERS]" in content
+        if has_sections:
+            # Parse with sections
+            for line in content.split('\n'):
+                line = line.strip()
+                if not line:
+                    continue
+                # Check for section headers
+                if line == "[MEME]":
+                    current_section = "meme"
+                    continue
+                elif line == "[STAR]":
+                    current_section = "star"
+                    continue
+                elif line == "[M7]":
+                    current_section = "m7"
+                    continue
+                elif line == "[EMERGINGTECH]":
+                    current_section = "emergingtech"
+                    continue
+                elif line == "[LEVERAGED]":
+                    current_section = "leveraged"
+                    continue
+                elif line == "[ETFS]":
+                    current_section = "etfs"
+                    continue
+                elif line == "[TICKERS]":
+                    current_section = "tickers"
+                    continue
+                # Parse tickers from line
+                parts = re.split(r"[,]+", line)
+                parts = [p.strip().upper() for p in parts if p and p.strip()]
+                # Add to appropriate list
+                if current_section == "meme":
+                    meme_list.extend(parts)
+                elif current_section == "m7":
+                    m7_list.extend(parts)
+                elif current_section == "star":
+                    star_list.extend(parts)
+                elif current_section == "emergingtech":
+                    emergingtech_list.extend(parts)
+                elif current_section == "leveraged":
+                    leveraged_list.extend(parts)
+                elif current_section == "etfs":
+                    etfs_list.extend(parts)
+                elif current_section == "tickers":
+                    ticker_list.extend(parts)
+        else:
+            # Backward compatible: treat as simple CSV without sections
+            content = content.replace("\r\n", "\n").replace("\r", "\n")
+            parts = re.split(r"[\n,]+", content.strip())
+            parts = [p.strip().upper() for p in parts if p and p.strip()]
+            # Skip header row if present
+            if parts and parts[0].lower() in ("ticker", "tickers"):
+                parts = parts[1:]
+            ticker_list = parts
+        
+        # Update global frozensets (frozensets automatically deduplicate)
+        MEME_STOCKS = frozenset(meme_list)
+        STAR_STOCKS = frozenset(star_list)
+        M7_STOCKS = frozenset(m7_list)
+        EMERGINGTECH_STOCKS = frozenset(emergingtech_list)
+        LEVERAGED_STOCKS = frozenset(leveraged_list)
+        ETFS_STOCKS = frozenset(etfs_list)
+        
+        # Return unique tickers for all lists
+        unique_tickers = pd.Series(ticker_list).unique().tolist()
+        unique_meme = list(set(meme_list))
+        unique_star = list(set(star_list))
+        unique_m7 = list(set(m7_list))
+        unique_emergingtech = list(set(emergingtech_list))
+        unique_leveraged = list(set(leveraged_list))
+        unique_etfs = list(set(etfs_list))
+        return unique_tickers, unique_meme, unique_star, unique_m7, unique_emergingtech, unique_leveraged, unique_etfs
+    except Exception as e:
+        M7_STOCKS = frozenset()
+        return ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "SPY"], [], [], []
 
 # ---------------- Formatting helpers ----------------
 def fmt_num(x, d: int = 2) -> str:
@@ -189,8 +303,8 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
         hist_list.append(h)
     df["macd_hist"] = pd.concat(hist_list).sort_index()
 
-    df["atr14"] = df.groupby("ticker").apply(lambda g: atr(g["high"], g["low"], g["close"], 14)).reset_index(level=0, drop=True)
-    df["day_ret"] = df.groupby("ticker")["close"].pct_change()
+    df["atr14"] = df.groupby("ticker", group_keys=False).apply(lambda g: atr(g["high"], g["low"], g["close"], 14), include_groups=False)
+    df["day_ret"] = df.groupby("ticker")["close"].pct_change(fill_method=None)
 
     return df
 
@@ -253,7 +367,7 @@ def build_tables(df: pd.DataFrame):
     monthly_rows = []
     for t, g in df.groupby("ticker"):
         g = g.set_index("date").sort_index()
-        m = g.resample("M").last()
+        m = g.resample("ME").last()
         if m.empty:
             continue
         m["ticker"] = t
@@ -690,7 +804,7 @@ def _render_main_table(df: pd.DataFrame) -> str:
     return "<div class='table-wrap'><table id='mainTable' class='data-table'>%s%s</table></div>" % (thead, tbody)
 
 def render_html(daily_df: pd.DataFrame, _unused, asof: Optional[str], tickers: str) -> str:
-    asof = asof or datetime.now().strftime("%Y-%m-%d")
+    asof = datetime.now(UTC).astimezone(PST).strftime("%I:%M:%S %p PST on %B %d, %Y")
     head = (
         "<!doctype html><html><head><meta charset='utf-8'/>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'/>"
@@ -719,6 +833,44 @@ def render_html(daily_df: pd.DataFrame, _unused, asof: Optional[str], tickers: s
         "</div></body></html>"
     )
     return head + body
+
+def generate_summary_html(csv="data/tickers.csv"):
+    """Generate summary.html using tickers from CSV file."""
+    os.makedirs("data", exist_ok=True)
+    
+    # Load tickers from CSV
+    tickers, _, _, _, _, _, _ = load_ticker_sections(csv)
+    
+    if not tickers:
+        return
+    
+    # Fetch data
+    df = fetch_yahoo_ohlcv(tickers, period="2y", interval="1d")
+    
+    if df.empty:
+        return
+    
+    # Add indicators
+    df = add_indicators(df)
+    
+    # Build tables
+    daily_df, _, asof = build_tables(df)
+    
+    # Generate HTML
+    tickers_str = ", ".join(tickers[:10]) + ("..." if len(tickers) > 10 else "")
+    html_content = render_html(daily_df, None, asof, tickers_str)
+    
+    # Write to file
+    output_file = "data/summary.html"
+    with open(output_file, "w", encoding="utf-8") as f:
+        f.write(html_content)
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("csv_file", nargs="?", default="data/tickers.csv")
+    args = parser.parse_args()
+    generate_summary_html(args.csv_file)
 
 __all__ = [
     "fetch_yahoo_ohlcv",

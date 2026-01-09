@@ -90,6 +90,13 @@ except ImportError:
     def predict_breakout_crash(stock_data):
         return {'breakout_score': 0, 'crash_risk': 0, 'prediction': 'NEUTRAL', 'confidence': 0}
 
+# Summary generator
+try:
+    from summary import generate_summary_html
+except ImportError:
+    def generate_summary_html(csv="data/tickers.csv"):
+        print("⚠️  Summary generation not available (summary.py not found)")
+
 ALERTS_FILE = "data/alerts.json"
 UTC = pytz.utc
 PST = pytz.timezone("America/Los_Angeles")
@@ -2444,7 +2451,7 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
 <ul>
 <li><a href="https://tradingeconomics.com/us100:ind" target="_blank">US 100</a> | <a href="https://tradingeconomics.com/calendar" target="_blank">Calendar</a> | <a href="https://www.ssga.com/us/en/intermediary/resources/sector-tracker#currentTab=dayFive" target="_blank">Sectors</a> | <a href="https://tradingeconomics.com/stream" target="_blank">News</a> | <a href="https://finviz.com/news.ashx" target="_blank">Finviz</a> | <a href="https://www.optionsprofitcalculator.com/calculator/call-spread.html" target="_blank">Options</a></li>
 <li><a href="https://www.slickcharts.com/market-movers" target="_blank">Market Movers</a> | <a href="https://stockanalysis.com/markets/gainers/" target="_blank">SA: Movers</a> | <a href="https://stockanalysis.com/trending" target="_blank">SA: Trending</a> | <a href="https://stockanalysis.com/markets/heatmap/?time=1W" target="_blank">Heat Map</a> | <a href="https://www.morningstar.com/markets" target="_blank">MS: Markets</a></li>
-<li><a href="https://www.trackinsight.com/en" target="_blank">Flows</a> | <a href="https://www.google.com/search?q=https://www.morningstar.com/topics/fund-flows" target="_blank">MS: Flows</a> | <a href="https://www.ssga.com/us/en/intermediary/insights/a-feast-of-etf-inflows-and-returns" target="_blank">SPDR: Flows</a> | <a href="https://www.etf.com/sections/daily-etf-flows" target="_blank">ETF.com</a> | <a href="https://etfdb.com/etf-fund-flows/#issuer=blackrock-inc" target="_blank">ETFdb</a></li>
+<li><a href="https://www.trackinsight.com/en" target="_blank">Flows</a> | <a href="https://www.google.com/search?q=https://www.morningstar.com/topics/fund-flows" target="_blank">MS: Flows</a> | <a href="https://www.ssga.com/us/en/intermediary/insights/a-feast-of-etf-inflows-and-returns" target="_blank">SPDR: Flows</a> | <a href="https://www.etf.com/sections/daily-etf-flows" target="_blank">ETF.com</a> | <a href="https://etfdb.com/etf-fund-flows/#issuer=blackrock-inc" target="_blank">ETFdb</a> | <a href="https://krmallina.github.io/smi/data/summary.html" target="_blank">Summary</a></li>
 <li><a href="https://www.cnn.com/markets/fear-and-greed" target="_blank">Fear & Greed Index</a> | <a href="https://www.aaii.com/sentiment-survey" target="_blank">AAII Sentiment</a> | <a href="https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models" target="_blank">Trading Strategies</a> | <a href="https://krmallina.github.io/smi/" target="_blank">Readme</a></li>
 </ul>
 </div>
@@ -2471,7 +2478,7 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
 <div class="quick-filters">
 <div class="chip active" data-filter="all">All</div>
 <div class="chip" data-filter="volume">📊 High Vol</div>
-<div class="chip" data-filter="m7">💎 M</div>
+<div class="chip" data-filter="m7">💎 M7+</div>
 <div class="chip" data-filter="star">⭐ Starred</div>
 <div class="chip" data-filter="earnings-week">📅 Earnings</div>
 <div class="chip" data-filter="cat-major-tech">🌐 Growth</div>
@@ -3709,6 +3716,14 @@ if __name__ == "__main__":
         )
         dashboard_elapsed = time_module.time() - dashboard_start
         print(f"✓ Dashboard generated: {file} (took {dashboard_elapsed / 60:.2f} minutes)")
+        
+        # Generate summary dashboard
+        try:
+            summary_start = time_module.time()
+            generate_summary_html(args.csv_file)
+            summary_elapsed = time_module.time() - summary_start
+        except Exception as e:
+            print(f"⚠️  Summary generation failed: {e}")
     except Exception as e:
         print(f"✗ Dashboard generation failed: {e}")
     
