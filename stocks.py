@@ -955,6 +955,8 @@ def fetch(ticker, ext=False, retry=0):
         time.sleep(FETCH_BASE_DELAY + jitter + (retry * RETRY_DELAY_MULTIPLIER))
 
         info = get_ticker_info_cached(ticker)
+        if info is None:
+            info = {}
         
         # OPTIMIZATION: Fetch longer history once and slice it for all needs
         # This reduces API calls from ~8 to ~3 per ticker
@@ -1658,7 +1660,6 @@ def fetch(ticker, ext=False, retry=0):
             "change_ytd": chytd,
             "change_abs_ytd": absytd,
             "change_3d": change_3d,
-"change_5d": change_5d,
             "change_1y": ch1y,
             "change_abs_1y": abs1y,
             "change_3y": ch3y,
@@ -1864,6 +1865,8 @@ def get_index_data(symbol):
             # fallback to minimal info if fetch fails
             t = yf.Ticker(symbol)
             info = t.info
+            if info is None:
+                info = {}
             price = info.get("regularMarketPrice") or info.get("currentPrice") or info.get("previousClose")
             ch_pct = info.get("regularMarketChangePercent")
             prev = info.get("regularMarketPreviousClose") or info.get("previousClose")
@@ -2058,7 +2061,7 @@ SESSION = requests.Session()
 def get_ticker_info_cached(ticker):
     try:
         t = yf.Ticker(ticker)
-        return t.info
+        return t.info or {}
     except Exception:
         return {}
 
@@ -2099,6 +2102,8 @@ def get_fear_greed_data():
         r = requests.get(url, headers=headers, timeout=5)  # OPTIMIZED: Reduced timeout
         r.raise_for_status()
         data = r.json()
+        if not isinstance(data, dict):
+            data = {}
         fg = data.get("fear_and_greed") or data
         score = float(fg["score"])
         s = int(round(score))
@@ -2118,6 +2123,8 @@ def get_fear_greed_data():
             )
             r.raise_for_status()
             data = r.json()
+            if not isinstance(data, dict):
+                data = {}
             score = float(data["fear_and_greed"]["score"])
             s = int(round(score))
             rating = ("Extreme Fear", "Fear", "Neutral", "Greed", "Extreme Greed")[
@@ -2256,7 +2263,7 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
         return prefix, suffix, sig_color if sig_icon else trend_color
 
     def index_str(data, name, invert=False):
-        if data.get("price") is None:
+        if data is None or data.get("price") is None:
             return f'<span class="neutral">{name}: N/A</span>'
         ch_abs = data.get("change_abs")
         prefix, suffix, color = signal_and_trend_icons(data)
@@ -2282,7 +2289,7 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
     indices_h = f'{index_str(dow, "Dow")} | {index_str(sp, "S&P")} | {index_str(spy, "SPY")} | {index_str(nas, "Nasdaq")} | {index_str(vix, "VIX", invert=True)}'
 
     fg_h = '<span class="neutral">F&G: N/A</span>'
-    if fg.get("score") is not None:
+    if fg and fg.get("score") is not None:
         cls = (
             "negative"
             if fg["score"] <= 24
@@ -2299,7 +2306,7 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
         fg_h = f'<span class="{cls}">F&G: {fg["score"]:.1f} ({fg["rating"]})</span>'
 
     aaii_h = '<span class="neutral">AAII: N/A</span>'
-    if aaii.get("bullish") is not None:
+    if aaii and aaii.get("bullish") is not None:
         spread = aaii["spread"]
         cls = (
             "positive"
