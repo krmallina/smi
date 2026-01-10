@@ -2519,7 +2519,7 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
 <div class="views" style="margin-top:6px">
 <button class="view-btn" onclick="setView(this,'heat')">🔥 Heatmap</button>
 <button class="view-btn" onclick="setView(this,'card')">🗂️ Cards</button>
-<button class="view-btn active" onclick="setView(this,'table')">📋 Table</button>
+<button class="view-btn" onclick="setView(this,'table')">📋 Table</button>
 <input id="tickerFilter" placeholder="Filter tickers..." oninput="applyFilter()">
 </div>
 </div>
@@ -3439,7 +3439,7 @@ const M7_TICKERS = {m7_tickers_js};
 const STAR_TICKERS = {star_tickers_js};
 """
     html += """const prefsKey = 'dash_prefs';
-let prefs = JSON.parse(localStorage.getItem(prefsKey) || '{"theme":"light","view":"table"}');
+let prefs = JSON.parse(localStorage.getItem(prefsKey) || '{"theme":"light","view":"heat"}');
 document.documentElement.setAttribute('data-theme', prefs.theme);
 
 function setView(btn, view) {
@@ -3553,10 +3553,15 @@ document.querySelectorAll('th[data-sort]').forEach(function(th) {
 });
 
 applyFilter();
-if (prefs.view !== 'table') {
-    const btn = document.querySelector(`.view-btn:nth-child(${prefs.view==='card'?2:3})`);
-    if (btn) setView(btn, prefs.view);
-}
+// Always set the correct view button on load
+const viewBtnMap = {
+    'heat': 0,
+    'card': 1,
+    'table': 2
+};
+const btns = document.querySelectorAll('.view-btn');
+const idx = viewBtnMap[prefs.view] ?? 0;
+if (btns[idx]) setView(btns[idx], prefs.view);
 
 function toggleTheme() {
     prefs.theme = prefs.theme === 'light' ? 'dark' : 'light';
