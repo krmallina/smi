@@ -2437,7 +2437,24 @@ tr:hover td{{background:var(--surface)}}
 .range-labels{{display:flex;justify-content:space-between;font-size:0.75em;margin-top:4px;color:var(--text);opacity:0.8}}
 .range-container{{margin:10px 0}}
 .range-title{{font-size:0.75em;font-weight:600;margin-bottom:4px;color:var(--text);opacity:0.9}}
-input#tickerFilter{{padding:6px 10px;border:1.5px solid var(--border);border-radius:var(--radius-md);background:var(--card);color:var(--text);font-size:13px;font-family:'Oracle Sans',-apple-system,sans-serif;transition:all 0.2s;outline:none;margin-left:auto;min-width:180px}}
+input#tickerFilter{{padding:6px 10px;border:1.5px solid var(--border);border-radius:var(--radius-md);background:var(--card);color:var(--text);font-size:13px;font-family:'Oracle Sans',-apple-system,sans-serif;transition:all 0.2s;outline:none;margin-left:auto;min-width:120px;width:100%;max-width:260px;box-sizing:border-box}}
+/* Responsive table view: horizontal scroll on small screens */
+.table-wrap{{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}}
+table.data-table{{min-width:900px;}}
+@media (max-width: 900px) {{
+    .table-wrap{{padding-bottom:8px;}}
+    table.data-table{{min-width:700px;}}
+}}
+@media (max-width: 600px) {{
+    .table-wrap{{padding-bottom:8px;}}
+    table.data-table{{min-width:520px;}}
+    input#tickerFilter {{
+        min-width: 0;
+        width: 100%;
+        margin-left: 0;
+        max-width: 100%;
+    }}
+}}
 input#tickerFilter:hover{{border-color:var(--accent)}}
 input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5,114,206,0.1)}}
 </style></head><body>

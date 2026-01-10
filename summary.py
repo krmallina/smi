@@ -561,46 +561,46 @@ def build_tables(df: pd.DataFrame):
 # ---------------- HTML ----------------
 _CSS = r"""
 :root{
-  --bg:#f7f8fa; --surface:#fff; --border:#dfe3e8;
-  --text:#1f2937; --muted:#6b7280;
-  --brand:#c74634;
-  --buy:#1f7a1f; --sell:#b42318; --short:#6f2dbd;
-  --radius:14px;
-  --shadow:0 1px 2px rgba(16,24,40,.06), 0 2px 8px rgba(16,24,40,.06);
+    --bg:#f7f8fa; --surface:#fff; --border:#dfe3e8;
+    --text:#1f2937; --muted:#6b7280;
+    --brand:#c74634;
+    --buy:#1f7a1f; --sell:#b42318; --short:#6f2dbd;
+    --radius:14px;
+    --shadow:0 1px 2px rgba(16,24,40,.06), 0 2px 8px rgba(16,24,40,.06);
 }
 *{box-sizing:border-box;}
 body{margin:0;background:var(--bg);color:var(--text);
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
 .page{max-width:100%;margin:0;padding:12px 12px 24px;}
 .header{display:flex;gap:14px;align-items:flex-start;justify-content:flex-start;flex-wrap:wrap;margin-bottom:14px;}
 .hgroup{max-width:100%;}
 .hgroup h1{margin:0;font-size:22px;}
 .hgroup .meta{margin-top:6px;color:var(--muted);font-size:13px;}
 .brand-dot{display:inline-block;width:10px;height:10px;border-radius:999px;background:var(--brand);
-  margin-right:8px;vertical-align:middle;}
+    margin-right:8px;vertical-align:middle;}
 .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
 .controls input{padding:11px 14px;border:1px solid var(--border);border-radius:999px;background:var(--surface);
-  font-size:16px;min-width:260px;outline:none;}
+    font-size:16px;min-width:260px;outline:none;}
 .controls input:focus{border-color:rgba(199,70,52,.55);box-shadow:0 0 0 4px rgba(199,70,52,.12);}
 .controls .hint{color:var(--muted);font-size:12.5px;}
 .card{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
-  box-shadow:var(--shadow);padding:12px;margin-top:12px;}
+    box-shadow:var(--shadow);padding:12px;margin-top:12px;}
 .card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;}
 .card-head h2{margin:0;font-size:16px;}
-.table-wrap{overflow:visible;}
-table.data-table{width:100%;border-collapse:separate;border-spacing:0;border-radius:12px;overflow:hidden;}
+.table-wrap{width:100%;max-height:80vh;overflow:auto;border:1px solid var(--border);border-radius:12px;position:relative;}
+table.data-table{width:100%;border-collapse:separate;border-spacing:0;min-width:900px;}
 thead th{position:sticky;top:0;background:#fbfbfc;color:#111827;font-weight:800;font-size:12.5px;
-  letter-spacing:.2px;cursor:pointer;user-select:none;border-bottom:1px solid var(--border);}
+    letter-spacing:.2px;cursor:pointer;user-select:none;border-bottom:1px solid var(--border);}
 th,td{padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap;font-size:13.5px;}
 td.hint{white-space:normal;min-width:260px;max-width:460px;line-height:1.25;}
 
-tbody tr:nth-child(even){background:rgba(17,24,39,.02);}
-tbody tr:hover{background:rgba(199,70,52,.06);}
+tbody tr{background:#fff;}
+tbody tr:hover{background:#fff;}
 td.num{text-align:right;font-variant-numeric:tabular-nums;}
 td.pos{color:var(--buy);font-weight:700;}
 td.neg{color:var(--sell);font-weight:700;}
 .badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;
-  font-weight:800;font-size:12px;border:1px solid rgba(17,24,39,.08);}
+    font-weight:800;font-size:12px;border:1px solid rgba(17,24,39,.08);}
 .badge:before{content:"";width:8px;height:8px;border-radius:999px;background:currentColor;opacity:.9;}
 .badge.buy{color:var(--buy);background:rgba(31,122,31,.08);}
 .badge.sell{color:var(--sell);background:rgba(180,35,24,.08);}
@@ -611,44 +611,56 @@ td.spark.trend-up{color:var(--buy);}
 td.spark.trend-down{color:var(--sell);}
 td.spark.trend-flat{color:var(--muted);}
 
-
 .footer{margin-top:14px;color:var(--muted);font-size:12.5px;}
+@media (max-width: 900px){
+    .table-wrap{overflow-x:auto;}
+    table.data-table{min-width:700px;}
+}
 @media (max-width: 640px){
-  .header{flex-direction:column;align-items:stretch;gap:10px;}
-  .controls input{width:100%;min-width:0;}
-  .controls .hint{display:none;}
-  .table-wrap{overflow-x:auto;}
-  table.data-table{min-width:1200px;}
+    .header{flex-direction:column;align-items:stretch;gap:10px;}
+    .controls input{width:100%;min-width:0;}
+    .controls .hint{display:none;}
+    .table-wrap{overflow-x:auto;}
+    table.data-table{min-width:520px;font-size:12px;}
+    th,td{padding:7px 7px;}
+    .card{padding:7px;}
 }
 """
 
 _JS = r"""
 function sortTable(id, col) {
-  const table = document.getElementById(id);
-  if (!table) return;
-  const tbody = table.tBodies[0];
-  const rows = Array.from(tbody.rows);
-  const asc = table.getAttribute("data-sort") !== "asc";
+    const table = document.getElementById(id);
+    if (!table) return;
+    const tbody = table.tBodies[0];
+    const rows = Array.from(tbody.rows);
+    const asc = table.getAttribute("data-sort") !== "asc";
 
-  rows.sort((a,b)=>{
-    const aCell = a.cells[col];
-    const bCell = b.cells[col];
-    let A = (aCell.getAttribute('data-sort') || aCell.innerText).trim();
-    let B = (bCell.getAttribute('data-sort') || bCell.innerText).trim();
+    rows.sort((a, b) => {
+        const aCell = a.cells[col];
+        const bCell = b.cells[col];
+        // Try to get data-sort from td, then from child span, then fallback to innerText
+        let A = aCell.getAttribute('data-sort');
+        if (!A && aCell.querySelector('span[data-sort]')) A = aCell.querySelector('span[data-sort]').getAttribute('data-sort');
+        if (!A) A = aCell.innerText;
+        A = (A || '').trim();
+        let B = bCell.getAttribute('data-sort');
+        if (!B && bCell.querySelector('span[data-sort]')) B = bCell.querySelector('span[data-sort]').getAttribute('data-sort');
+        if (!B) B = bCell.innerText;
+        B = (B || '').trim();
 
-    const pA = A.endsWith('%') ? parseFloat(A.slice(0,-1)) : NaN;
-    const pB = B.endsWith('%') ? parseFloat(B.slice(0,-1)) : NaN;
-    if (!isNaN(pA) && !isNaN(pB)) return asc ? pA - pB : pB - pA;
+        const pA = A.endsWith('%') ? parseFloat(A.slice(0, -1)) : NaN;
+        const pB = B.endsWith('%') ? parseFloat(B.slice(0, -1)) : NaN;
+        if (!isNaN(pA) && !isNaN(pB)) return asc ? pA - pB : pB - pA;
 
-    const nA = parseFloat(A.replace(/,/g,''));
-    const nB = parseFloat(B.replace(/,/g,''));
-    if (!isNaN(nA) && !isNaN(nB)) return asc ? nA - nB : nB - nA;
+        const nA = parseFloat(A.replace(/,/g, ''));
+        const nB = parseFloat(B.replace(/,/g, ''));
+        if (!isNaN(nA) && !isNaN(nB)) return asc ? nA - nB : nB - nA;
 
-    return asc ? A.localeCompare(B) : B.localeCompare(A);
-  });
+        return asc ? A.localeCompare(B) : B.localeCompare(A);
+    });
 
-  rows.forEach(r => tbody.appendChild(r));
-  table.setAttribute("data-sort", asc ? "asc" : "desc");
+    rows.forEach(r => tbody.appendChild(r));
+    table.setAttribute("data-sort", asc ? "asc" : "desc");
 }
 
 function applyFilter() {
@@ -682,29 +694,29 @@ function decorateMain() {
     .filter(x => x.h.endsWith("Trend"))
     .map(x => x.i);
 
-  Array.from(table.tBodies[0].rows).forEach(r => {
-    if (idxTicker >= 0) r.setAttribute('data-ticker', r.cells[idxTicker].innerText.trim().toUpperCase());
+    Array.from(table.tBodies[0].rows).forEach(r => {
+        if (idxTicker >= 0) r.setAttribute('data-ticker', r.cells[idxTicker].innerText.trim().toUpperCase());
 
-    // badges for each signal cell
-    signalCols.forEach(ci => {
-      const sig = r.cells[ci].innerText.trim().toUpperCase();
-      let cls = "badge hold";
-      if (sig === "BUY") cls = "badge buy";
-      else if (sig === "SELL") cls = "badge sell";
-      else if (sig === "SHORT") cls = "badge short";
-      r.cells[ci].innerHTML = `<span class="${cls}">${sig || "—"}</span>`;
+        // badges for each signal cell
+        signalCols.forEach(ci => {
+            const sig = r.cells[ci].innerText.trim().toUpperCase();
+            let cls = "badge hold";
+            if (sig === "BUY") cls = "badge buy";
+            else if (sig === "SELL") cls = "badge sell";
+            else if (sig === "SHORT") cls = "badge short";
+            r.cells[ci].innerHTML = `<span class="${cls}" data-sort="${sig}">${sig || "—"}</span>`;
+        });
+
+        // sparkline coloring using trend cols (aligned by timeframe order)
+        // We expect order: D Spark, W Spark, M Spark and D Trend, W Trend, M Trend
+        for (let k=0; k<sparkCols.length; k++) {
+            const sCol = sparkCols[k];
+            const tCol = trendCols[k];
+            const trend = (tCol != null && r.cells[tCol]) ? r.cells[tCol].innerText.trim().toLowerCase() : "flat";
+            r.cells[sCol].classList.add("spark");
+            r.cells[sCol].classList.add("trend-" + (trend || "flat"));
+        }
     });
-
-    // sparkline coloring using trend cols (aligned by timeframe order)
-    // We expect order: D Spark, W Spark, M Spark and D Trend, W Trend, M Trend
-    for (let k=0; k<sparkCols.length; k++) {
-      const sCol = sparkCols[k];
-      const tCol = trendCols[k];
-      const trend = (tCol != null && r.cells[tCol]) ? r.cells[tCol].innerText.trim().toLowerCase() : "flat";
-      r.cells[sCol].classList.add("spark");
-      r.cells[sCol].classList.add("trend-" + (trend || "flat"));
-    }
-  });
 
   // Hide trend columns (used only for coloring)
   trendCols.forEach(ci => {
@@ -769,6 +781,11 @@ def _render_main_table(df: pd.DataFrame) -> str:
         tds = []
         for c in cols:
             v = r.get(c, "")
+            # Make M Signal sortable by adding data-sort attribute
+            if c == "M Signal":
+                val = "" if v is None or (isinstance(v, float) and pd.isna(v)) else str(v)
+                tds.append("<td data-sort='%s'>%s</td>" % (_html.escape(val.upper()), _html.escape(val)))
+                continue
             if c.endswith("Spark"):
                 tds.append("<td>%s</td>" % (v or ""))
                 continue
@@ -808,7 +825,7 @@ def render_html(daily_df: pd.DataFrame, _unused, asof: Optional[str], tickers: s
     head = (
         "<!doctype html><html><head><meta charset='utf-8'/>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'/>"
-        "<title>Stock Summary Dashboard</title>"
+        "<title>Summary Dashboard</title>"
         "<style>" + _CSS + "</style>"
         "<script>" + _JS + "</script>"
         "</head>"
@@ -817,7 +834,7 @@ def render_html(daily_df: pd.DataFrame, _unused, asof: Optional[str], tickers: s
         "<body><div class='page'>"
         "<div class='header'>"
         "<div class='hgroup'>"
-        "<h1><span class='brand-dot'></span>Summary Dashboard</h1>"
+        "<h1></span>📊 Summary Dashboard</h1>"
         "<div class='meta'><b>As-of:</b> " + _html.escape(asof) + "</div>"
         "</div>"
         "<div class='controls'>"
