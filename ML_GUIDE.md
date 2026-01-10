@@ -13,7 +13,7 @@ The ML Stock Predictor is a **production-ready machine learning system** that id
 
 ### 🤖 ML Pipeline
 1. **Data Acquisition**: Smart caching system with incremental updates
-2. **Feature Engineering**: 28 technical + fundamental indicators
+2. **Feature Engineering**: 30 technical + fundamental indicators (including denoised P/E features)
 3. **Model Training**: Gradient Boosting with stratified sampling
 4. **Validation**: Cross-validation with detailed metrics
 5. **Deployment**: Automated daily retraining with flat git history
@@ -75,13 +75,16 @@ python3 ml_predictor.py --help
 
 **Note:** The workflow runs in quiet mode by default for clean automation. For detailed logs, trigger manually and check the Actions console.
 
+
 ## Features
 
 - **Breakout Score (0-100%)**: Probability of >100% gain in 6-12 months
 - **Crash Risk (0-100%)**: Probability of >50% decline in 6-12 months
 - **Prediction**: BREAKOUT | CRASH | NEUTRAL classification
 - **Confidence**: Model certainty (0-100%)
-- **Historical Performance Tracking**: Tracks prediction accuracy with win rates and expected returns
+- **Denoised P/E Features**: Uses P/E relative to 5-year average and 1-year P/E volatility, not raw P/E
+- **Crash Filter**: "CRASH" is only triggered if both technicals and high relative/volatile P/E agree (reduces false positives)
+- **Historical Performance Tracking**: Tracks prediction accuracy with win rates and expected returns (rolling 7-day window, old predictions automatically cleaned up)
 - **Options Strategy Suggestions**: Rule-based recommendations for calls/puts based on technical indicators
 - **Earnings Move Suggestions**: Advanced trading strategies for earnings events based on implied volatility and technical setup
 
@@ -123,12 +126,12 @@ The system now tracks every ML prediction and its outcome to provide statistical
 3. **Performance Calculation**: Win rates and expected returns calculated from historical data
 4. **Dashboard Integration**: Metrics displayed in both table and card views
 
-### Data Storage
+-### Data Storage
 - **File**: `data/ml_models/prediction_performance.pkl`
 - **Structure**: Dictionary with prediction history and performance summaries
-- **Rolling Window**: Automatically maintains last 5 trading days (~7 calendar days) of predictions
+- **Rolling Window**: Automatically maintains only the last 7 calendar days (≈5 trading days) of predictions
 - **Per-Ticker Limit**: Maximum 5 most recent predictions per ticker
-- **Automatic Cleanup**: Old predictions are removed when new ones are recorded
+- **Automatic Cleanup**: Old predictions are removed when new ones are recorded, so file size stays small
 - **Repository Impact**: File size stays bounded (~50-100KB), flat git history prevents bloat
 
 ### Repository Size Management

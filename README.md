@@ -9,12 +9,16 @@
 - **Crash Risk (0-100%)**: Stocks at risk of >50% decline
 - **Prediction**: BREAKOUT, CRASH, or NEUTRAL classification
 - **Confidence**: Model certainty (0-100%)
-- **Historical Performance Tracking**: Tracks prediction accuracy over time with win rates and expected returns
+- **Historical Performance Tracking**: Tracks prediction accuracy over time with win rates and expected returns (rolling 7-day window, old predictions automatically cleaned up)
 - **Options Strategy Suggestions**: Rule-based recommendations for buying calls/puts based on technical indicators
 - **Integrated in INDICATORS Column**: ML breakout/crash scores are now fully merged into the INDICATORS column (no separate column).
 - Color-coded: 🟢 Green (≥70%), 🟠 Orange (50-69%), Gray (<50%)
 - ⚠️ Crash warnings for high-risk stocks
-- **28 Technical + Fundamental Indicators**: RSI, BB Position %, BB Width %, MACD, ATR, OBV, Stochastic %K/%D, ADX, CCI, MFI, Williams %R, ROC, Volume ROC, Volume Bias, Volume Spike, Change %, 5D Change, 1M Change, MA Cross, PE Ratio, EPS, Market Cap, Put/Call Ratio, Short Interest, Squeeze Score, Trading Signal, Trend Score
+- **30 Technical + Fundamental Indicators**: RSI, BB Position %, BB Width %, MACD, ATR, OBV, Stochastic %K/%D, ADX, CCI, MFI, Williams %R, ROC, Volume ROC, Volume Bias, Volume Spike, Change %, 5D Change, 1M Change, MA Cross, PE Ratio, **P/E Relative to 5Y Avg**, **P/E Volatility (1Y Std)**, EPS, Market Cap, Put/Call Ratio, Short Interest, Squeeze Score, Trading Signal, Trend Score
+### 🧹 Denoised P/E Features & Crash Filter
+**Denoised P/E**: Instead of using raw P/E, the model uses P/E relative to its 5-year average and the volatility (standard deviation) of P/E over the past year.
+
+**Crash Filter**: A "CRASH" signal is only triggered if both technical indicators and a high relative or volatile P/E agree. This reduces false positives from temporary technical dips.
 - See [ML_GUIDE.md](ML_GUIDE.md) for complete guide
 
 ### 📊 Historical Performance Tracking

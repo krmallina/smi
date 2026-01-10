@@ -1,34 +1,16 @@
-"""
-ML Stock Predictor - Identifies Breakout and Crash Candidates
-
-Trains models on historical data to predict:
-- BREAKOUT: Stocks likely to gain >100% in 6-12 months (NVDA, MU-like patterns)
-- CRASH: Stocks likely to drop >50% in 6-12 months
-- NEUTRAL: Normal price action
-
-Features used (28 technical + fundamental indicators):
-- Technical: RSI, BB Position %, BB Width %, MACD, ATR, OBV, Stochastic %K/%D, ADX, CCI, MFI, Williams %R, ROC, Vol ROC
-- Volume & Momentum: Volume bias, Volume spike, Change %, 5D Change, 1M Change
-- Moving Averages: Golden/Death crosses
-- Fundamentals: P/E ratio, Market cap, EPS
-- Sentiment: Put/Call ratio, Short interest %
-- Squeeze: Squeeze levels
-- Signals/Trend: Active signals, Trend scores
-
-Historical Performance Tracking:
-- Tracks prediction accuracy over time
-- Calculates win rates for breakout/crash predictions
-- Provides expected returns when signals trigger
-- Updates performance metrics with each prediction
-
-Usage:
-    from ml_predictor import predict_breakout_crash
-
-    scores = predict_breakout_crash(stock_data)
-    # Returns: {'breakout_score': 0-100, 'crash_risk': 0-100, 'prediction': str, 'confidence': 0-100,
-    #           'historical_win_rate': 0-100, 'expected_return': float, 'sample_size': int}
-"""
+# --- FIX FUTURE IMPORT POSITION ---
 from __future__ import annotations
+
+# --- NOISE REDUCTION: SMOOTHED INDICATORS ---
+def get_smoothed_rsi(prices: pd.Series, window: int = 14, smooth_window: int = 3) -> pd.Series:
+    """Reduces noise by smoothing the RSI with a secondary moving average."""
+    delta = prices.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi.rolling(window=smooth_window).mean()
+
 
 import logging
 import os
@@ -41,23 +23,23 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-# ML imports - install with: pip install scikit-learn xgboost
+
+# ML and yfinance imports - install with: pip install scikit-learn xgboost yfinance
+ML_AVAILABLE = True
 try:
-    from sklearn.ensemble import GradientBoostingClassifier
+    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
     from sklearn.preprocessing import StandardScaler
     from sklearn.model_selection import train_test_split
-    from sklearn.metrics import classification_report, confusion_matrix
-    import warnings
-
-    warnings.filterwarnings("ignore")
-    ML_AVAILABLE = True
-except Exception:
+    from sklearn.metrics import accuracy_score, classification_report
+    import xgboost as xgb
+except Exception as e:
+    print(f"[ML_IMPORT_ERROR] {e}")
+    import traceback
+    traceback.print_exc()
     ML_AVAILABLE = False
 
-# yfinance: used to fetch market data. Import safely so module functions can be used without network if not needed.
 try:
     import yfinance as yf  # type: ignore
-
     YF_AVAILABLE = True
 except Exception:
     yf = None  # type: ignore
@@ -79,10 +61,9 @@ DATA_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 class PredictionPerformanceTracker:
     """
-    Tracks historical predictions and their outcomes to calculate performance metrics.
-    
-    Stores predictions with timestamps and tracks their actual performance over time.
-    Provides win rates, expected returns, and confidence intervals.
+Tracks historical predictions and their outcomes to calculate performance metrics.
+Stores predictions with timestamps and tracks their actual performance over time.
+Provides win rates, expected returns, and confidence intervals.
     """
     
     def __init__(self):
@@ -329,6 +310,8 @@ DEFAULT_FEATURES = {
     "change_5d": 0.0,
     "change_1m": 0.0,
     "pe_ratio": 25.0,
+    "pe_rel_to_5y": 1.0,
+    "pe_volatility_1y": 0.0,
     "market_cap": 1e9,
     "eps": 5.0,
     "put_call_ratio": 1.0,
@@ -499,6 +482,8 @@ FEATURE_NAMES = [
     "change_1m",
     "ma_cross",
     "pe_ratio",
+    "pe_rel_to_5y",
+    "pe_volatility_1y",
     "market_cap",
     "eps",
     "put_call_ratio",
@@ -799,66 +784,48 @@ def get_tickers_from_file(file_path: str) -> List[str]:
 
 
 # Example training data generator (for demonstration)
-def generate_synthetic_training_data(n_samples: int = 1000) -> Tuple[List[Dict[str, Any]], List[str]]:
+def generate_realistic_training_data(n_samples: int = 1000) -> Tuple[list[dict], list[str]]:
     """
-    Generate synthetic training data for testing/demo purposes.
-    Replace with real historical feature extraction in production.
+    Replaces purely random synthetic data with correlated 'market-like' data.
+    Ensures that 'BREAKOUT' labels actually align with indicator patterns.
     """
     np.random.seed(42)
-    data: List[Dict[str, Any]] = []
-    labels: List[str] = []
-
+    data = []
+    labels = []
     for _ in range(n_samples):
+        market_trend = np.random.normal(0, 1)
         stock = {
-            "rsi": np.random.uniform(20, 80),
-            "bb_position_pct": np.random.uniform(0, 100),
-            "bb_width_pct": np.random.uniform(2, 20),
-            "macd_label": np.random.choice(["Bullish", "Bearish", None]),
-            "atr_14": np.random.uniform(1, 10),
-            "obv": np.random.uniform(-1000000, 1000000),
-            "stoch_k": np.random.uniform(0, 100),
-            "stoch_d": np.random.uniform(0, 100),
-            "adx": np.random.uniform(0, 100),
-            "cci": np.random.uniform(-200, 200),
-            "mfi": np.random.uniform(0, 100),
-            "williams_r": np.random.uniform(-100, 0),
-            "roc": np.random.uniform(-50, 50),
-            "vol_roc": np.random.uniform(-50, 50),
-            "volume_bias": np.random.uniform(-1, 1),
-            "volume_spike": np.random.choice([True, False]),
-            "change_pct": np.random.uniform(-10, 10),
-            "change_5d": np.random.uniform(-15, 15),
-            "change_1m": np.random.uniform(-20, 20),
-            "golden_cross": np.random.choice([True, False]),
-            "death_cross": np.random.choice([True, False]),
-            "pe_ratio": np.random.uniform(10, 50),
-            "market_cap": np.random.uniform(1e9, 1e12),
-            "put_call_ratio": np.random.uniform(0.5, 2.0),
-            "short_interest": np.random.uniform(0, 30),
-            "squeeze_level": np.random.choice(["None", "Moderate", "High", "Extreme"]),
-            "active_signal": np.random.choice(["BUY", "SHORT", "SELL", "HOLD"]),
-            "trend_score": np.random.uniform(-5, 5),
+            "rsi": 50 + (market_trend * 15) + np.random.normal(0, 5),
+            "volume_spike": True if market_trend > 1.5 else False,
+            "bb_width_pct": 5 + np.random.exponential(5),
+            "change_1m": (market_trend * 10) + np.random.normal(0, 2),
+            "adx": 20 + (abs(market_trend) * 10),
+            "put_call_ratio": 1.0 - (market_trend * 0.2),
         }
-
-        score = 0
-        if stock["rsi"] < 30 and stock["active_signal"] == "BUY":
-            score += 2
-        if stock["golden_cross"] and stock["volume_spike"]:
-            score += 2
-        if stock["death_cross"] or stock["rsi"] > 70:
-            score -= 2
-
-        if score >= 2:
+        if stock["rsi"] > 65 and stock["volume_spike"] and stock["change_1m"] > 15:
             label = "BREAKOUT"
-        elif score <= -2:
+        elif stock["rsi"] < 35 and stock["change_1m"] < -15:
             label = "CRASH"
         else:
             label = "NEUTRAL"
-
         data.append(stock)
         labels.append(label)
-
     return data, labels
+# --- NOISE REDUCTION: IMPROVED FEATURE EXTRACTION ---
+def extract_features_denoised(stock_data: dict) -> list[float]:
+    """
+    Filters features to prioritize low-noise indicators like BB Squeeze 
+    and Volume Bias over lagging MA crosses.
+    """
+    features = {
+        "rsi_smooth": stock_data.get("rsi", 50.0),
+        "vol_bias": stock_data.get("volume_bias", 0.0),
+        "squeeze_score": {"None": 0, "Moderate": 1, "High": 2, "Extreme": 3}.get(
+            stock_data.get("squeeze_level", "None"), 0
+        ),
+        "adx_dynamic": stock_data.get("adx", 20.0),
+    }
+    return list(features.values())
 
 
 def run_basic_tests() -> bool:
@@ -1098,9 +1065,24 @@ if __name__ == "__main__":
                     if len(avg_volume_series.dropna()) > 0:
                         avg_volume = avg_volume_series.iloc[-1]
                         current_volume = recent_data["Volume"].iloc[-1]
-                        volume_bias = ((current_volume - avg_volume) / avg_volume) * 100
+                        if avg_volume == 0 or np.isnan(avg_volume):
+                            volume_bias = 0
+                        else:
+                            volume_bias = ((current_volume - avg_volume) / avg_volume) * 100
                         volume_spike = current_volume > avg_volume * 2  # 2x average volume
                 
+                # Calculate P/E relative to 5-year average and P/E volatility (1-year std)
+                pe_ratio = one_year_ago_data.get("P/E Ratio", 25) if isinstance(one_year_ago_data, pd.Series) else 25
+                pe_5y_avg = None
+                pe_volatility_1y = None
+                if isinstance(stock_hist, pd.DataFrame) and "P/E Ratio" in stock_hist.columns:
+                    pe_series = stock_hist["P/E Ratio"].dropna()
+                    if len(pe_series) >= 252:
+                        pe_5y_avg = pe_series[-252*5:].mean() if len(pe_series) >= 252*5 else pe_series.mean()
+                        pe_volatility_1y = pe_series[-252:].std()
+                pe_rel_to_5y = (pe_ratio / pe_5y_avg) if pe_5y_avg and pe_5y_avg > 0 else 1.0
+                pe_volatility_1y = pe_volatility_1y if pe_volatility_1y is not None else 0.0
+
                 features = {
                     "rsi": rsi_val,
                     "bb_position_pct": bb_position_pct,
@@ -1123,7 +1105,9 @@ if __name__ == "__main__":
                     "change_1m": (current_price - recent_data["Close"].iloc[0]) / recent_data["Close"].iloc[0] * 100 if len(recent_data) >= 21 else 0,
                     "golden_cross": golden_cross,
                     "death_cross": death_cross,
-                    "pe_ratio": one_year_ago_data.get("P/E Ratio", 25) if isinstance(one_year_ago_data, pd.Series) else 25,
+                    "pe_ratio": pe_ratio,
+                    "pe_rel_to_5y": pe_rel_to_5y,
+                    "pe_volatility_1y": pe_volatility_1y,
                     "eps": one_year_ago_data.get("EPS", 5.0) if isinstance(one_year_ago_data, pd.Series) else 5.0,
                     "market_cap": one_year_ago_data.get("Market Cap", 1e9) if isinstance(one_year_ago_data, pd.Series) else 1e9,
                     "put_call_ratio": 1.0,  # Placeholder
@@ -1188,6 +1172,13 @@ if __name__ == "__main__":
                     if args.verbose:
                         logger.warning(f"Could not calculate labels for {ticker}: {e}")
                     continue
+
+
+                # Denoised CRASH filter: Only label as CRASH if technicals and high relative/volatile P/E agree
+                if label == "CRASH":
+                    # Use as a filter: require high relative P/E or high P/E volatility
+                    if pe_rel_to_5y < 1.2 and pe_volatility_1y < 10:  # thresholds can be tuned
+                        label = "NEUTRAL"
 
                 training_data.append(features)
                 labels.append(label)
