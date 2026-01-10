@@ -184,43 +184,6 @@ When ML predictions are neutral or unavailable, the system provides rule-based o
 - **Color Coding**: Green for calls, red for puts
 - **Fallback System**: Activates when ML model predicts NEUTRAL
 
-## Cost Analysis
-
-The ML stock predictor is designed for cost-effective personal use:
-
-### Operating Costs (Monthly)
-- **API Usage**: $0 - Yahoo Finance provides free historical data
-- **Compute**: $0 - Runs on your existing computer
-- **Storage**: $0 - ~12MB total (281 cached stock files)
-- **Electricity**: ~$0.10 - Minimal additional power usage
-
-### Development Costs (One-time)
-- **Your Time**: $2,000-9,000 (40-60 hours @ $50-150/hr)
-- **Software**: $0 - All libraries are open source
-- **Hardware**: $0 - Uses existing computer
-
-### Trading Costs (When Used)
-- **Commissions**: $0-5 per trade
-- **Spread Costs**: 0.1-0.5% per trade
-- **Market Data**: $0 - Uses free sources
-
-### Cloud Deployment (Optional)
-- **Heroku Free**: $0/month
-- **AWS Lambda**: ~$0.20/1,000 requests
-- **DigitalOcean**: $6-12/month
-
-### Optimization Opportunities
-- **API Reduction**: Increase cache TTL from 7 to 30 days
-- **Storage Compression**: 90% reduction possible
-- **Selective Tracking**: Focus on 50-100 key stocks
-- **Batch Processing**: Weekly instead of daily updates
-
-### Why Cost-Effective
-- **Free Data Sources**: Yahoo Finance API with no usage limits
-- **Local Processing**: No cloud computing costs
-- **Intelligent Caching**: Minimizes API calls and storage
-- **Personal Scale**: Designed for individual investors, not institutions
-
 ## Data Processing Details
 
 ### Historical Data Timeline
