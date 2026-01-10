@@ -1,11 +1,9 @@
 name: Update Dashboard
 on:
   schedule:
-    # 4 AM - 5 PM PST on Weekdays (Monday-Friday) - every 30 minutes
-    # UTC is +8 hours: 12:00 PM to 1:00 AM. 
-    # '1-5' covers Mon-Fri, '6' covers Friday afternoon PST run which occurs on Saturday UTC.
-    - cron: '0,15,30,45 12-23 * * 1-5'
-    - cron: '0,15,30,45 0 * * 2-6'
+    # Run every 5 minutes on weekdays (UTC). The job itself gates to PST/PDT windows
+    # and to NYSE trading days/holidays so we remain correct across DST and market holidays.
+    - cron: '*/5 * * * 1-5'
   workflow_dispatch: 
 permissions:
   contents: write
@@ -21,19 +19,76 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1  # Shallow clone - we don't need history for generated files
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; else pip install yfinance pandas requests; fi
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          # Ensure market-calendar packages are available for the trading-day and timezone checks
+          pip install pandas_market_calendars pytz yfinance pandas requests
+
+      - name: Decide whether to run (timezone + trading-day gating)
+        id: gate
+        run: |
+          should_run=$(python - <<'PY'
+import datetime
+from zoneinfo import ZoneInfo
+import pandas_market_calendars as mcal
+
+# Current times
+now_utc = datetime.datetime.now(datetime.timezone.utc)
+la = ZoneInfo("America/Los_Angeles")
+ny = ZoneInfo("America/New_York")
+now_la = now_utc.astimezone(la)
+now_ny = now_utc.astimezone(ny)
+
+# Check NYSE trading day for today in New York
+today_ny = now_ny.date()
+nyse = mcal.get_calendar("NYSE")
+sched = nyse.schedule(start_date=today_ny, end_date=today_ny)
+is_trading_day = not sched.empty
+
+# Define local windows (America/Los_Angeles)
+from datetime import time
+trading_start = time(6, 30)   # 06:30
+trading_end = time(13, 0)     # 13:00
+non_trading_start = time(13, 0)
+non_trading_end = time(17, 0)
+
+t = now_la.time()
+
+# Decide
+if not is_trading_day:
+    print("false")
+else:
+    if trading_start <= t < trading_end:
+        # Always run every 5 minutes during trading window
+        print("true")
+    elif non_trading_start <= t < non_trading_end:
+        # Only run on 0 and 30 minutes (every 30 minutes)
+        if now_la.minute % 30 == 0:
+            print("true")
+        else:
+            print("false")
+    else:
+        print("false")
+PY
+)
+          echo "should_run=${should_run}" >> $GITHUB_OUTPUT
+          echo "Gate decision: should_run=${should_run}"
+
       - name: Run stocks.py
+        if: ${{ steps.gate.outputs.should_run == 'true' }}
         run: python stocks.py
+
       - name: Deploy dashboards (no history tracking)
-        if: success()
+        if: ${{ success() && (steps.gate.outputs.should_run == 'true') }}
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
