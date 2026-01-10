@@ -777,8 +777,12 @@ def _render_main_table(df: pd.DataFrame) -> str:
         )
 
     body_rows = []
+
     for _, r in df.iterrows():
         tds = []
+        ticker = str(r.get('Ticker', '') or r.get('ticker', '')).upper()
+        ticker_l = ticker.lower()
+        quote_type = str(r.get('quote_type', '') or r.get('Quote Type', '')).upper()
         for c in cols:
             v = r.get(c, "")
             # Make M Signal sortable by adding data-sort attribute
@@ -792,6 +796,20 @@ def _render_main_table(df: pd.DataFrame) -> str:
             if c == "Options Hint":
                 val = "" if v is None or (isinstance(v, float) and pd.isna(v)) else str(v)
                 tds.append("<td class='hint'>%s</td>" % _html.escape(val))
+                continue
+
+
+            # Add Barchart link for Ticker column (match new logic)
+            if c.lower() == "ticker" and ticker:
+                qt = quote_type.upper()
+                if qt == "ETF":
+                    bc_url = f"https://www.barchart.com/etfs-funds/quotes/{ticker}"
+                elif qt == "MUTUALFUND":
+                    bc_url = f"https://www.barchart.com/mutual-funds/quotes/{ticker}"
+                else:
+                    bc_url = f"https://www.barchart.com/stocks/quotes/{ticker}"
+                val = f"<a href=\"{bc_url}\" target=\"_blank\">{_html.escape(ticker)}</a>"
+                tds.append(f"<td>{val}</td>")
                 continue
 
             val = "" if v is None or (isinstance(v, float) and pd.isna(v)) else str(v)
