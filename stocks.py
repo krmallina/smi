@@ -2525,6 +2525,7 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
 </div>
 
 <div id="tableView">
+<div class="table-wrap">
 <table id="stockTable">
 <tr>
 <th data-sort="ticker">TICKER</th>
@@ -2859,7 +2860,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 <td><span class="{sent_cls}">{sent_text}</span><br><span class="{upside_cls}">Upside: {na(r['upside_potential'],"{:+.1f}%")}</span></td>
 </tr>"""
 
-    html += "</table></div><div id='cardView'><div class='card-grid'>"
+    html += "</table></div></div><div id='cardView'><div class='card-grid'>"
     for _, r in df.iterrows():
         bg = "rgba(0,170,0,0.1)" if r["change_pct"] > 0 else "rgba(204,0,0,0.1)"
         bb_width_val = r["bb_width_pct"] if r["bb_width_pct"] is not None else 100
