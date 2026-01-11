@@ -102,6 +102,17 @@ UTC = pytz.utc
 PST = pytz.timezone("America/Los_Angeles")
 ET = pytz.timezone("America/New_York")
 
+def normalize_ticker(t: str) -> str:
+    """Normalize tickers for Yahoo Finance (e.g., strip leading '$' from watchlists)."""
+    t = (t or "").strip().upper()
+    # Strip leading $ that often appears in watchlists (e.g., $GC=F)
+    t = t.lstrip("$")
+    # Yahoo uses dashes for some share class tickers
+    if t in ("BRK.B", "BF.B"):
+        t = t.replace(".", "-")
+    return t
+
+
 def is_regular_hours():
     """Check if current time is during regular market hours (9:30 AM - 4:00 PM ET, Mon-Fri)"""
     now_et = datetime.now(ET)
@@ -969,7 +980,10 @@ def fetch(ticker, ext=False, retry=0):
         # This reduces API calls from ~8 to ~3 per ticker
         h_all = safe_history(t, period="1y")  # Get 1 year for all calculations
         h_3y = safe_history(t, period="3y")  # Get 3 years for 3-year returns
-        h_day = safe_history(t, period="1d", interval="1m", prepost=ext)
+        # On weekends/market-closed windows, period="1d" can be empty and trigger noisy yfinance logs.
+        # Use a slightly longer window on weekends so we still get the latest completed bar without errors.
+        day_period = "5d" if datetime.now(ET).weekday() >= 5 else "1d"
+        h_day = safe_history(t, period=day_period, interval="1m", prepost=ext)
         
         if h_day.empty:
             h_day = safe_history(t, period="5d", prepost=ext)
@@ -2032,7 +2046,7 @@ def load_ticker_sections(csv="data/tickers.csv"):
                     continue
                 # Parse tickers from line
                 parts = re.split(r"[,]+", line)
-                parts = [p.strip().upper() for p in parts if p and p.strip()]
+                parts = [t for p in parts if p and p.strip() and (t := normalize_ticker(p))]
                 # Add to appropriate list
                 if current_section == "meme":
                     meme_list.extend(parts)
@@ -2052,7 +2066,7 @@ def load_ticker_sections(csv="data/tickers.csv"):
             # Backward compatible: treat as simple CSV without sections
             content = content.replace("\r\n", "\n").replace("\r", "\n")
             parts = re.split(r"[\n,]+", content.strip())
-            parts = [p.strip().upper() for p in parts if p and p.strip()]
+            parts = [t for p in parts if p and p.strip() and (t := normalize_ticker(p))]
             # Skip header row if present
             if parts and parts[0].lower() in ("ticker", "tickers"):
                 parts = parts[1:]
@@ -2599,8 +2613,8 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
 <th data-sort="change_ytd">YTD %</th>
 <th data-sort="change_1y">1Y %</th>
 <th data-sort="change_3y">3YR10K</th>
-<th style="width:200px;min-width:180px;max-width:260px;">RANGES</th>
-<th style="width:200px;min-width:180px;max-width:260px;">INDICATORS</th>
+<th style="width:160px;min-width:140px;max-width:200px;">RANGES</th>
+<th style="width:160px;min-width:140px;max-width:200px;">INDICATORS</th>
 </tr>
 """
     for _, r in df.iterrows():
@@ -2916,8 +2930,8 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 <td>{fmt_change(r['change_ytd'], r['change_abs_ytd'])} {r.get('sparkline_ytd', '')}</td>
 <td>{fmt_change(r.get('change_1y'), r.get('change_abs_1y'))} {r.get('sparkline_1y', '')}</td>
 <td>{fmt_3yr10k(r.get('change_3y'), r.get('value_10k_3y'))} {r.get('sparkline_3y', '')}</td>
-<td style="width:200px;min-width:180px;max-width:260px;padding-right:18px;">{ranges_html}</td>
-<td style="width:200px;min-width:180px;max-width:260px;padding-left:18px;">{indicators_html}<hr style="margin:2px 0;opacity:0.3"> <span class="{sent_cls}">{sent_text}</span><br><span class="{upside_cls}">Upside: {na(r['upside_potential'],"{:+.1f}%")}</span></td>
+<td style="width:90px;min-width:70px;max-width:100px;padding-right:1px;">{ranges_html}</td>
+<td style="width:90px;min-width:70px;max-width:100px;padding-left:1px;">{indicators_html}<hr style="margin:2px 0;opacity:0.3"> <span class="{sent_cls}">{sent_text}</span><br><span class="{upside_cls}">Upside: {na(r['upside_potential'],"{:+.1f}%")}</span></td>
 </tr>"""
 
     html += "</table></div></div><div id='cardView'><div class='card-grid'>"
