@@ -2599,8 +2599,8 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
 <th data-sort="change_ytd">YTD %</th>
 <th data-sort="change_1y">1Y %</th>
 <th data-sort="change_3y">3YR10K</th>
-<th style="width:160px;min-width:140px;max-width:200px;">RANGES</th>
-<th style="width:160px;min-width:140px;max-width:200px;">INDICATORS</th>
+<th style="width:200px;min-width:180px;max-width:260px;">RANGES</th>
+<th style="width:200px;min-width:180px;max-width:260px;">INDICATORS</th>
 </tr>
 """
     for _, r in df.iterrows():
@@ -2916,8 +2916,8 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 <td>{fmt_change(r['change_ytd'], r['change_abs_ytd'])} {r.get('sparkline_ytd', '')}</td>
 <td>{fmt_change(r.get('change_1y'), r.get('change_abs_1y'))} {r.get('sparkline_1y', '')}</td>
 <td>{fmt_3yr10k(r.get('change_3y'), r.get('value_10k_3y'))} {r.get('sparkline_3y', '')}</td>
-<td style="width:90px;min-width:70px;max-width:100px;padding-right:1px;">{ranges_html}</td>
-<td style="width:90px;min-width:70px;max-width:100px;padding-left:1px;">{indicators_html}<hr style="margin:2px 0;opacity:0.3"> <span class="{sent_cls}">{sent_text}</span><br><span class="{upside_cls}">Upside: {na(r['upside_potential'],"{:+.1f}%")}</span></td>
+<td style="width:200px;min-width:180px;max-width:260px;padding-right:18px;">{ranges_html}</td>
+<td style="width:200px;min-width:180px;max-width:260px;padding-left:18px;">{indicators_html}<hr style="margin:2px 0;opacity:0.3"> <span class="{sent_cls}">{sent_text}</span><br><span class="{upside_cls}">Upside: {na(r['upside_potential'],"{:+.1f}%")}</span></td>
 </tr>"""
 
     html += "</table></div></div><div id='cardView'><div class='card-grid'>"
