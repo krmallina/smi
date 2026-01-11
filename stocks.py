@@ -657,7 +657,7 @@ def check_alerts(data):
 
     # --- ROTATION DETECTION LOGIC ---
     rotation_map = {
-        "MIDU": "Mid-Cap", "TNA": "Small-Cap", "DDM": "Dow 2x",
+        "MIDU": "Mid-Cap", "TNA": "Small-Cap", "IWM": "Russell 2000", "DDM": "Dow 2x",
         "^DJI": "Dow 30", "^IXIC": "Nasdaq", "^GSPC": "S&P 500"
     }
     rot_candidates = []
@@ -983,6 +983,7 @@ def fetch(ticker, ext=False, retry=0):
         reg = safe_history(t, period="5d", prepost=False)  # Still need this for prepost=False
         h30 = h_all.tail(60) if not h_all.empty else pd.DataFrame()  # Last 60 days
         h6m = h_all.tail(180) if not h_all.empty else pd.DataFrame()  # Last ~6 months
+        h3m = h_all.tail(63) if not h_all.empty else pd.DataFrame()  # Last ~3 months (63 trading days)
         h1m = h_all.tail(21) if not h_all.empty else pd.DataFrame()  # Last ~1 month (21 trading days)
         
         change_pct = change_abs_day = 0.0
@@ -1025,6 +1026,7 @@ def fetch(ticker, ext=False, retry=0):
             return None, None
 
         ch1m, abs1m = calc_ch(h1m)
+        ch3m, abs3m = calc_ch(h3m)
         ch6m, abs6m = calc_ch(h6m)
         chytd, absytd = calc_ch(ytd)
         ch1y, abs1y = calc_ch(h_all)  # 1-year change
@@ -1046,29 +1048,83 @@ def fetch(ticker, ext=False, retry=0):
             if len(r) > 1:
                 hv = r.std() * (252**0.5) * 100
 
-        short_pct = info.get("shortPercentOfFloat")
-        if short_pct:
+        # --- Enhanced Yahoo Finance attribute mapping and data quality checks ---
+        def safe_get(d, key, default=None):
+            v = d.get(key, default)
+            if v is None or (isinstance(v, float) and (pd.isna(v) or v != v)):
+                return default
+            return v
+
+        short_pct = safe_get(info, "shortPercentOfFloat")
+        if short_pct is not None:
             short_pct *= 100
 
         days_cover = None
-        if info.get("sharesShort"):
-            avg = (
-                info.get("averageDailyVolume10Day")
-                or info.get("averageVolume")
-                or vol
-                or 1
-            )
-            if avg > 0:
-                days_cover = info["sharesShort"] / avg
+        shares_short = safe_get(info, "sharesShort")
+        avg_vol_10d = safe_get(info, "averageDailyVolume10Day")
+        avg_vol = safe_get(info, "averageVolume")
+        avg = avg_vol_10d or avg_vol or vol or 1
+        if shares_short is not None and avg > 0:
+            days_cover = shares_short / avg
 
         squeeze = "None"
-        if short_pct and days_cover:
+        if short_pct is not None and days_cover is not None:
             if short_pct > 30 and days_cover > 10:
                 squeeze = "Extreme"
             elif short_pct > 20 and days_cover > 7:
                 squeeze = "High"
             elif short_pct > 15 and days_cover > 5:
                 squeeze = "Moderate"
+
+        # --- Map additional Yahoo Finance attributes for richer analytics ---
+        pe_ratio = safe_get(info, "trailingPE")
+        eps = safe_get(info, "trailingEps")
+        target_mean_price = safe_get(info, "targetMeanPrice")
+        dividend_rate = safe_get(info, "dividendRate")
+        ex_dividend_date = safe_get(info, "exDividendDate")
+        beta = safe_get(info, "beta")
+        bid = safe_get(info, "bid")
+        ask = safe_get(info, "ask")
+        day_low = safe_get(info, "dayLow")
+        day_high = safe_get(info, "dayHigh")
+        fifty_two_week_low = safe_get(info, "fiftyTwoWeekLow")
+        fifty_two_week_high = safe_get(info, "fiftyTwoWeekHigh")
+
+        # Option chain attributes (if available)
+        implied_vol = None
+        open_interest = None
+        in_the_money = None
+        expiration_dates = None
+        try:
+            opts = getattr(t, "options", None)
+            if opts:
+                expiration_dates = opts
+                exp_date = opts[0]
+                try:
+                    chain = t.option_chain(exp_date)
+                    # ATM strike logic as before
+                    strikes = pd.concat([
+                        chain.calls["strike"], chain.puts["strike"]
+                    ]).unique()
+                    if len(strikes) > 0:
+                        atm = min(strikes, key=lambda s: abs(s - price))
+                        # Implied volatility, open interest, in the money for ATM call/put
+                        call_row = chain.calls[chain.calls["strike"] == atm]
+                        put_row = chain.puts[chain.puts["strike"] == atm]
+                        if not call_row.empty:
+                            implied_vol = safe_get(call_row.iloc[0], "impliedVolatility")
+                            open_interest = safe_get(call_row.iloc[0], "openInterest")
+                            in_the_money = safe_get(call_row.iloc[0], "inTheMoney")
+                        elif not put_row.empty:
+                            implied_vol = safe_get(put_row.iloc[0], "impliedVolatility")
+                            open_interest = safe_get(put_row.iloc[0], "openInterest")
+                            in_the_money = safe_get(put_row.iloc[0], "inTheMoney")
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # --- End of enhanced mapping ---
 
         rsi_val, rsi_prev = rsi(h30["Close"], return_prev=True) if not h30.empty else (None, None)
         
@@ -1170,6 +1226,7 @@ def fetch(ticker, ext=False, retry=0):
         spk = sparkline(h30["Close"].tolist() if not h30.empty else [])
         spk_5d = sparkline(reg["Close"].tolist() if not reg.empty else [])
         spk_1m = sparkline(h1m["Close"].tolist() if not h1m.empty else [])
+        spk_3m = sparkline(h3m["Close"].tolist() if not h3m.empty else [])
         spk_6m = sparkline(h6m["Close"].tolist() if not h6m.empty else [])
         spk_ytd = sparkline(ytd["Close"].tolist() if not ytd.empty else [])
         spk_1y = sparkline(h_all["Close"].tolist() if not h_all.empty else [])
@@ -1660,6 +1717,8 @@ def fetch(ticker, ext=False, retry=0):
             "change_abs_day": change_abs_day,
             "change_1m": ch1m,
             "change_abs_1m": abs1m,
+            "change_3m": ch3m,
+            "change_abs_3m": abs3m,
             "change_5d": change_5d,
             "change_abs_5d": change_abs_5d,
             "change_6m": ch6m,
@@ -1697,6 +1756,7 @@ def fetch(ticker, ext=False, retry=0):
             "sparkline": spk,
             "sparkline_5d": sparkline(reg["Close"].tolist() if not reg.empty else []),
             "sparkline_1m": spk_1m,
+            "sparkline_3m": spk_3m,
             "sparkline_6m": spk_6m,
             "sparkline_ytd": spk_ytd,
             "sparkline_1y": spk_1y,
@@ -2534,6 +2594,7 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
 <th data-sort="change_pct">DAY %</th>
 <th data-sort="change_5d">5D %</th>
 <th data-sort="change_1m">1M %</th>
+<th data-sort="change_3m">3M %</th>
 <th data-sort="change_6m">6M %</th>
 <th data-sort="change_ytd">YTD %</th>
 <th data-sort="change_1y">1Y %</th>
@@ -2850,6 +2911,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 <td>{fmt_change(r['change_pct'], r['change_abs_day'])}</td>
 <td>{fmt_change(r.get('change_5d'), r.get('change_abs_5d'))} {r.get('sparkline_5d', '')}</td>
 <td>{fmt_change(r['change_1m'], r['change_abs_1m'])} {r.get('sparkline_1m', '')}</td>
+<td>{fmt_change(r.get('change_3m'), r.get('change_abs_3m'))} {r.get('sparkline_3m', '')}</td>
 <td>{fmt_change(r['change_6m'], r['change_abs_6m'])} {r.get('sparkline_6m', '')}</td>
 <td>{fmt_change(r['change_ytd'], r['change_abs_ytd'])} {r.get('sparkline_ytd', '')}</td>
 <td>{fmt_change(r.get('change_1y'), r.get('change_abs_1y'))} {r.get('sparkline_1y', '')}</td>
