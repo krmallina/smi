@@ -1,12 +1,13 @@
 name: Update Dashboard
 on:
   schedule:
-    # 4 AM - 5 PM PST on Weekdays (Monday-Friday) - every 30 minutes
-    # UTC is +8 hours: 12:00 PM to 1:00 AM. 
-    # '1-5' covers Mon-Fri, '6' covers Friday afternoon PST run which occurs on Saturday UTC.
-    - cron: '0,15,30,45 12-23 * * 1-5'
-    - cron: '0,15,30,45 0 * * 2-6'
-  workflow_dispatch: 
+    # Covers 4:00 AM to 3:50 PM PST (12:00 PM to 11:50 PM UTC)
+    # Days: Monday (1) to Friday (5)
+    - cron: '*/10 12-23 * * 1-5'
+    # Covers 4:00 PM to 5:00 PM PST (12:00 AM to 1:00 AM UTC)
+    # Days: Tuesday (2) to Saturday (6) - because 4pm PST Mon is 12am UTC Tue
+    - cron: '0,10,20,30,40,50 0 * * 2-6'
+  workflow_dispatch:
 permissions:
   contents: write
 jobs:
