@@ -617,11 +617,13 @@ def get_vix_cached():
     now = time.time()
     if _vix_cache['data'] is None or (now - _vix_cache['time']) > VIX_CACHE_TTL:
         try:
-            # Use 1d period on weekends, 5d otherwise, to avoid empty results
-            day_period = "5d" if datetime.now(UTC).weekday() >= 5 else "1d"
-            vix_data = safe_history(yf.Ticker("^VIX"), period=day_period)
-            if len(vix_data) == 0:
+            # Always use UTC weekday for server compatibility
+            if datetime.now(UTC).weekday() >= 5:
                 vix_data = safe_history(yf.Ticker("^VIX"), period="5d")
+            else:
+                vix_data = safe_history(yf.Ticker("^VIX"), period="1d")
+                if len(vix_data) == 0:
+                    vix_data = safe_history(yf.Ticker("^VIX"), period="5d")
             if len(vix_data) >= 1:
                 _vix_cache['data'] = vix_data
                 _vix_cache['time'] = now
@@ -1955,10 +1957,14 @@ def get_index_data(symbol):
             price = info.get("regularMarketPrice") or info.get("currentPrice") or info.get("previousClose")
             ch_pct = info.get("regularMarketChangePercent")
             prev = info.get("regularMarketPreviousClose") or info.get("previousClose")
-            # Use robust period selection for history
-            day_period = "5d" if datetime.now(UTC).weekday() >= 5 else "1d"
+            # Always use UTC weekday for server compatibility
+            if datetime.now(UTC).weekday() >= 5:
+                hist = safe_history(t, period="5d")
+            else:
+                hist = safe_history(t, period="1d")
+                if len(hist) < 2:
+                    hist = safe_history(t, period="5d")
             if price is None or prev is None:
-                hist = safe_history(t, period=day_period)
                 if len(hist) >= 2:
                     price = hist["Close"].iloc[-1]
                     prev = hist["Close"].iloc[-2]
