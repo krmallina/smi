@@ -2560,7 +2560,7 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
 </details>
 </div>
 <div style="padding:4px 15px;background:var(--card);border-bottom:1px solid var(--border);font-size:0.9em;text-align:center;margin-top:0;margin-bottom:6px">
-<span>{commodities_h}</span> | <span>{cvr3_str}</span> | <span>{fg_h}</span> | <span>{aaii_h}</span>
+<span id="marketCommodities">{commodities_h}</span> | <span>{cvr3_str}</span> | <span>{fg_h}</span> | <span>{aaii_h}</span>
 </div>
 <div style="padding:4px 15px;background:var(--card);border-bottom:1px solid var(--border);font-size:0.9em;text-align:center;margin-top:0;margin-bottom:6px">
 <span id="marketIndices">{indices_h}</span>
@@ -3738,7 +3738,79 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     
     // Market indices are now rendered statically by Python for GitHub Pages compatibility.
+    
+    // Fetch live market indices for GitHub Pages
+    fetchMarketIndices();
 });
+
+async function fetchMarketIndices() {
+    const symbols = [
+        {ticker: '^DJI', name: 'Dow'},
+        {ticker: '^GSPC', name: 'S&P'},
+        {ticker: '^IXIC', name: 'Nasdaq'},
+        {ticker: '^VIX', name: 'VIX'},
+        {ticker: 'GC=F', name: 'Gold'},
+        {ticker: 'SI=F', name: 'Silver'},
+        {ticker: 'HG=F', name: 'Copper'},
+        {ticker: 'BTC-USD', name: 'Bitcoin'}
+    ];
+    
+    try {
+        const results = await Promise.all(symbols.map(async ({ticker, name}) => {
+            try {
+                // Use Yahoo Finance quote API for more reliable data
+                const response = await fetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${ticker}`, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                        'Accept': 'application/json'
+                    }
+                });
+                if (!response.ok) return null;
+                const data = await response.json();
+                const quote = data.quoteResponse.result[0];
+                if (!quote) return null;
+                
+                const price = quote.regularMarketPrice || quote.regularMarketPreviousClose || quote.marketCap; // fallback for crypto
+                const prevClose = quote.regularMarketPreviousClose;
+                if (!price || !prevClose) return null;
+                
+                const change = price - prevClose;
+                const changePercent = ((change / prevClose) * 100);
+                
+                return {name, price, change, changePercent};
+            } catch {
+                return null;
+            }
+        }));
+        
+        // Separate commodities and indices
+        const indices = results.slice(0, 4); // Dow, S&P, Nasdaq, VIX
+        const commodities = results.slice(4); // Gold, Silver, Copper, Bitcoin
+        
+        const formatItem = (r) => {
+            if (!r) return `<span class="neutral">${r?.name || '?'}: N/A</span>`;
+            const cls = r.change >= 0 ? 'positive' : 'negative';
+            const arrow = r.change >= 0 ? '↑' : '↓';
+            return `<span class="${cls}">${r.name} ${arrow}: ${r.price.toFixed(r.name === 'Bitcoin' ? 0 : 2)} (${r.change >= 0 ? '+' : ''}${r.change.toFixed(2)})</span>`;
+        };
+        
+        const indicesHtml = indices.map(formatItem).join(' | ');
+        const commoditiesHtml = commodities.map(formatItem).join(' | ');
+        
+        // Update both sections if elements exist
+        const indicesEl = document.getElementById('marketIndices');
+        const commoditiesEl = document.getElementById('marketCommodities');
+        
+        if (indicesEl && indices.some(r => r !== null)) {
+            indicesEl.innerHTML = indicesHtml;
+        }
+        if (commoditiesEl && commodities.some(r => r !== null)) {
+            commoditiesEl.innerHTML = commoditiesHtml;
+        }
+    } catch (error) {
+        console.log('Market indices fetch failed (using server values):', error);
+    }
+}
 
 </script>
 </body></html>"""
