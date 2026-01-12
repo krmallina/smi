@@ -74,6 +74,7 @@ import os
 import argparse
 import json
 import requests
+from bs4 import BeautifulSoup
 import random
 import re
 import pytz
@@ -1992,7 +1993,30 @@ def get_index_data(symbol):
                 time.sleep(2 ** attempt)
             else:
                 pass  # Last attempt failed
-    # All retries failed
+    # All retries failed, try scraping Yahoo Finance as last resort
+    try:
+        url = f"https://finance.yahoo.com/quote/{symbol}"
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            # Find the price
+            price_elem = soup.find('fin-streamer', {'data-field': 'regularMarketPrice'})
+            if price_elem and price_elem.get('value'):
+                price = float(price_elem['value'])
+                # Find change
+                change_elem = soup.find('fin-streamer', {'data-field': 'regularMarketChange'})
+                ch_abs = float(change_elem['value']) if change_elem and change_elem.get('value') else 0
+                # Previous close
+                prev_elem = soup.find('fin-streamer', {'data-field': 'regularMarketPreviousClose'})
+                prev = float(prev_elem['value']) if prev_elem and prev_elem.get('value') else price
+                if ch_abs == 0 and abs(price - prev) > 0.01:
+                    ch_abs = price - prev
+                ch_pct = ((price - prev) / prev) * 100 if prev > 0 else 0
+                return {"price": price, "change_pct": ch_pct, "change_abs": ch_abs}
+    except Exception as e:
+        pass
+    # All methods failed
     return {"price": None, "change_pct": None, "change_abs": None}
 
 
