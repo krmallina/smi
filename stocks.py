@@ -2486,9 +2486,9 @@ body{{font-family:'Oracle Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Robo
   .heat-tile{{min-height:160px}}
 }}
 .heat-tile:hover{{transform:scale(1.03);box-shadow:var(--shadow-lg);border-color:var(--accent)}}
-table{{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);box-shadow:var(--shadow);border-radius:var(--radius-lg);overflow:hidden;border:1px solid var(--border)}}
-th{{background:linear-gradient(180deg,var(--accent),var(--accent-dark));color:#fff;padding:16px;cursor:pointer;position:sticky;top:0;z-index:10;font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid var(--accent-dark)}}
-th:hover{{background:linear-gradient(180deg,var(--accent-hover),var(--accent))}}
+    table{{width:100%;min-width:1200px;border-collapse:collapse;background:var(--card);border:1px solid var(--border);}}
+th{{background:#1a2636;color:#fff;padding:16px;cursor:pointer;position:sticky;top:0;z-index:10;font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid var(--accent-dark);}}
+th:hover{{background:#22314a;}}
 td{{padding:14px 16px;border-bottom:1px solid var(--border);vertical-align:top;font-size:13px}}
 tr:last-child td{{border-bottom:none}}
 tr:hover td{{background:var(--surface)}}
@@ -2513,7 +2513,17 @@ tr:hover td{{background:var(--surface)}}
 .range-title{{font-size:0.75em;font-weight:600;margin-bottom:4px;color:var(--text);opacity:0.9}}
 input#tickerFilter{{padding:6px 10px;border:1.5px solid var(--border);border-radius:var(--radius-md);background:var(--card);color:var(--text);font-size:13px;font-family:'Oracle Sans',-apple-system,sans-serif;transition:all 0.2s;outline:none;margin-left:auto;min-width:120px;width:100%;max-width:260px;box-sizing:border-box}}
 /* Responsive table view: horizontal scroll on small screens */
-.table-wrap{{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}}
+    .table-wrap{{width:100%;max-height:80vh;overflow:auto;-webkit-overflow-scrolling:touch;position:relative;box-shadow:var(--shadow);}}
+    thead th:first-child {{ border-top-left-radius: var(--radius-lg); }}
+    thead th:last-child {{ border-top-right-radius: var(--radius-lg); }}
+        thead th {{
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: linear-gradient(180deg,var(--accent),var(--accent-dark)), var(--card);
+            box-shadow: 0 2px 4px 0 rgba(0,0,0,0.04);
+            border-radius: 0 !important;
+        }}
 table.data-table{{min-width:900px;}}
 @media (max-width: 900px) {{
     .table-wrap{{padding-bottom:8px;}}
@@ -2600,7 +2610,8 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
 
 <div id="tableView">
 <div class="table-wrap">
-<table id="stockTable">
+<table id="stockTable" class="data-table">
+<thead>
 <tr>
 <th data-sort="ticker">TICKER</th>
 <th data-sort="price">PRICE</th>
@@ -2616,6 +2627,8 @@ input#tickerFilter:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(5
 <th style="width:160px;min-width:140px;max-width:200px;">RANGES</th>
 <th style="width:160px;min-width:140px;max-width:200px;">INDICATORS</th>
 </tr>
+</thead>
+<tbody>
 """
     for _, r in df.iterrows():
         bb_width_val = r["bb_width_pct"] if r["bb_width_pct"] is not None else 100
@@ -2934,7 +2947,7 @@ Short: {na(r['short_percent'],"{:.1f}%")} ({na(r['days_to_cover'],"{:.1f}d")})<b
 <td style="width:90px;min-width:70px;max-width:100px;padding-left:1px;">{indicators_html}<hr style="margin:2px 0;opacity:0.3"> <span class="{sent_cls}">{sent_text}</span><br><span class="{upside_cls}">Upside: {na(r['upside_potential'],"{:+.1f}%")}</span></td>
 </tr>"""
 
-    html += "</table></div></div><div id='cardView'><div class='card-grid'>"
+    html += "</tbody></table></div></div><div id='cardView'><div class='card-grid'>"
     for _, r in df.iterrows():
         bg = "rgba(0,170,0,0.1)" if r["change_pct"] > 0 else "rgba(204,0,0,0.1)"
         bb_width_val = r["bb_width_pct"] if r["bb_width_pct"] is not None else 100
