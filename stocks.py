@@ -617,11 +617,8 @@ def get_vix_cached():
     now = time.time()
     if _vix_cache['data'] is None or (now - _vix_cache['time']) > VIX_CACHE_TTL:
         try:
-            # Try 1d first, fallback to 5d if not enough data (works for both UTC and PST)
-            vix_data = safe_history(yf.Ticker("^VIX"), period="1d")
-            if len(vix_data) < 1:
-                vix_data = safe_history(yf.Ticker("^VIX"), period="5d")
-            if len(vix_data) >= 1:
+            vix_data = safe_history(yf.Ticker("^VIX"), period="60d")
+            if len(vix_data) >= 10:
                 _vix_cache['data'] = vix_data
                 _vix_cache['time'] = now
             else:
@@ -1954,11 +1951,8 @@ def get_index_data(symbol):
             price = info.get("regularMarketPrice") or info.get("currentPrice") or info.get("previousClose")
             ch_pct = info.get("regularMarketChangePercent")
             prev = info.get("regularMarketPreviousClose") or info.get("previousClose")
-            # Try 1d first, fallback to 5d if not enough data (works for both UTC and PST)
-            hist = safe_history(t, period="1d")
-            if len(hist) < 2:
-                hist = safe_history(t, period="5d")
             if price is None or prev is None:
+                hist = safe_history(t, period="5d")
                 if len(hist) >= 2:
                     price = hist["Close"].iloc[-1]
                     prev = hist["Close"].iloc[-2]
@@ -2186,7 +2180,7 @@ def get_fear_greed_data():
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Referer": "https://www.cnn.com/markets/fear-and-greed",
         }
-        r = SESSION.get(url, headers=headers, timeout=5)  # OPTIMIZED: Reduced timeout
+        r = requests.get(url, headers=headers, timeout=5)  # OPTIMIZED: Reduced timeout
         r.raise_for_status()
         data = r.json()
         if not isinstance(data, dict):
@@ -2203,7 +2197,7 @@ def get_fear_greed_data():
         return result
     except Exception:
         try:
-            r = SESSION.get(
+            r = requests.get(
                 "https://production.dataviz.cnn.io/index/fearandgreed/graphdata",
                 headers={"User-Agent": "Mozilla/5.0"},
                 timeout=5,
@@ -2242,7 +2236,7 @@ def get_aaii_sentiment():
         return _aaii_cache["data"]
 
     try:
-        r = SESSION.get(
+        r = requests.get(
             "https://www.aaii.com/sentimentsurvey/sent_results",
             headers={"User-Agent": "Mozilla/5.0"},
             timeout=5,
