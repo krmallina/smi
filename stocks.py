@@ -3736,51 +3736,9 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // Fetch live market indices for GitHub Pages
-    fetchMarketIndices();
+    // Market indices are now rendered statically by Python for GitHub Pages compatibility.
 });
 
-async function fetchMarketIndices() {
-    const symbols = [
-        {ticker: '^DJI', name: 'Dow'},
-        {ticker: '^GSPC', name: 'S&P'},
-        {ticker: '^IXIC', name: 'Nasdaq'},
-        {ticker: '^VIX', name: 'VIX'}
-    ];
-    
-    try {
-        const results = await Promise.all(symbols.map(async ({ticker, name}) => {
-            try {
-                const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5d`, {
-                    headers: {'User-Agent': 'Mozilla/5.0'}
-                });
-                if (!response.ok) return null;
-                const data = await response.json();
-                const quote = data.chart.result[0];
-                const meta = quote.meta;
-                const price = meta.regularMarketPrice || meta.previousClose;
-                const prevClose = meta.chartPreviousClose || meta.previousClose;
-                const change = price - prevClose;
-                return {name, price, change};
-            } catch {
-                return null;
-            }
-        }));
-        
-        let html = results.map(r => {
-            if (!r) return `<span class="neutral">${r?.name || '?'}: N/A</span>`;
-            const cls = r.change >= 0 ? 'positive' : 'negative';
-            return `<span class="${cls}">${r.name}: ${r.price.toFixed(2)} (${r.change >= 0 ? '+' : ''}${r.change.toFixed(2)})</span>`;
-        }).join(' | ');
-        
-        const indicesEl = document.getElementById('marketIndices');
-        if (indicesEl && results.some(r => r !== null)) {
-            indicesEl.innerHTML = html;
-        }
-    } catch (error) {
-        console.log('Market indices fetch failed (using server values):', error);
-    }
-}
 </script>
 </body></html>"""
 
