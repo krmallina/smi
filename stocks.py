@@ -2290,9 +2290,9 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
     vix = get_index_data("^VIX")
     
     # Commodities and Crypto
-    gold = get_index_data("GC=F")
-    silver = get_index_data("SI=F")
-    copper = get_index_data("HG=F")
+    gold = get_index_data("GLD")
+    silver = get_index_data("SLV")
+    copper = get_index_data("CPER")
     bitcoin = get_index_data("BTC-USD")
 
     # Calculate CVR3 Signal
