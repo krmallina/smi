@@ -1940,84 +1940,59 @@ def fmt_3yr10k(pct, val_10k):
 
 @lru_cache(maxsize=32)  # OPTIMIZED: Cache index data
 def get_index_data(symbol):
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            # First try simple yf.Ticker.info (more reliable for indexes)
+    try:
+        # Use fetch() to get full signal/trend info for index/commodity, as in ticker table
+        data = fetch(symbol, ext=False)
+        if not data:
+            # fallback to minimal info if fetch fails
             t = yf.Ticker(symbol)
             info = t.info
-            if info:
-                price = info.get("regularMarketPrice") or info.get("currentPrice") or info.get("previousClose")
-                ch_pct = info.get("regularMarketChangePercent")
-                prev = info.get("regularMarketPreviousClose") or info.get("previousClose")
-                if price is not None:
-                    if prev is None:
-                        # Use 5d history instead of 1d to avoid issues
-                        hist = safe_history(t, period="5d")
-                        if len(hist) >= 2:
-                            prev = hist["Close"].iloc[-2]
-                    if prev is not None:
-                        ch_abs = price - prev
-                        if ch_pct is None and prev > 0:
-                            ch_pct = ((price - prev) / prev) * 100
-                        return {"price": price, "change_pct": ch_pct, "change_abs": ch_abs}
-            
-            # If info failed, try full fetch() as fallback
-            data = fetch(symbol, ext=False)
-            if data:
-                return {
-                    "price": data.get("price"),
-                    "change_pct": data.get("change_pct"),
-                    "change_abs": data.get("change_abs_day"),
-                    "active_signal": data.get("active_signal"),
-                    "signal_combined": data.get("signal_combined"),
-                    "predicted_trend": data.get("predicted_trend"),
-                    "trend_label": data.get("trend_label"),
-                    "macd_label": data.get("macd_label"),
-                    "rsi": data.get("rsi"),
-                    "bb_signal": data.get("bb_signal"),
-                    "signal_bb": data.get("signal_bb"),
-                    "signal_rsi": data.get("signal_rsi"),
-                    "signal_macd": data.get("signal_macd"),
-                    "signal_ichimoku": data.get("signal_ichimoku"),
-                    "signal_bb_ichimoku": data.get("signal_bb_ichimoku"),
-                    "signal_confidence": data.get("signal_confidence"),
-                    "signal_strength": data.get("signal_strength"),
-                }
-            
-            # If still no data, wait and retry
-            if attempt < max_retries - 1:
-                time.sleep(2 ** attempt)  # Exponential backoff: 1s, 2s, 4s
-        except Exception as e:
-            if attempt < max_retries - 1:
-                time.sleep(2 ** attempt)
-            else:
-                pass  # Last attempt failed
-    # All retries failed, try scraping Yahoo Finance as last resort
-    try:
-        url = f"https://finance.yahoo.com/quote/{symbol}"
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-        response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            # Find the price
-            price_elem = soup.find('fin-streamer', {'data-field': 'regularMarketPrice'})
-            if price_elem and price_elem.get('value'):
-                price = float(price_elem['value'])
-                # Find change
-                change_elem = soup.find('fin-streamer', {'data-field': 'regularMarketChange'})
-                ch_abs = float(change_elem['value']) if change_elem and change_elem.get('value') else 0
-                # Previous close
-                prev_elem = soup.find('fin-streamer', {'data-field': 'regularMarketPreviousClose'})
-                prev = float(prev_elem['value']) if prev_elem and prev_elem.get('value') else price
-                if ch_abs == 0 and abs(price - prev) > 0.01:
+            if info is None:
+                info = {}
+            price = info.get("regularMarketPrice") or info.get("currentPrice") or info.get("previousClose")
+            ch_pct = info.get("regularMarketChangePercent")
+            prev = info.get("regularMarketPreviousClose") or info.get("previousClose")
+            if price is None or prev is None:
+                hist = safe_history(t, period="5d")
+                if len(hist) >= 2:
+                    price = hist["Close"].iloc[-1]
+                    prev = hist["Close"].iloc[-2]
+            ch_abs = None
+            if price is not None and prev is not None:
+                try:
+                    price = float(price)
+                    prev = float(prev)
                     ch_abs = price - prev
-                ch_pct = ((price - prev) / prev) * 100 if prev > 0 else 0
-                return {"price": price, "change_pct": ch_pct, "change_abs": ch_abs}
+                except (ValueError, TypeError):
+                    ch_abs = None
+            if ch_pct is None and price is not None and prev is not None and prev > 0:
+                try:
+                    ch_pct = ((float(price) - float(prev)) / float(prev)) * 100
+                except (ValueError, TypeError):
+                    ch_pct = None
+            return {"price": price, "change_pct": ch_pct, "change_abs": ch_abs}
+        # Return all relevant fields for ticker-style trending arrow logic
+        return {
+            "price": data.get("price"),
+            "change_pct": data.get("change_pct"),
+            "change_abs": data.get("change_abs_day"),
+            "active_signal": data.get("active_signal"),
+            "signal_combined": data.get("signal_combined"),
+            "predicted_trend": data.get("predicted_trend"),
+            "trend_label": data.get("trend_label"),
+            "macd_label": data.get("macd_label"),
+            "rsi": data.get("rsi"),
+            "bb_signal": data.get("bb_signal"),
+            "signal_bb": data.get("signal_bb"),
+            "signal_rsi": data.get("signal_rsi"),
+            "signal_macd": data.get("signal_macd"),
+            "signal_ichimoku": data.get("signal_ichimoku"),
+            "signal_bb_ichimoku": data.get("signal_bb_ichimoku"),
+            "signal_confidence": data.get("signal_confidence"),
+            "signal_strength": data.get("signal_strength"),
+        }
     except Exception as e:
-        pass
-    # All methods failed
-    return {"price": None, "change_pct": None, "change_abs": None}
+        return {"price": None, "change_pct": None, "change_abs": None}
 
 
 def load_ticker_sections(csv="data/tickers.csv"):
