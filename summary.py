@@ -358,7 +358,7 @@ def build_tables(df: pd.DataFrame):
         _, _, mh = macd(w["close"])
         w["macd_hist"] = mh
         w["atr14"] = atr(w["high"], w["low"], w["close"], 14)
-        w["week_ret"] = w["close"].pct_change()
+        w["week_ret"] = w["close"].pct_change(fill_method=None)
         weekly_rows.append(w.reset_index())
     weekly_df = pd.concat(weekly_rows, ignore_index=True) if weekly_rows else pd.DataFrame()
     weekly_tf = _make_tf_table(weekly_df, "week_ret", "Week %", spark_points=16) if not weekly_df.empty else pd.DataFrame()
@@ -377,7 +377,7 @@ def build_tables(df: pd.DataFrame):
         _, _, mh = macd(m["close"])
         m["macd_hist"] = mh
         m["atr14"] = atr(m["high"], m["low"], m["close"], 14)
-        m["month_ret"] = m["close"].pct_change()
+        m["month_ret"] = m["close"].pct_change(fill_method=None)
         monthly_rows.append(m.reset_index())
     monthly_df = pd.concat(monthly_rows, ignore_index=True) if monthly_rows else pd.DataFrame()
     monthly_tf = _make_tf_table(monthly_df, "month_ret", "Month %", spark_points=12) if not monthly_df.empty else pd.DataFrame()
