@@ -74,7 +74,6 @@ import os
 import argparse
 import json
 import requests
-from bs4 import BeautifulSoup
 import random
 import re
 import pytz
@@ -3758,8 +3757,7 @@ async function fetchMarketIndices() {
     try {
         const results = await Promise.all(symbols.map(async ({ticker, name}) => {
             try {
-                // Use Yahoo Finance quote API for more reliable data
-                const response = await fetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${ticker}`, {
+                response = await fetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${ticker}`, {
                     headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
                         'Accept': 'application/json'
