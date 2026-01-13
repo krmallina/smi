@@ -1966,15 +1966,19 @@ def get_index_data(symbol):
             if info is None:
                 info = {}
             price = info.get("regularMarketPrice") or info.get("currentPrice") or info.get("previousClose")
+            if price is not None:
+                price = float(price)
             ch_pct = info.get("regularMarketChangePercent")
             prev = info.get("regularMarketPreviousClose") or info.get("previousClose")
+            if prev is not None:
+                prev = float(prev)
             # Try safe_history if price/prev missing
             if price is None or prev is None:
                 try:
                     hist = safe_history(t, period="5d")
                     if len(hist) >= 2:
-                        price = hist["Close"].iloc[-1]
-                        prev = hist["Close"].iloc[-2]
+                        price = float(hist["Close"].iloc[-1])
+                        prev = float(hist["Close"].iloc[-2])
                 except Exception:
                     pass
             # Try yf.download as last resort
@@ -1982,21 +1986,19 @@ def get_index_data(symbol):
                 try:
                     dl = yf.download(symbol, period="5d", progress=False)
                     if len(dl) >= 2:
-                        price = dl["Close"].iloc[-1]
-                        prev = dl["Close"].iloc[-2]
+                        price = float(dl["Close"].iloc[-1])
+                        prev = float(dl["Close"].iloc[-2])
                 except Exception:
                     pass
             ch_abs = None
             if price is not None and prev is not None:
                 try:
-                    price = float(price)
-                    prev = float(prev)
                     ch_abs = price - prev
                 except (ValueError, TypeError):
                     ch_abs = None
             if ch_pct is None and price is not None and prev is not None and prev > 0:
                 try:
-                    ch_pct = ((float(price) - float(prev)) / float(prev)) * 100
+                    ch_pct = ((price - prev) / prev) * 100
                 except (ValueError, TypeError):
                     ch_pct = None
             # ...existing code...
