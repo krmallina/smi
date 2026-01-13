@@ -1986,8 +1986,8 @@ def get_index_data(symbol):
                 try:
                     dl = yf.download(symbol, period="5d", progress=False)
                     if len(dl) >= 2:
-                        price = float(dl["Close"].iloc[-1])
-                        prev = float(dl["Close"].iloc[-2])
+                        price = float(dl["Close"].iloc[-1].iloc[0])
+                        prev = float(dl["Close"].iloc[-2].iloc[0])
                 except Exception:
                     pass
             ch_abs = None
