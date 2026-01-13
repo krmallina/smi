@@ -1951,11 +1951,22 @@ def get_index_data(symbol):
             price = info.get("regularMarketPrice") or info.get("currentPrice") or info.get("previousClose")
             ch_pct = info.get("regularMarketChangePercent")
             prev = info.get("regularMarketPreviousClose") or info.get("previousClose")
+            # Try safe_history if price/prev missing
             if price is None or prev is None:
                 hist = safe_history(t, period="5d")
                 if len(hist) >= 2:
                     price = hist["Close"].iloc[-1]
                     prev = hist["Close"].iloc[-2]
+            # Try yf.download as last resort
+            if (price is None or prev is None):
+                try:
+                    import yfinance as yf
+                    dl = yf.download(symbol, period="5d", progress=False)
+                    if len(dl) >= 2:
+                        price = dl["Close"].iloc[-1]
+                        prev = dl["Close"].iloc[-2]
+                except Exception:
+                    pass
             ch_abs = None
             if price is not None and prev is not None:
                 try:
