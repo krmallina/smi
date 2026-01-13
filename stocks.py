@@ -68,6 +68,7 @@ Trading Strategies:
 """
 
 import yfinance as yf
+import logging
 import pandas as pd
 from datetime import datetime, timedelta, timezone
 import os
@@ -1937,6 +1938,18 @@ def fmt_3yr10k(pct, val_10k):
     return f'<span class="{cls}" data-sort="{pct:.10f}">{sign} {pct:+.2f}%<br><small>${val_10k:,.0f}</small></span>'
 
 
+
+# Patch yfinance's requests session to use a custom User-Agent
+try:
+    import requests
+    yf.utils.requests = requests
+    if hasattr(yf, 'shared') and hasattr(yf.shared, '_requests_session'):
+        yf.shared._requests_session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (compatible; SMI-Bot/1.0; +https://github.com/your-org/smi)'
+        })
+except Exception as e:
+    logging.warning(f"Could not patch yfinance User-Agent: {e}")
+
 @lru_cache(maxsize=32)  # OPTIMIZED: Cache index data
 def get_index_data(symbol):
     try:
@@ -1945,7 +1958,11 @@ def get_index_data(symbol):
         if not data:
             # fallback to minimal info if fetch fails
             t = yf.Ticker(symbol)
-            info = t.info
+            info = None
+            try:
+                info = t.info
+            except Exception as e:
+                logging.error(f"[get_index_data] {symbol} Ticker.info failed: {e}")
             if info is None:
                 info = {}
             price = info.get("regularMarketPrice") or info.get("currentPrice") or info.get("previousClose")
@@ -1953,33 +1970,40 @@ def get_index_data(symbol):
             prev = info.get("regularMarketPreviousClose") or info.get("previousClose")
             # Try safe_history if price/prev missing
             if price is None or prev is None:
-                hist = safe_history(t, period="5d")
-                if len(hist) >= 2:
-                    price = hist["Close"].iloc[-1]
-                    prev = hist["Close"].iloc[-2]
+                try:
+                    hist = safe_history(t, period="5d")
+                    if len(hist) >= 2:
+                        price = hist["Close"].iloc[-1]
+                        prev = hist["Close"].iloc[-2]
+                        logging.info(f"[get_index_data] {symbol} price from safe_history: {price}, prev: {prev}")
+                except Exception as e:
+                    logging.error(f"[get_index_data] {symbol} safe_history failed: {e}")
             # Try yf.download as last resort
             if (price is None or prev is None):
                 try:
-                    import yfinance as yf
                     dl = yf.download(symbol, period="5d", progress=False)
                     if len(dl) >= 2:
                         price = dl["Close"].iloc[-1]
                         prev = dl["Close"].iloc[-2]
-                except Exception:
-                    pass
+                        logging.info(f"[get_index_data] {symbol} price from yf.download: {price}, prev: {prev}")
+                except Exception as e:
+                    logging.error(f"[get_index_data] {symbol} yf.download failed: {e}")
             ch_abs = None
             if price is not None and prev is not None:
                 try:
                     price = float(price)
                     prev = float(prev)
                     ch_abs = price - prev
-                except (ValueError, TypeError):
+                except (ValueError, TypeError) as e:
+                    logging.error(f"[get_index_data] {symbol} price/prev conversion failed: {e}")
                     ch_abs = None
             if ch_pct is None and price is not None and prev is not None and prev > 0:
                 try:
                     ch_pct = ((float(price) - float(prev)) / float(prev)) * 100
-                except (ValueError, TypeError):
+                except (ValueError, TypeError) as e:
+                    logging.error(f"[get_index_data] {symbol} ch_pct calculation failed: {e}")
                     ch_pct = None
+            logging.info(f"[get_index_data] {symbol} final price: {price}, ch_pct: {ch_pct}, ch_abs: {ch_abs}")
             return {"price": price, "change_pct": ch_pct, "change_abs": ch_abs}
         # Return all relevant fields for ticker-style trending arrow logic
         return {
@@ -2002,6 +2026,7 @@ def get_index_data(symbol):
             "signal_strength": data.get("signal_strength"),
         }
     except Exception as e:
+        logging.error(f"[get_index_data] {symbol} failed: {e}")
         return {"price": None, "change_pct": None, "change_abs": None}
 
 
