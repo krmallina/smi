@@ -2323,7 +2323,7 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
     sp = get_index_data("ES=F")       # S&P 500 Futures
     spy = get_index_data("SPY")       # SPY ETF (unchanged)
     nas = get_index_data("NQ=F")      # Nasdaq Futures
-    vix = get_index_data("VX=F")      # VIX Futures
+    vix = get_index_data("^VIX")      # VIX Index
     
     # Commodities and Crypto (use main futures/spot symbols)
     gold = get_index_data("GC=F")      # Gold Futures
