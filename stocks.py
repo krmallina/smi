@@ -2318,18 +2318,18 @@ def html(df, vix, fg, aaii, file, ext=False, alerts=None):
         "</div>"
     )
 
-    # Major indices
-    dow = get_index_data("^DJI")
-    sp = get_index_data("^GSPC")
-    spy = get_index_data("SPY")
-    nas = get_index_data("^IXIC")
-    vix = get_index_data("^VIX")
+    # Major indices (use futures for global indexes)
+    dow = get_index_data("YM=F")      # Dow Futures
+    sp = get_index_data("ES=F")       # S&P 500 Futures
+    spy = get_index_data("SPY")       # SPY ETF (unchanged)
+    nas = get_index_data("NQ=F")      # Nasdaq Futures
+    vix = get_index_data("VX=F")      # VIX Futures
     
-    # Commodities and Crypto
-    gold = get_index_data("GLD")
-    silver = get_index_data("SLV")
-    copper = get_index_data("CPER")
-    bitcoin = get_index_data("BTC-USD")
+    # Commodities and Crypto (use main futures/spot symbols)
+    gold = get_index_data("GC=F")      # Gold Futures
+    silver = get_index_data("SI=F")    # Silver Futures
+    copper = get_index_data("HG=F")    # Copper Futures
+    bitcoin = get_index_data("BTC-USD") # Bitcoin spot (unchanged)
 
     # Calculate CVR3 Signal
     cvr3_signal = "NEUTRAL"
