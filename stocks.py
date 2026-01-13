@@ -1961,8 +1961,8 @@ def get_index_data(symbol):
             info = None
             try:
                 info = t.info
-            except Exception as e:
-                logging.error(f"[get_index_data] {symbol} Ticker.info failed: {e}")
+            except Exception:
+                pass
             if info is None:
                 info = {}
             price = info.get("regularMarketPrice") or info.get("currentPrice") or info.get("previousClose")
@@ -1975,9 +1975,8 @@ def get_index_data(symbol):
                     if len(hist) >= 2:
                         price = hist["Close"].iloc[-1]
                         prev = hist["Close"].iloc[-2]
-                        logging.info(f"[get_index_data] {symbol} price from safe_history: {price}, prev: {prev}")
-                except Exception as e:
-                    logging.error(f"[get_index_data] {symbol} safe_history failed: {e}")
+                except Exception:
+                    pass
             # Try yf.download as last resort
             if (price is None or prev is None):
                 try:
@@ -1985,25 +1984,22 @@ def get_index_data(symbol):
                     if len(dl) >= 2:
                         price = dl["Close"].iloc[-1]
                         prev = dl["Close"].iloc[-2]
-                        logging.info(f"[get_index_data] {symbol} price from yf.download: {price}, prev: {prev}")
-                except Exception as e:
-                    logging.error(f"[get_index_data] {symbol} yf.download failed: {e}")
+                except Exception:
+                    pass
             ch_abs = None
             if price is not None and prev is not None:
                 try:
                     price = float(price)
                     prev = float(prev)
                     ch_abs = price - prev
-                except (ValueError, TypeError) as e:
-                    logging.error(f"[get_index_data] {symbol} price/prev conversion failed: {e}")
+                except (ValueError, TypeError):
                     ch_abs = None
             if ch_pct is None and price is not None and prev is not None and prev > 0:
                 try:
                     ch_pct = ((float(price) - float(prev)) / float(prev)) * 100
-                except (ValueError, TypeError) as e:
-                    logging.error(f"[get_index_data] {symbol} ch_pct calculation failed: {e}")
+                except (ValueError, TypeError):
                     ch_pct = None
-            logging.info(f"[get_index_data] {symbol} final price: {price}, ch_pct: {ch_pct}, ch_abs: {ch_abs}")
+            # ...existing code...
             return {"price": price, "change_pct": ch_pct, "change_abs": ch_abs}
         # Return all relevant fields for ticker-style trending arrow logic
         return {
@@ -2025,8 +2021,7 @@ def get_index_data(symbol):
             "signal_confidence": data.get("signal_confidence"),
             "signal_strength": data.get("signal_strength"),
         }
-    except Exception as e:
-        logging.error(f"[get_index_data] {symbol} failed: {e}")
+    except Exception:
         return {"price": None, "change_pct": None, "change_abs": None}
 
 
