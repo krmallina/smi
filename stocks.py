@@ -3669,7 +3669,7 @@ document.querySelectorAll('th[data-sort]').forEach(function(th) {
         // Use DocumentFragment for efficient DOM updates
         const fragment = document.createDocumentFragment();
         rowsWithValues.forEach(item => fragment.appendChild(item.row));
-        table.appendChild(fragment);
+        table.tBodies[0].appendChild(fragment);
     };
 });
 
