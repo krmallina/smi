@@ -3651,7 +3651,8 @@ document.querySelectorAll('th[data-sort]').forEach(function(th) {
     th.onclick = function() {
         const col = th.cellIndex;
         const table = document.getElementById('stockTable');
-        const rows = Array.from(table.querySelectorAll('tr:nth-child(n+2)'));
+        // FIX: include all tbody rows, not just from 2nd row
+        const rows = Array.from(table.tBodies[0].rows);
         const dir = th.dataset.dir = (th.dataset.dir === 'asc' ? 'desc' : 'asc');
         const multiplier = dir === 'asc' ? 1 : -1;
         
