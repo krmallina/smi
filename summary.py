@@ -413,8 +413,107 @@ def build_tables(df: pd.DataFrame):
     combined["M_atr_pct"] = _atr_pct("M_")
 
     # Avg ATR% across available timeframes
-    
-    
+    atr_cols = [c for c in ["D_atr_pct", "W_atr_pct", "M_atr_pct"] if c in combined.columns]
+    if atr_cols:
+        combined["Avg_atr_pct"] = pd.to_numeric(combined[atr_cols].stack(), errors="coerce").groupby(level=0).mean()
+    else:
+        combined["Avg_atr_pct"] = pd.NA
+
+    # --- Extra metrics (match stocks.py columns) ---
+    # 52W low/high based on last ~252 trading days of daily bars
+    # 3YR10K based on last ~756 trading days of daily bars (approx 3y)
+    metrics_rows = []
+    for t, g in df.groupby("ticker", sort=False):
+        g = g.sort_values("date")
+        if g.empty:
+            continue
+        last_close = float(g["close"].iloc[-1]) if pd.notna(g["close"].iloc[-1]) else None
+        w52 = g.tail(252)
+        low52 = float(w52["low"].min()) if not w52.empty and pd.notna(w52["low"].min()) else None
+        high52 = float(w52["high"].max()) if not w52.empty and pd.notna(w52["high"].max()) else None
+        range_pct = None
+        if low52 is not None and high52 is not None and low52 > 0:
+            range_pct = (high52 - low52) / low52 * 100.0
+
+        g3 = g.tail(756)
+        ch3y = None
+        val10k = None
+        try:
+            if len(g3) >= 2 and last_close is not None:
+                base = float(g3["close"].iloc[0])
+                if base and base > 0:
+                    ch3y = (last_close - base) / base * 100.0
+                    val10k = 10000.0 * (1.0 + ch3y / 100.0)
+        except Exception:
+            ch3y = None
+            val10k = None
+        # 3M return aligned to month-end series (month-end to month-end, 3 months)
+        ch3m = None
+        val10k3m = None
+        try:
+            gm = g.set_index("date").sort_index()
+            mclose = gm["close"].resample("ME").last()
+            # Need 4 month-end points: M-3, M-2, M-1, M0
+            if len(mclose) >= 4:
+                base = float(mclose.iloc[-4])
+                last = float(mclose.iloc[-1])
+                if base and base > 0:
+                    mret3 = (last / base) - 1.0
+                    ch3m = float(mret3) * 100.0
+                    val10k3m = 10000.0 * (1.0 + float(mret3))
+        except Exception:
+            ch3m = None
+            val10k3m = None
+
+
+        metrics_rows.append({
+            "ticker": t,
+            "52w_low": low52,
+            "52w_high": high52,
+            "52w_range_pct": range_pct,
+            "change_3m": ch3m,
+            "value_10k_3m": val10k3m,
+            "change_3y": ch3y,
+            "value_10k_3y": val10k,
+        })
+
+    if metrics_rows:
+        mdf = pd.DataFrame(metrics_rows)
+        combined = combined.merge(mdf, how="left", on="ticker")
+
+    def _fmt_52w(low, high):
+        if low is None or high is None or (isinstance(low, float) and pd.isna(low)) or (isinstance(high, float) and pd.isna(high)):
+            return ""
+        return f"${low:.2f}–${high:.2f}"
+
+    def _fmt_3yr10k(pct, val):
+        if pct is None or val is None or (isinstance(pct, float) and pd.isna(pct)) or (isinstance(val, float) and pd.isna(val)):
+            return ""
+        return f"{pct:+.2f}% (${val:,.0f})"
+
+    def _fmt_3mr10k(pct, val):
+        if pct is None or val is None or (isinstance(pct, float) and pd.isna(pct)) or (isinstance(val, float) and pd.isna(val)):
+            return ""
+        return f"{pct:+.2f}% (${val:,.0f})"
+
+    if "52w_low" in combined.columns and "52w_high" in combined.columns:
+        combined["52W L-H"] = [_fmt_52w(l, h) for l, h in zip(combined.get("52w_low"), combined.get("52w_high"))]
+        combined["52W L-H__sort"] = pd.to_numeric(combined.get("52w_range_pct"), errors="coerce")
+    else:
+        combined["52W L-H"] = ""
+
+    if "change_3m" in combined.columns and "value_10k_3m" in combined.columns:
+        combined["3MR10K"] = [_fmt_3mr10k(p, v) for p, v in zip(combined.get("change_3m"), combined.get("value_10k_3m"))]
+        combined["3MR10K__sort"] = pd.to_numeric(combined.get("change_3m"), errors="coerce")
+    else:
+        combined["3MR10K"] = ""
+
+    if "change_3y" in combined.columns and "value_10k_3y" in combined.columns:
+        combined["3YR10K"] = [_fmt_3yr10k(p, v) for p, v in zip(combined.get("change_3y"), combined.get("value_10k_3y"))]
+        combined["3YR10K__sort"] = pd.to_numeric(combined.get("change_3y"), errors="coerce")
+    else:
+        combined["3YR10K"] = ""
+
     # Consensus signal
     def consensus_row(r: pd.Series) -> str:
         sigs = []
@@ -524,6 +623,7 @@ def build_tables(df: pd.DataFrame):
         "D_Day %": "Day %",
         "W_Week %": "Week %",
         "M_Month %": "Month %",
+        "Avg_atr_pct": "Avg ATR%",
 
         "D_signal": "D Signal",
         "W_signal": "W Signal",
@@ -538,17 +638,18 @@ def build_tables(df: pd.DataFrame):
         "M_sparktrend": "M Trend",
     }
     combined = combined.rename(columns=rename)
-
     # Ensure columns order (minimal)
     cols = [
-        "Ticker","Close","Day %","Week %","Month %",
+        "Ticker","Close","52W L-H","3MR10K","3YR10K","Day %","Week %","Month %",
         "D Signal","W Signal","M Signal","Consensus",
-                "D Spark","W Spark","M Spark",
+        "D Spark","W Spark","M Spark",
         "Options Hint",
         "D Trend","W Trend","M Trend"
     ]
     cols = [c for c in cols if c in combined.columns]
-    combined = combined[cols].copy()
+    # Keep helper sort columns so HTML sorting works
+    keep = cols + [f"{c}__sort" for c in cols if f"{c}__sort" in combined.columns]
+    combined = combined[keep].copy()
 
     try:
         asof = df["date"].max().strftime("%Y-%m-%d")
@@ -773,18 +874,21 @@ def _render_main_table(df: pd.DataFrame) -> str:
         n = name.strip().lower()
         return (
             n.endswith("%") or n.endswith("sma20") or n.endswith("sma50")
-            or n.endswith("rsi14") or n.endswith("macd") or n.endswith("atr") or n == "close"
+            or n.endswith("rsi14") or n.endswith("macd") or n.endswith("atr") or n == "close" or n in ("52w l-h","3mr10k","3yr10k","avg atr%")
         )
 
     body_rows = []
 
-    for _, r in df.iterrows():
+    colnames = list(df.columns)
+    sortable = {c for c in cols if f"{c}__sort" in df.columns}
+
+    for r in df.itertuples(index=False, name=None):
         tds = []
-        ticker = str(r.get('Ticker', '') or r.get('ticker', '')).upper()
-        ticker_l = ticker.lower()
-        quote_type = str(r.get('quote_type', '') or r.get('Quote Type', '')).upper()
+        row = dict(zip(colnames, r))
+        ticker = str(row.get('Ticker', '') or row.get('ticker', '')).upper()
+        quote_type = str(row.get('quote_type', '') or row.get('Quote Type', '')).upper()
         for c in cols:
-            v = r.get(c, "")
+            v = row.get(c, "")
             # Make M Signal sortable by adding data-sort attribute
             if c == "M Signal":
                 val = "" if v is None or (isinstance(v, float) and pd.isna(v)) else str(v)
@@ -815,11 +919,12 @@ def _render_main_table(df: pd.DataFrame) -> str:
             val = "" if v is None or (isinstance(v, float) and pd.isna(v)) else str(v)
             cls = []
             data_sort = ""
-            if c == "Avg ATR%" and ("Avg ATR%__sort" in df.columns):
+            sort_col = f"{c}__sort"
+            if c in sortable:
                 try:
-                    sv = df.loc[_, "Avg ATR%__sort"]
+                    sv = row.get(sort_col)
                     if sv is not None and not (isinstance(sv, float) and pd.isna(sv)):
-                        data_sort = " data-sort='%s'" % _html.escape(f"{float(sv)*100:.6f}")
+                        data_sort = " data-sort='%s'" % _html.escape(f"{float(sv):.10f}")
                 except Exception:
                     data_sort = ""
             if is_num_col(c):
@@ -830,6 +935,16 @@ def _render_main_table(df: pd.DataFrame) -> str:
                     cls.append(css_class_from_value(num))
                 except Exception:
                     pass
+
+            # Color-code 3MR10K / 3YR10K using the hidden __sort value (return as a decimal)
+            if c in ("3MR10K", "3YR10K"):
+                try:
+                    sv = row.get(f"{c}__sort", pd.NA)
+                    if sv is not None and not (isinstance(sv, float) and pd.isna(sv)):
+                        cls.append(css_class_from_value(float(sv)))
+                except Exception:
+                    pass
+
             td_cls = (" class='%s'" % " ".join([x for x in cls if x])) if cls else ""
             tds.append("<td%s%s>%s</td>" % (data_sort, td_cls, _html.escape(val)))
 
@@ -880,7 +995,7 @@ def generate_summary_html(csv="data/tickers.csv"):
         return
     
     # Fetch data
-    df = fetch_yahoo_ohlcv(tickers, period="2y", interval="1d")
+    df = fetch_yahoo_ohlcv(tickers, period="4y", interval="1d")
     
     if df.empty:
         return
