@@ -1,11 +1,11 @@
 name: Update Dashboard
 on:
   schedule:
-    # 4:00 AM–3:40 PM PST  => 12:00–23:40 UTC (Mon–Fri)
+    # 4:00 AM–3:40 PM PST => 12:00–23:40 UTC (Mon–Fri)
     - cron: '*/20 12-23 * * 1-5'
 
-    # 4:00 PM–5:00 PM PST  => 00:00–01:00 UTC (Tue–Sat in UTC calendar)
-    - cron: '0,20,40 0-1 * * 2-6'
+    # 4:00 PM–4:20 PM PST => 00:00–00:20 UTC (Tue–Sat in UTC calendar)
+    - cron: '0,20 0 * * 2-6'
   workflow_dispatch:
 permissions:
   contents: write
