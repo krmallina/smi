@@ -19,7 +19,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1  # Shallow clone - we don't need history for generated files
+          fetch-depth: 0  # Full history needed for commit amending
 
       - name: Checkout private scripts repository
         uses: actions/checkout@v4
@@ -50,13 +50,13 @@ jobs:
       - name: Run ML model training
         run: python scripts-repo/stocks/ml_predictor.py
 
-      - name: Deploy model files (no history tracking)
+      - name: Deploy model files (amend last commit - no new history)
         if: success()
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Stage only model files and stock cache
+          # Stage only model files
           git add data/ml_models/
           git add data/stock_cache/
           
@@ -65,8 +65,18 @@ jobs:
             exit 0
           fi
           
-          # Commit and push only model files with no history tracking
-          git commit -m "Deploy ML models - auto-updated [skip ci]"
-          git push origin main
-          
-          echo "✓ ML models updated on main branch (model files only)"
+          # Check if last commit was an auto-update
+          LAST_COMMIT_MSG=$(git log -1 --pretty=%B)
+          if [[ "$LAST_COMMIT_MSG" == *"Deploy ML models - auto-updated"* ]]; then
+            # Amend the existing auto-update commit
+            TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M UTC")
+            git commit --amend -m "Deploy ML models - auto-updated: $TIMESTAMP [skip ci]"
+            git push --force-with-lease origin main
+            echo "✓ Amended existing ML models commit (no new history)"
+          else
+            # First time or manual commits in between - create new commit
+            TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M UTC")
+            git commit -m "Deploy ML models - auto-updated: $TIMESTAMP [skip ci]"
+            git push origin main
+            echo "✓ Created new ML models commit"
+          fi
