@@ -1,0 +1,72 @@
+name: ML Model Build
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 11 * * 1-5'  # 3 AM PST (11 AM UTC) Monday-Friday
+
+permissions:
+  contents: write
+
+jobs:
+  build-model:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ml-model-build
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1  # Shallow clone - we don't need history for generated files
+
+      - name: Checkout private scripts repository
+        uses: actions/checkout@v4
+        with:
+          repository: krmallina/scripts
+          path: scripts-repo
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          sparse-checkout: |
+            stocks
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: 'scripts-repo/stocks/requirements.txt'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f scripts-repo/stocks/requirements.txt ]; then 
+            pip install -r scripts-repo/stocks/requirements.txt
+          else 
+            pip install yfinance pandas requests
+          fi
+
+      - name: Run ML model training
+        run: python scripts-repo/stocks/ml_predictor.py
+
+      - name: Deploy model files (no history tracking)
+        if: success()
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Stage only model files and stock cache
+          git add data/ml_models/
+          git add data/stock_cache/
+          
+          if git diff --staged --quiet; then
+            echo "No changes to deploy."
+            exit 0
+          fi
+          
+          # Commit and push only model files with no history tracking
+          git commit -m "Deploy ML models - auto-updated [skip ci]"
+          git push origin main
+          
+          echo "✓ ML models updated on main branch (model files only)"
