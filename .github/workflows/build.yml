@@ -1,0 +1,72 @@
+name: Update Dashboard
+on:
+  schedule:
+    # 4:00 AM–3:40 PM PT  => 12:00–23:40 UTC during PDT, 13:00–00:40 UTC during PST (Mon–Fri)
+    - cron: '*/20 12-23 * * 1-5'
+    # 4:00 PM–4:40 PM PT  => 00:00–00:40 UTC during PDT, 01:00–01:40 UTC during PST (Tue–Sat in UTC calendar)
+    - cron: '0,20,40 0 * * 2-6'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+    # This prevents multiple versions of this job from running at the exact same time
+    concurrency:
+      group: stock-update
+      cancel-in-progress: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1  # Shallow clone - we don't need history for generated files
+      
+      - name: Checkout private scripts repository
+        uses: actions/checkout@v4
+        with:
+          repository: krmallina/scripts
+          path: scripts-repo
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          sparse-checkout: |
+            stocks
+          sparse-checkout-cone-mode: false
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: 'scripts-repo/stocks/requirements.txt'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f scripts-repo/stocks/requirements.txt ]; then 
+            pip install -r scripts-repo/stocks/requirements.txt
+          else 
+            pip install yfinance pandas requests
+          fi
+      
+      - name: Run stocks.py
+        run: python scripts-repo/stocks/stocks.py
+      
+      - name: Deploy dashboards (no history tracking)
+        if: success()
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Stage only HTML files in data directory
+          git add data/*.html
+          
+          if git diff --staged --quiet; then
+            echo "No changes to deploy."
+            exit 0
+          fi
+          
+          # Commit and push only HTML files with no history tracking
+          git commit -m "Deploy dashboard - auto-updated [skip ci]"
+          git fetch origin main
+          git push --force-with-lease origin HEAD:main
+          
+          echo "✓ Dashboards updated on main branch (HTML files only)"
