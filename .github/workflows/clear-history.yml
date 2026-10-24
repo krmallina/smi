@@ -1,0 +1,42 @@
+name: Clear Repository History
+
+on:
+  workflow_dispatch: # Allows you to trigger this manually from the Actions tab
+  schedule:
+    - cron: '0 11 * * 6' # Runs at 3am PT during PDT, 2am PT during PST (11am UTC) every Saturday
+
+permissions:
+  contents: write
+
+jobs:
+  reset-history:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: clear-history
+      cancel-in-progress: true
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetches all history to ensure we can delete it
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Orphan Branch and Reset
+        run: |
+          # 1. Create orphan branch
+          git checkout --orphan temp_branch
+          
+          # 2. Add all current files
+          git add -A
+          
+          # 3. Create the new initial commit
+          git commit -m "Clean start: History cleared, files preserved"
+          
+          # 4. Force overwrite the main branch
+          # Replace 'main' with your branch name if different
+          git fetch origin main
+          git push --force-with-lease origin temp_branch:main
