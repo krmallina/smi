@@ -1,0 +1,20 @@
+[
+  {
+    "ticker": "NVDA",
+    "condition": "price_above",
+    "value": 200
+  },
+  {
+    "ticker": "TSLA",
+    "condition": "day_change_above",
+    "value": 20
+  },
+  {
+    "ticker": "AAPL",
+    "condition": "rsi_oversold"
+  },
+  {
+    "ticker": "SPY",
+    "condition": "volume_spike"
+  }
+]
