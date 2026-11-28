@@ -1,0 +1,84 @@
+name: 3axis Pages Build
+
+# Builds the 3axis UI and commits it into this repository's 3axis/ folder. GitHub Pages publishes the
+# branch (dashboard and 3axis together), so there is one source for the site: no artifact deploy that
+# would replace the whole site, and no dashboard commit that would drop 3axis.
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [threeaxis-changed]
+  schedule:
+    - cron: '15 */6 * * *'  # resync fallback if a dispatch was missed
+
+permissions:
+  contents: write
+
+jobs:
+  build-commit:
+    if: github.repository == 'krmallina/smi'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages-3axis
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout site repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          path: site
+
+      - name: Checkout 3axis source repository
+        uses: actions/checkout@v4
+        with:
+          repository: krmallina/3axis
+          ref: ${{ github.event.client_payload.sha || 'main' }}
+          token: ${{ secrets.THREEAXIS_READ_TOKEN }}
+          path: source
+          fetch-depth: 1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'source/ui/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: source/ui
+        run: npm ci
+
+      - name: Build 3axis UI
+        working-directory: source/ui
+        env:
+          VITE_API_BASE: https://usmini.tailde64f0.ts.net
+          VITE_BASE_PATH: /smi/3axis/
+        run: npm run build
+
+      - name: Commit the build into 3axis/
+        working-directory: site
+        env:
+          SOURCE_SHA: ${{ github.event.client_payload.sha || 'main' }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Lay the build on the newest main each try: a shallow checkout can't be rebased onto a main that
+          # moved, and the dashboard job pushes about every 20 minutes.
+          for i in 1 2 3 4 5; do
+            git fetch --depth 1 origin main
+            git reset --hard origin/main
+            rm -rf 3axis
+            cp -r ../source/threeaxis/web 3axis
+            git add -A 3axis
+            if git diff --staged --quiet; then
+              echo "3axis UI unchanged."
+              exit 0
+            fi
+            git commit -m "Deploy 3axis UI from krmallina/3axis@${SOURCE_SHA}"
+            git push origin HEAD:main && exit 0
+            sleep $((i * 5))
+          done
+          echo "Could not push the 3axis build" >&2
+          exit 1
